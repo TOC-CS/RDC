@@ -1,6 +1,8 @@
 import builtins
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
@@ -87,9 +89,24 @@ class WorkerOutputFailures(unittest.TestCase):
         self.base = Path(self.temp.name)
         self.store = Store(self.base / 'state')
         (self.store.directory / 'jobs').mkdir()
+        self.children = []
+        self.child_wait_timeouts = []
 
     def tearDown(self):
-        self.temp.cleanup()
+        try:
+            for process in self.children:
+                try:
+                    if process.poll() is None:
+                        process.kill()
+                finally:
+                    try:
+                        process.wait(timeout=5)
+                    finally:
+                        for stream in (process.stdin, process.stdout):
+                            if stream is not None:
+                                stream.close()
+        finally:
+            self.temp.cleanup()
 
     def run_job(self, script, destination=None, max_output_bytes=1024, timeout=2):
         job_id = 'capture-test'
@@ -99,6 +116,20 @@ class WorkerOutputFailures(unittest.TestCase):
             db.execute('INSERT INTO jobs (id,fingerprint,spec,status,created_at) VALUES (?,?,?,?,?)',
                        (job_id, 'test', json.dumps(spec), 'queued', time.time()))
         real_open = builtins.open
+        real_popen = subprocess.Popen
+
+        def track_child(*args, **kwargs):
+            process = real_popen(*args, **kwargs)
+            if args[0] == spec['argv']:
+                self.children.append(process)
+                real_wait = process.wait
+
+                def wait(timeout=None):
+                    self.child_wait_timeouts.append(timeout)
+                    return real_wait(timeout=timeout)
+
+                process.wait = wait
+            return process
 
         def output_open(path, *args, **kwargs):
             if str(path).endswith('.output'):
@@ -107,7 +138,9 @@ class WorkerOutputFailures(unittest.TestCase):
                 return destination(real_open(path, *args, **kwargs))
             return real_open(path, *args, **kwargs)
 
-        with patch('builtins.open', side_effect=output_open), patch('threading.excepthook') as thread_error:
+        with patch('builtins.open', side_effect=output_open), \
+             patch('rdc.worker.subprocess.Popen', side_effect=track_child), \
+             patch('threading.excepthook') as thread_error:
             run(self.store.directory, job_id)
         thread_error.assert_not_called()
         return self.store.job(job_id)
@@ -209,6 +242,73 @@ class WorkerOutputFailures(unittest.TestCase):
         self.assertEqual(job['status'], 'timed_out')
         self.assertIn('capture disk full', job['error'])
         self.assertIn('output is incomplete', job['error'])
+        self.assert_owned_child_reaped(job)
+
+    def assert_owned_child_reaped(self, job):
+        self.assertEqual(len(self.children), 1)
+        process = self.children[0]
+        # Check before poll()/test cleanup can reap a child the worker abandoned.
+        self.assertIsNotNone(process.returncode)
+        self.assertEqual(job['exit_code'], process.returncode)
+        if os.name != 'nt':
+            with self.assertRaises(ChildProcessError):
+                os.waitpid(process.pid, os.WNOHANG)
+
+    def test_cleanup_reaps_after_termination_signals_then_raises(self):
+        calls = []
+
+        def signal_then_fail(process):
+            self.assertIs(process, self.children[0])
+            calls.append(process)
+            if len(calls) == 1:
+                process.terminate()
+                raise OSError('termination backend failed after signaling owned child')
+            # Both cleanup attempts fail, without a second poll masking a missing wait.
+            raise RuntimeError('secondary termination failure')
+
+        with patch('rdc.worker.terminate_tree', side_effect=signal_then_fail):
+            job = self.run_job('import time; time.sleep(60)', timeout=.1)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(self.child_wait_timeouts, [10])
+        self.assertEqual(job['status'], 'timed_out')
+        self.assertIn('termination backend failed after signaling owned child', job['error'])
+        self.assertNotIn('secondary termination failure', job['error'])
+        self.assertIn('capture disk full', job['error'])
+        self.assertIn('output is incomplete', job['error'])
+        self.assert_owned_child_reaped(job)
+        if os.name != 'nt':
+            self.assertEqual(job['exit_code'], -signal.SIGTERM)
+        else:
+            self.assertNotEqual(job['exit_code'], 0)
+
+    def test_cleanup_wait_is_bounded_when_termination_fails_with_child_alive(self):
+        calls = []
+
+        def fail_without_signaling(process):
+            self.assertIs(process, self.children[0])
+            calls.append(process)
+            if len(calls) == 1:
+                raise OSError('termination backend unavailable')
+            raise RuntimeError('secondary termination failure')
+
+        with patch('rdc.worker.terminate_tree', side_effect=fail_without_signaling):
+            # Keep the child live without leaving a reader blocked on its pipes.
+            job = self.run_job('import os,time; os.close(1); os.close(2); time.sleep(60)', timeout=.1)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(self.child_wait_timeouts, [10])
+        self.assertEqual(job['status'], 'timed_out')
+        self.assertIsNone(job['exit_code'])
+        self.assertIn('termination backend unavailable', job['error'])
+        self.assertNotIn('secondary termination failure', job['error'])
+        self.assertIn('Owned child exit could not be confirmed after cleanup.', job['error'])
+        self.assertIn('capture disk full', job['error'])
+        self.assertIn('output is incomplete', job['error'])
+        self.assertEqual(len(self.children), 1)
+        self.assertIsNone(self.children[0].poll())
+        # An uncertain terminal job must not become runnable again.
+        with patch('rdc.worker.subprocess.Popen') as replay:
+            run(self.store.directory, job['id'])
+        replay.assert_not_called()
 
 
 if __name__ == '__main__':
