@@ -30,6 +30,14 @@ For `pending_approval`, tell the owner the action is waiting in the paired compu
 
 An explicitly offline response means no new operation was queued. The device claims queued work once; expired queued work is not dispatched. A claimed operation whose response is lost is never automatically redelivered. A worker-side timeout may occur after the action took effect.
 
+## ChatGPT conversation interruptions
+
+A ChatGPT page reporting "connection interrupted" and an RDC relay interruption are separate observations. First check RDC connection status and, when available, the selected worker's status and the original operation ID. A healthy worker does not need a restart because the chat page disconnected. Never replay an uncertain action or create a replacement approval to repair the chat display.
+
+OpenAI supports using one account on multiple devices. Viewing the same chat on a computer and phone alone does not establish the cause of an interruption. The owner can refresh the affected ChatGPT tab, then try a private window or another browser if needed. For persistent trouble in a long conversation, preserve a durable task checkpoint and unresolved operation IDs before moving to a new chat. A new chat does not automatically retain unsaved files, process handles or all execution context. Keep browser sessions and jobs intact while troubleshooting the viewer.
+
+Sources: [OpenAI account use across devices](https://help.openai.com/en/articles/10471989-openai-account-sharing-policy) and [ChatGPT error troubleshooting](https://help.openai.com/en/articles/7996703-troubleshooting-chatgpt-error-messages). Check current service status before attributing a current incident to an outage.
+
 ## Job input and incomplete evidence
 
 An input response containing `queued: true` and `input_id` confirms queue admission only. Retain that ID with `job_id` and the original cloud request identity. If delivery fails, the worker leaves the affected input unacknowledged, closes its input stream, and reports incomplete input in the job error without replaying it. A prefix may already have caused effects, even if the process later exits with code zero.
