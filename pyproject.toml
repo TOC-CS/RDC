@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rdc-agent-workspace"
+version = "0.1.0a3"
+description = "Open agent workspaces with durable jobs, independent browsers, and a live preview"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "TOC Ministries"}]
+dependencies = ["mcp>=2.3,<3", "jsonschema>=4.23,<5", "uvicorn>=0.35,<1", "starlette>=0.47,<2"]
+
+[project.optional-dependencies]
+browser = ["playwright>=1.55,<2"]
+desktop = ["pyautogui>=0.9.54", "Pillow>=11"]
+test = ["httpx>=0.28,<1", "Pillow>=11"]
+
+[project.scripts]
+rdc = "rdc.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["rdc*"]
+
+[tool.setuptools.package-data]
+rdc = ["web/*", "embedded/preview.html", "embedded/THIRD_PARTY_NOTICES.txt", "assets/*.png"]
+
