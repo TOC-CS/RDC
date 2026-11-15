@@ -34,20 +34,30 @@
 
 **Interfaces:** Implement a recorder with nonblocking `record(component, event, tool=None)` over finite allowlists, bounded `snapshot(limit=50)`, and bounded `close()`. The implementer may choose concrete class and constructor names, documented in its report. Add `rdc_diagnostics_status` with optional integer limit 1..50, read-only annotations, and `rdc diagnostics --state-dir ...` output. No action or arbitrary text parameter is exposed.
 
-- [ ] Write meaningful failing tests for private finite data, bounded queue/retention, writer failure, safe path handling and shutdown.
-- [ ] Implement the recorder and make the focused tests pass.
-- [ ] Add worker and relay hooks while retaining existing results, exceptions, approvals and reconnect/no-replay behavior.
-- [ ] Add tests proving failed operations are recorded, successful reconnection is distinguished from an attempt, and reporter failure does not change the underlying operation.
-- [ ] Add the read-only tool and CLI with bounded safe output and no new permission path.
-- [ ] Document actual automated recovery, missing capture, and the need for verified code repairs. Run focused tests and the available project suite; report environment-related limitations precisely.
-- [ ] Commit only task files and write the task report.
+- [x] Write meaningful failing tests for private finite data, bounded queue/retention, writer failure, safe path handling and shutdown.
+- [x] Implement the recorder and make the focused tests pass.
+- [x] Add worker and relay hooks while retaining existing results, exceptions, approvals and reconnect/no-replay behavior.
+- [x] Add tests proving failed operations are recorded, successful reconnection is distinguished from an attempt, and reporter failure does not change the underlying operation.
+- [x] Add the read-only tool and CLI with bounded safe output and no new permission path.
+- [x] Document actual automated recovery, missing capture, and the need for verified code repairs. Run focused tests and the available project suite; report environment-related limitations precisely.
+- [x] Commit only task files and write the task report.
 
 ## Task 2: Review and qualify the release
 
 **Owner:** Root after Task 1. Independently review the diff and privacy/no-replay cases. Integrate required repairs. Set the next core version, synchronize the gateway catalog from exact source, and qualify the frozen candidate on the iMac using its existing virtual environment. Preserve the installed worker until the approved installer passes quiescence and identity checks. Reconcile any already-running prior publication before updating public source, gateway and saved plugin guidance. Verify live version/catalog and read-only diagnostics after installation.
 
-- [ ] Independent spec and code-quality review.
-- [ ] Frozen full iMac suite and source hash receipt.
-- [ ] Gateway tests, type check and production build.
-- [ ] Exact-source activation with preserved config/grants and retained rollback evidence.
-- [ ] Public/source and plugin readback, or precise external blocker with all reviewable work ready.
+- [x] Independent spec and code-quality review.
+- [x] Frozen full iMac suite and source hash receipt.
+- [x] Gateway tests, type check and production build.
+- [x] Exact-source activation with preserved config/grants and retained rollback evidence.
+- [x] Public/source and plugin readback, or precise external blocker with all reviewable work ready.
+
+## Completion evidence, 2026-11-15
+
+Task 1 was implemented in `5f90840383e826238a13b3e873583a8628ca5355`, with the task report retained in the development record. Independent review passed, including 21 diagnostic tests and 55 relay tests with no skips. The reviewed changes preserve finite private data, bounded capture, operation results and no-replay behavior.
+
+Task 2 qualified frozen runtime `4a18ec0a87d30d4f37dea9b03a611098e14bc527`: the complete iMac gate passed 254 tests with no failures, errors or skips, and all 54 frozen inputs were unchanged. The [sanitized receipt](../../verification-results-0.1.0a4.json) records the exact hashes and outcomes. The matching gateway passed nine tests, TypeScript checking and its production build, then deployed successfully. Exact-source activation preserved configuration, grants, identity, pause state and protected file metadata while retaining rollback code. Native ChatGPT status confirmed alpha4 after activation and deployment; the local diagnostic CLI read the real store successfully. Existing private plugin 1.0.4 and its preserved App binding and audience were read back.
+
+The public source at [`e4f6f18c8d1002462fccd93f85a1be1e1983cb52`](https://github.com/TOC-CS/RDC/commit/e4f6f18c8d1002462fccd93f85a1be1e1983cb52) matched approved local source `12335ccedf6e6464ae8924b051b2742296afd2d3`: all 225 manifest paths, blob IDs, modes and sizes matched, with no missing or extra files. Its [hosted matrix](https://github.com/TOC-CS/RDC/actions/runs/43699939501) completed successfully. Ubuntu and macOS each executed and passed 254 tests with no skips. Windows reported 254 discovered tests: 237 executed passes and 17 documented POSIX-only skips.
+
+The completed release steps retain explicit qualification limits. Windows secure diagnostic capture is unavailable. The hosted macOS timeout-fixture warning remains unattributed; targeted review supplied no evidence justifying a runtime change. The rendered ChatGPT publisher label, cached host tool inventory, production embedded rendering and physical-phone qualification remain unresolved. See the [verification record](../../VERIFICATION.md) for exact run times, skipped contracts and those remaining boundaries.
