@@ -62,7 +62,7 @@ function ownerFixture(captureError=null){
   };
   const context=vm.createContext(globals);
   const source=fs.readFileSync(path.join(base,'app.js'),'utf8').replace(/\(\(\) => \{/,'').replace(/\}\)\(\);\s*$/,'');
-  vm.runInContext(source+'\nglobalThis.ui={state,renderStatus,selectSession,renderObservation,tick,disconnect};',context);
+  vm.runInContext(source+'\nglobalThis.ui={state,renderStatus,selectSession,renderObservation,tick,disconnect,renderCredentialAliases};',context);
   context.ui.state.token='synthetic-owner-token';context.ui.renderStatus(ownerStatus);context.ui.selectSession(mobileId);
   return {...context.ui,nodes,calls,context};
 }
@@ -80,7 +80,63 @@ function embeddedFixture(captureError='screenshot_redaction_required'){
 }
 
 const which=process.argv[2];
-if(which==='owner-profile'){
+if(which==='owner-credential-busy'){
+  const ui=ownerFixture();
+  const alias={credential_id:'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',label:'Synthetic login',origins:['https://example.test']};
+  const request={id:'bbbbbbbb-cccc-dddd-eeee-ffffffffffff',credential_id:alias.credential_id,label:alias.label,origin:'https://example.test',status:'pending'};
+  const status={...ownerStatus,credentials:{aliases:[alias],requests:[request],grants:[{id:'fixture-grant',credential_id:alias.credential_id,origin:'https://example.test'}]}};
+  ui.renderStatus(status);
+  assert.equal(ui.nodes.get('credential-dialog').open,true);
+  const credentialButtons=()=>[...ui.nodes.get('credential-aliases').querySelectorAll('button'),
+    ...ui.nodes.get('credential-grants').querySelectorAll('button'),
+    ...['credential-once','credential-always','credential-deny'].map(id=>ui.nodes.get(id))];
+  const updatedAlias={...alias,label:'Updated synthetic login'};
+  const decidedStatus={...status,credentials:{...status.credentials,aliases:[updatedAlias],requests:[]}};
+  let releaseRefresh,refreshStarted,holdRefresh=true,removeCalls=0,removed=false;
+  const refreshPending=new Promise(resolve=>{refreshStarted=resolve;});
+  const response=(data,ok=true)=>({ok,status:ok?200:503,json:async()=>data});
+  ui.context.fetch=async (url,options)=>{
+    const body=options.body?JSON.parse(options.body):undefined;ui.calls.push({url,body});
+    if(url==='/api/credentials/decision'){
+      assert.deepEqual(body,{request_id:request.id,decision:'once'});
+      return response({ok:true});
+    }
+    if(url==='/api/status'){
+      if(holdRefresh){holdRefresh=false;return new Promise(resolve=>{releaseRefresh=()=>resolve(response(decidedStatus));refreshStarted();});}
+      return response({...decidedStatus,credentials:{...decidedStatus.credentials,aliases:removed?[]:[updatedAlias]}});
+    }
+    if(url==='/api/credentials/remove'){
+      assert.deepEqual(body,{credential_id:alias.credential_id});removeCalls++;
+      if(removeCalls===1)return response({ok:false,error:{code:'credential_removal_incomplete',message:'Synthetic cleanup failure. Retry removal.'}},false);
+      removed=true;return response({ok:true});
+    }
+    assert.fail(`Unexpected credential fixture request: ${url}`);
+  };
+  const finishingAction=ui.nodes.get('credential-once').listeners.click[0]();
+  await refreshPending;
+  assert.equal(ui.nodes.get('credential-dialog').open,false,'Decision dialog closes while its status refresh remains pending');
+  assert.ok(credentialButtons().every(button=>button.disabled),'Credential mutations must wait while an owner action is finishing');
+  ui.renderCredentialAliases([updatedAlias]);
+  assert.ok(ui.nodes.get('credential-aliases').querySelectorAll('button').every(button=>button.disabled),'Direct alias rendering must preserve busy state before another control update');
+  ui.renderStatus(decidedStatus);
+  assert.ok(credentialButtons().every(button=>button.disabled),'Status refresh must keep replacement controls disabled while busy');
+  assert.equal(removeCalls,0);
+  releaseRefresh();await finishingAction;
+  assert.ok(credentialButtons().every(button=>!button.disabled),'Credential controls must become available after the action finishes');
+  await trigger(ui.nodes.get('credential-aliases').querySelectorAll('button')[0],'click');
+  assert.equal(removeCalls,1,'An available removal click dispatches once; a failed removal is never retried automatically');
+  const retry=ui.nodes.get('credential-aliases').querySelectorAll('button')[0];
+  assert.equal(retry.textContent,'Retry removal');assert.equal(retry.disabled,false);
+  assert.equal(retry.getAttribute('aria-label'),'Retry removing Updated synthetic login mapping');
+  assert.equal(ui.state.failedCredentialRemovals.size,1);
+  await trigger(retry,'click');
+  assert.equal(removeCalls,2,'Only an explicit retry dispatches the second removal');
+  assert.equal(ui.state.failedCredentialRemovals.size,0);
+  assert.equal(ui.nodes.get('credential-aliases').textContent,'No saved credential mappings.');
+  ui.disconnect();
+  ui.renderCredentialAliases([alias]);
+  assert.ok(credentialButtons().every(button=>button.disabled),'Disconnected credential controls must stay unavailable');
+}else if(which==='owner-profile'){
   const ui=ownerFixture();
   const profile=ui.nodes.get('mobile-profile');assert.ok(profile,'Configured mobile profile selector must exist');
   assert.match(profile.textContent,/Android.*fixture-phone/);
@@ -144,44 +200,6 @@ if(which==='owner-profile'){
   ui.disconnect();
   assert.equal(ui.nodes.get('input-mode').textContent,'Awaiting worker');
   assert.equal(ui.nodes.get('mobile-profile').disabled,true);
-}else if(which==='owner-credential-busy'){
-  const ui=ownerFixture(),status=structuredClone(ownerStatus);
-  const alias={credential_id:'synthetic-alias',label:'Synthetic login',origins:['https://example.test']};
-  const request={id:'synthetic-request',credential_id:alias.credential_id,label:alias.label,origin:alias.origins[0],status:'pending'};
-  status.credentials={configuration:'configured',aliases:[alias],requests:[request],grants:[]};
-  let releaseRefresh,refreshStarted,removals=0;
-  const heldRefresh=new Promise(resolve=>{releaseRefresh=resolve;});
-  const started=new Promise(resolve=>{refreshStarted=resolve;});
-  ui.context.fetch=async(url,options)=>{
-    const body=options.body?JSON.parse(options.body):undefined;ui.calls.push({url,body});
-    if(url==='/api/credentials/decision')request.status='filled';
-    if(url==='/api/status'){refreshStarted();await heldRefresh;}
-    if(url==='/api/credentials/remove'){
-      removals++;
-      if(removals===1)return {ok:false,status:503,json:async()=>({ok:false,error:{code:'credential_removal_incomplete',message:'Synthetic cleanup failure.'}})};
-      status.credentials.aliases=[];
-    }
-    return {ok:true,status:200,json:async()=>url==='/api/status'?status:{ok:true}};
-  };
-  ui.renderStatus(status);
-  const decision=ui.nodes.get('credential-once').listeners.click[0]();
-  await started;
-  const removalButton=()=>descendants(ui.nodes.get('credential-aliases')).find(node=>node.tagName==='BUTTON');
-  assert.equal(ui.nodes.get('credential-dialog').open,false,'Consent closes before the status refresh completes');
-  assert.equal(removalButton().disabled,true,'Removal must stay disabled while the decision refresh is pending');
-  const refreshed=structuredClone(status);refreshed.credentials.aliases[0].label='Refreshed synthetic login';
-  ui.renderStatus(refreshed);
-  assert.equal(removalButton().disabled,true,'A refreshed alias must retain the current busy state');
-  assert.equal(removals,0,'No removal may be dispatched before the decision finishes');
-  releaseRefresh();await decision;
-  assert.equal(removalButton().disabled,false,'Removal becomes available after the decision refresh');
-  await trigger(removalButton(),'click');
-  assert.equal(removals,1);
-  assert.equal(removalButton().getAttribute('aria-label'),'Retry removing Synthetic login mapping');
-  assert.equal(removalButton().disabled,false,'A failed removal remains available for an explicit retry');
-  await trigger(removalButton(),'click');
-  assert.equal(removals,2);
-  assert.equal(ui.nodes.get('credential-aliases').textContent,'No saved credential mappings.');
 }else if(which==='embedded-mobile'){
   const ui=embeddedFixture();
   assert.match(ui.nodes.get('session').textContent,/Android.*fixture-phone/);
