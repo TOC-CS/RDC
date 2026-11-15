@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import sqlite3
+import subprocess
 from pathlib import Path, PurePosixPath
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http.server import SimpleHTTPRequestHandler
@@ -634,6 +635,15 @@ class CredentialDialogTests(unittest.TestCase):
         self.assertFalse(dialog.is_visible())
 
 
+@unittest.skipUnless(shutil.which('node'), 'Node is required for the dashboard contract')
+class CredentialDashboardBusyTests(unittest.TestCase):
+    def test_removal_waits_for_decision_refresh_and_preserves_explicit_retry(self):
+        root = Path(__file__).resolve().parents[1]
+        result = subprocess.run([shutil.which('node'), str(root / 'tests/fixtures/mobile_ui_contract.mjs'),
+            'owner-credential-busy'], capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
 class CredentialEnrollmentUITests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -675,6 +685,7 @@ class CredentialEnrollmentUITests(unittest.TestCase):
     def test_owner_enrolls_then_consents_to_fill_and_removes_mapping(self):
         from tests.test_proxy import running_worker
         from rdc.credentials import Secret
+        from playwright.sync_api import expect
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             settings = Settings(root / 'private', [root], approval_mode='trusted', browser_backend='disabled')
@@ -730,8 +741,23 @@ class CredentialEnrollmentUITests(unittest.TestCase):
                     dialog = page.get_by_role('dialog', name='Use a saved password')
                     dialog.wait_for(state='visible')
                     self.assertEqual(reads, [])
-                    page.get_by_role('button', name='Allow Once', exact=True).click()
-                    dialog.wait_for(state='hidden')
+                    # A decision closes its dialog before its status refresh finishes.
+                    # Keep that refresh pending so removal cannot race the busy action.
+                    held_status = []
+                    page.route(url + '/api/status', lambda route: held_status.append(route))
+                    try:
+                        with page.expect_request(url + '/api/status'):
+                            page.get_by_role('button', name='Allow Once', exact=True).click()
+                        dialog.wait_for(state='hidden')
+                        remove = page.get_by_role('button', name='Remove Synthetic login mapping', exact=True)
+                        self.assertTrue(remove.is_disabled(), 'Removal must stay disabled until the decision refresh completes')
+                    finally:
+                        try:
+                            for route in held_status:
+                                route.continue_()
+                        finally:
+                            page.unroute(url + '/api/status')
+                    expect(remove).to_be_enabled()
                     deadline = time.monotonic() + 5
                     while time.monotonic() < deadline:
                         result = engine.credentials.status(request['request']['id'])['request']

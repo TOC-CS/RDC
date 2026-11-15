@@ -2,15 +2,34 @@
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 import unittest
 
 
 @unittest.skipUnless(shutil.which('node'), 'Node is required for UI source-function contracts')
 class MobileUIContracts(unittest.TestCase):
-    def check(self, name):
-        script = Path(__file__).parent/'fixtures'/'mobile_ui_contract.mjs'
+    def check(self, name, script=None):
+        if script is None:
+            script = Path(__file__).parent/'fixtures'/'mobile_ui_contract.mjs'
         result = subprocess.run([shutil.which('node'), str(script), name], capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_embedded_source_contract_accepts_lf_and_crlf(self):
+        source_root = Path(__file__).resolve().parents[1]
+        script = Path('tests/fixtures/mobile_ui_contract.mjs')
+        html = Path('rdc/embedded/src/index.html')
+        app = Path('rdc/embedded/src/app.js')
+        source = (source_root/app).read_bytes().replace(b'\r\n', b'\n')
+        with tempfile.TemporaryDirectory(prefix='rdc-ui-contract-') as directory:
+            fixture_root = Path(directory)
+            for relative in (script, html):
+                destination = fixture_root/relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source_root/relative, destination)
+            for name, ending in (('LF', b'\n'), ('CRLF', b'\r\n')):
+                with self.subTest(line_ending=name):
+                    (fixture_root/app).write_bytes(source.replace(b'\n', ending))
+                    self.check('embedded-mobile', fixture_root/script)
 
     def test_owner_configured_profile_and_device_notice(self): self.check('owner-profile')
     def test_owner_native_controls_do_not_offer_browser_credentials(self): self.check('owner-controls')
