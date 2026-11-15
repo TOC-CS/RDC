@@ -54,7 +54,8 @@
     for(const direction of ['up','down','left','right'])$(`mobile-swipe-${direction}`).disabled=!connected||!ready||!mobile||state.busy;
     if(mobile)$('takeover').checked=false;
     $('credential-enrollment-fields').disabled=!connected||state.busy;
-    for(const button of $('credential-aliases').querySelectorAll('button'))button.disabled=!connected||state.busy;
+    for(const id of ['credential-aliases','credential-grants'])for(const button of $(id).querySelectorAll('button'))button.disabled=!connected||state.busy;
+    for(const id of ['credential-once','credential-always','credential-deny'])$(id).disabled=!connected||state.busy;
     $('pause-button').textContent=state.status?.paused?'Resume agent input':'Pause agent input';
     $('preview-stage').classList.toggle('owner-control',$('takeover').checked);
     $('preview').alt=mobile?'Live mobile device workspace':'Live browser workspace';
