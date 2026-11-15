@@ -28,6 +28,8 @@ Report `pending_approval` or a credential request's `pending` status as waiting 
 
 Treat `outcome_unknown`, an expired mutation result, or a missing retained record as incomplete evidence. Inspect the worker's file, browser, or job state before deciding on a new action. Fresh read-only observations are appropriate when their short-lived preview results have expired.
 
+When ChatGPT itself reports a connection interruption, check RDC and recover existing operation IDs before attributing the problem to the worker. A healthy RDC worker stays running while the owner refreshes or troubleshoots the chat page. Follow [conversation interruption guidance](references/cloud-operations.md#chatgpt-conversation-interruptions); do not repeat a device action to repair the viewer.
+
 ## Inspect private incident reports
 
 When the current catalog exposes `rdc_diagnostics_status`, use this read-only report to inspect recent worker failures and observed relay recovery. Follow the current schema, including required host account routing such as `link_id`, and optionally set integer `limit` from 1 through 50. The report accepts no repair action or free-text payload. Inspect `available`, `storage_status`, `incomplete` and `capture_scope`; a readable history or an empty list cannot establish worker liveness or a complete incident record.
