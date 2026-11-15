@@ -72,7 +72,7 @@ function embeddedFixture(captureError='screenshot_redaction_required'){
   globals.App=class {getHostCapabilities(){return {};} getHostContext(){return {};} async callServerTool(request){calls.push(request);return {isError:true,structuredContent:{ok:false,error:{code:captureError,message:'Synthetic capture refusal'}},content:[]};}};
   globals.PostMessageTransport=class {};
   const context=vm.createContext(globals);
-  const source=fs.readFileSync(path.join(base,'app.js'),'utf8').replace(/^import .*?;\n/,'').replace(/\nconnect\(\);\s*$/,'\n');
+  const source=fs.readFileSync(path.join(base,'app.js'),'utf8').replace(/^import .*?;\r?\n/,'').replace(/\nconnect\(\);\s*$/,'\n');
   vm.runInContext(source+'\nglobalThis.ui={state,acceptOpen,refreshFrame};',context);
   Object.assign(context.ui.state,{connected:true,bridgeReady:true});
   context.ui.acceptOpen({device_id:'fixture-worker',session_id:mobileId,sessions:[browser,mobile],active_jobs:1,pending_approvals:0});
@@ -144,6 +144,44 @@ if(which==='owner-profile'){
   ui.disconnect();
   assert.equal(ui.nodes.get('input-mode').textContent,'Awaiting worker');
   assert.equal(ui.nodes.get('mobile-profile').disabled,true);
+}else if(which==='owner-credential-busy'){
+  const ui=ownerFixture(),status=structuredClone(ownerStatus);
+  const alias={credential_id:'synthetic-alias',label:'Synthetic login',origins:['https://example.test']};
+  const request={id:'synthetic-request',credential_id:alias.credential_id,label:alias.label,origin:alias.origins[0],status:'pending'};
+  status.credentials={configuration:'configured',aliases:[alias],requests:[request],grants:[]};
+  let releaseRefresh,refreshStarted,removals=0;
+  const heldRefresh=new Promise(resolve=>{releaseRefresh=resolve;});
+  const started=new Promise(resolve=>{refreshStarted=resolve;});
+  ui.context.fetch=async(url,options)=>{
+    const body=options.body?JSON.parse(options.body):undefined;ui.calls.push({url,body});
+    if(url==='/api/credentials/decision')request.status='filled';
+    if(url==='/api/status'){refreshStarted();await heldRefresh;}
+    if(url==='/api/credentials/remove'){
+      removals++;
+      if(removals===1)return {ok:false,status:503,json:async()=>({ok:false,error:{code:'credential_removal_incomplete',message:'Synthetic cleanup failure.'}})};
+      status.credentials.aliases=[];
+    }
+    return {ok:true,status:200,json:async()=>url==='/api/status'?status:{ok:true}};
+  };
+  ui.renderStatus(status);
+  const decision=ui.nodes.get('credential-once').listeners.click[0]();
+  await started;
+  const removalButton=()=>descendants(ui.nodes.get('credential-aliases')).find(node=>node.tagName==='BUTTON');
+  assert.equal(ui.nodes.get('credential-dialog').open,false,'Consent closes before the status refresh completes');
+  assert.equal(removalButton().disabled,true,'Removal must stay disabled while the decision refresh is pending');
+  const refreshed=structuredClone(status);refreshed.credentials.aliases[0].label='Refreshed synthetic login';
+  ui.renderStatus(refreshed);
+  assert.equal(removalButton().disabled,true,'A refreshed alias must retain the current busy state');
+  assert.equal(removals,0,'No removal may be dispatched before the decision finishes');
+  releaseRefresh();await decision;
+  assert.equal(removalButton().disabled,false,'Removal becomes available after the decision refresh');
+  await trigger(removalButton(),'click');
+  assert.equal(removals,1);
+  assert.equal(removalButton().getAttribute('aria-label'),'Retry removing Synthetic login mapping');
+  assert.equal(removalButton().disabled,false,'A failed removal remains available for an explicit retry');
+  await trigger(removalButton(),'click');
+  assert.equal(removals,2);
+  assert.equal(ui.nodes.get('credential-aliases').textContent,'No saved credential mappings.');
 }else if(which==='embedded-mobile'){
   const ui=embeddedFixture();
   assert.match(ui.nodes.get('session').textContent,/Android.*fixture-phone/);
