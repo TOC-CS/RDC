@@ -33,6 +33,8 @@ from mcp import ClientSession, types
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.exceptions import MCPError
 
+from .diagnostics import Diagnostics, safe_record
+
 MAX_WIRE_BYTES = 16 * 1024 * 1024
 MAX_RESULT_BYTES = 12 * 1024 * 1024
 MAX_REQUEST_BYTES = 12 * 1024 * 1024
@@ -322,12 +324,13 @@ class Journal:
         except sqlite3.Error:
             raise RelayPermanentError('Relay could not persist a tool result. Its outcome must be inspected before any retry.') from None
 
-    def recover(self):
+    def recover(self, diagnostics=None):
         # Even 'received' work is not resumed automatically. The gateway does
         # not redeliver claims, and an old operation may no longer be intended.
         rows = self.db.execute("SELECT operation_id,state FROM operations WHERE state IN ('received','executing')").fetchall()
         for row in rows:
             executing = row['state'] == 'executing'
+            safe_record(diagnostics, 'relay', 'outcome_unknown' if executing else 'interrupted_before_dispatch')
             result = error_result('outcome_unknown' if executing else 'interrupted_before_dispatch',
                 'Relay stopped during dispatch. The action may have completed. Inspect the worker before any new attempt.' if executing else
                 'Relay stopped before dispatch. This operation was not automatically executed on restart.', row['operation_id'])
@@ -459,9 +462,10 @@ class Gateway:
 
 
 class RelayPump:
-    def __init__(self, config, journal, gateway, session, catalog):
+    def __init__(self, config, journal, gateway, session, catalog, diagnostics=None):
         self.config = config; self.journal = journal; self.gateway = gateway
         self.session = session; self.catalog = catalog
+        self.diagnostics = diagnostics
         self.worker_lost = False; self.gateway_error = None
 
     async def _heartbeat(self):
@@ -470,12 +474,13 @@ class RelayPump:
             try:
                 await self.gateway.poll(claim=False)
             except RelayPermanentError as exc:
+                safe_record(self.diagnostics, 'relay', 'permanent_failure')
                 self.gateway_error = exc
                 return
             except RelayTransientError:
                 # Preserve the already dispatched result before reporting a
                 # disconnected gateway. Heartbeats never claim more work.
-                pass
+                safe_record(self.diagnostics, 'relay', 'connection_interrupted')
 
     async def handle(self, operation):
         row = self.journal.remember(operation)
@@ -491,6 +496,7 @@ class RelayPump:
                 self.journal.complete(operation.operation_id, row['result_json'])
             return
         if row['state'] == 'executing':
+            safe_record(self.diagnostics, 'relay', 'outcome_unknown')
             self.journal.complete(operation.operation_id, _encoded(error_result('outcome_unknown',
                 'This operation was already dispatched. Inspect the worker before any new attempt.', operation.operation_id), MAX_RESULT_BYTES))
             return
@@ -507,6 +513,7 @@ class RelayPump:
             except (jsonschema.ValidationError, jsonschema.SchemaError, ValueError, TypeError, RecursionError):
                 reason = ('invalid_arguments', 'The requested tool arguments do not match the paired worker schema.')
         if reason:
+            safe_record(self.diagnostics, 'relay', 'worker_rejected', name)
             self.journal.complete(operation.operation_id, _encoded(error_result(*reason, operation.operation_id), MAX_RESULT_BYTES))
             return
         self.journal.mark_executing(operation.operation_id)
@@ -516,6 +523,8 @@ class RelayPump:
                 with anyio.fail_after(self.config.tool_timeout):
                     result = await self.session.call_tool(name, arguments, read_timeout_seconds=self.config.tool_timeout)
                 result = result.model_dump(by_alias=True, exclude_none=True) if hasattr(result, 'model_dump') else result
+                if isinstance(result, dict) and result.get('isError') is True:
+                    safe_record(self.diagnostics, 'relay', 'worker_rejected', name)
                 try:
                     encoded = _encoded(result, MAX_RESULT_BYTES)
                 except RelayPermanentError:
@@ -524,10 +533,12 @@ class RelayPump:
             except MCPError as exc:
                 unknown = exc.code in (types.REQUEST_TIMEOUT, types.CONNECTION_CLOSED)
                 self.worker_lost = unknown
+                safe_record(self.diagnostics, 'relay', 'outcome_unknown' if unknown else 'worker_rejected', name)
                 encoded = _encoded(error_result('outcome_unknown' if unknown else 'worker_rejected',
                     'Worker response was lost. The action may have completed; inspect the worker before any new attempt.' if unknown else
                     'The local MCP worker rejected this request. The relay will not repeat it.', operation.operation_id), MAX_RESULT_BYTES)
             except Exception:
+                safe_record(self.diagnostics, 'relay', 'outcome_unknown', name)
                 self.worker_lost = True
                 encoded = _encoded(error_result('outcome_unknown',
                     'Worker connection failed or timed out during dispatch. The action may have completed. Inspect the worker before any new attempt.', operation.operation_id), MAX_RESULT_BYTES)
@@ -555,11 +566,16 @@ class RelayPump:
                 # permits local retirement. Other protocol failures still stop
                 # the pump. Retirement never acknowledges or repeats an action.
                 self.journal.undeliverable(operation.operation_id)
+                safe_record(self.diagnostics, 'relay', 'result_undeliverable')
                 LOGGER.warning('RDC relay operation %s is undeliverable: the gateway no longer retains its identity. '
                                'Its original outcome remains local within the retention bound; inspect the worker '
                                'before another attempt. The action was not repeated.', operation.operation_id)
                 continue
+            except RelayTransientError:
+                safe_record(self.diagnostics, 'relay', 'result_upload_retry')
+                raise
             self.journal.delivered(operation.operation_id)
+            safe_record(self.diagnostics, 'relay', 'result_uploaded')
         self.journal.prune_results()
 
 
@@ -647,7 +663,7 @@ def _permanent(exc):
     return None
 
 
-async def run_relay(config_path, state_dir, *, stop_event=None):
+async def _run_relay(config_path, state_dir, *, stop_event=None, diagnostics=None):
     """CLI entry: ``anyio.run(run_relay, private_config_path, worker_state_dir)``.
 
     No listener is opened. Transport reconnects preserve operation identities;
@@ -665,18 +681,21 @@ async def run_relay(config_path, state_dir, *, stop_event=None):
     with _relay_lock(directory):
         journal = Journal(directory / 'relay.sqlite3', config.binding)
         try:
-            journal.recover()
+            journal.recover(diagnostics)
             async with httpx2.AsyncClient(trust_env=False, follow_redirects=False, verify=True,
                 timeout=httpx2.Timeout(15, connect=5, pool=5)) as client:
                 gateway = Gateway(config, client)
                 delay = .5
+                interrupted = False
                 while stop_event is None or not stop_event.is_set():
                     try:
+                        if interrupted:
+                            safe_record(diagnostics, 'relay', 'reconnect_attempt')
                         # Deliver previously recorded outcomes even while the
                         # local MCP worker is temporarily unavailable.
-                        await RelayPump(config, journal, gateway, None, {}).flush()
+                        await RelayPump(config, journal, gateway, None, {}, diagnostics).flush()
                         async with _worker_session(config, token) as (session, catalog):
-                            pump = RelayPump(config, journal, gateway, session, catalog)
+                            pump = RelayPump(config, journal, gateway, session, catalog, diagnostics)
                             delay = .5
                             idle_delay = .25
                             while stop_event is None or not stop_event.is_set():
@@ -684,6 +703,9 @@ async def run_relay(config_path, state_dir, *, stop_event=None):
                                 if pump.worker_lost:
                                     raise RelayTransientError('Local worker connection ended; uncertain actions will not be replayed.')
                                 operation, poll_delay = await gateway.poll()
+                                if interrupted:
+                                    safe_record(diagnostics, 'relay', 'reconnected')
+                                    interrupted = False
                                 if operation is not None:
                                     idle_delay = .25
                                     await pump.handle(operation)
@@ -699,8 +721,30 @@ async def run_relay(config_path, state_dir, *, stop_event=None):
                             raise RelayPermanentError(str(fatal)) from None
                         # Transport exception groups can embed credentials and
                         # payloads. Neither their repr nor their text is logged.
+                        interrupted = True
+                        safe_record(diagnostics, 'relay', 'connection_interrupted')
                         LOGGER.warning('RDC relay connection interrupted. Retained results will retry; uncertain actions will not replay.')
                         await anyio.sleep(delay)
                         delay = min(15, delay * 2)
         finally:
             journal.close()
+
+
+async def run_relay(config_path, state_dir, *, stop_event=None):
+    """Run the existing relay with best-effort private diagnostics only."""
+    try:
+        diagnostics = Diagnostics(state_dir)
+    except Exception:
+        diagnostics = None
+    try:
+        return await _run_relay(config_path, state_dir, stop_event=stop_event, diagnostics=diagnostics)
+    except Exception as exc:
+        if _permanent(exc) is not None:
+            safe_record(diagnostics, 'relay', 'permanent_failure')
+        raise
+    finally:
+        try:
+            if diagnostics is not None:
+                diagnostics.close()
+        except Exception:
+            pass

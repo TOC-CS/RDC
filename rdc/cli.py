@@ -62,9 +62,11 @@ def read_secret(path):
 def parser():
     command = argparse.ArgumentParser(prog='rdc', description='Independent local agent workspaces (alpha).')
     sub = command.add_subparsers(dest='command', required=True)
-    for name in ('init', 'stdio', 'connect', 'relay', 'serve', 'doctor', 'owner-token'):
+    for name in ('init', 'stdio', 'connect', 'relay', 'serve', 'doctor', 'owner-token', 'diagnostics'):
         action = sub.add_parser(name)
         action.add_argument('--state-dir', type=Path, default=default_state_dir())
+        if name == 'diagnostics':
+            action.add_argument('--limit', type=int, choices=range(1,51), default=50)
         if name == 'init':
             action.add_argument('--root', type=Path, action='append', help='Allowed workspace root, repeatable (default: current directory)')
             action.add_argument('--allow-exec', action='store_true', help='Grant shell execution as this OS account')
@@ -94,6 +96,10 @@ def main(argv=None):
     try:
         from .config import Settings
         state = Path(args.state_dir).expanduser().absolute()
+        if args.command == 'diagnostics':
+            from .diagnostics import Diagnostics
+            print(json.dumps(Diagnostics.read_status(state,args.limit), indent=2))
+            return 0
         if args.command == 'init':
             state = private_state(state)
             if any((state / name).exists() or (state / name).is_symlink() for name in ('config.json', 'agent-token', 'owner-token')):

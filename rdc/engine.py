@@ -10,6 +10,7 @@ import uuid
 from jsonschema import Draft202012Validator
 
 from . import __version__
+from .diagnostics import Diagnostics, safe_record
 from .errors import RDCError
 from .files import Files
 from .jobs import Jobs
@@ -49,11 +50,18 @@ class Engine:
         self.credentials = CredentialBroker(self)
         self._tools = {item['name']:item for item in self._catalog()}
         self._validators = {name:Draft202012Validator(item['inputSchema']) for name,item in self._tools.items()}
+        try:
+            self.diagnostics = Diagnostics(settings.state_dir)
+        except Exception:
+            self.diagnostics = None
 
     def _catalog(self):
         content = {'type':'string','maxLength':self.settings.max_read_bytes}
         items = [
             tool('rdc_system_status','Get worker identity, permissions, capability status and counts.'),
+            tool('rdc_diagnostics_status','Read bounded private incident categories and observed recovery outcomes. '
+                 'Does not repair code, replay actions, or change permissions.',
+                 {'limit':{'type':'integer','minimum':1,'maximum':50}}),
             tool('rdc_preview_open','Show or reopen the live RDC preview inside a compatible AI app. '
                  'Attaches to an existing browser or configured mobile session; closing the view leaves work running.',
                  {'session_id':PREVIEW_SESSION_ID}),
@@ -148,23 +156,33 @@ class Engine:
         # Slow reads and browser navigation must not block pause or job cancel.
         return {'ok':True,**self._invoke(name,arguments)}
 
-    def _guarded(self,operation):
+    def _guarded(self,operation,tool_name=None):
         try:
-            return operation()
+            result = operation()
+            if isinstance(result,dict) and result.get('ok') is False:
+                safe_record(self.diagnostics,'worker','operation_failed',tool_name)
+            return result
         except RDCError as exc:
+            safe_record(self.diagnostics,'worker','operation_failed',tool_name)
             return exc.result()
         except FileNotFoundError:
+            safe_record(self.diagnostics,'worker','operation_failed',tool_name)
             return RDCError('not_found','Requested file or program does not exist.').result()
         except PermissionError:
+            safe_record(self.diagnostics,'worker','operation_failed',tool_name)
             return RDCError('permission_denied','The operating system denied access.').result()
         except (OSError,ValueError,sqlite3.Error) as exc:
+            safe_record(self.diagnostics,'worker','operation_failed',tool_name)
             return RDCError('operation_failed',str(exc)).result()
+        except Exception:
+            safe_record(self.diagnostics,'worker','unexpected_error',tool_name)
+            raise
 
     def call(self,name,arguments=None):
-        return self._guarded(lambda:self._execute(name,arguments if arguments is not None else {}))
+        return self._guarded(lambda:self._execute(name,arguments if arguments is not None else {}),name)
 
     def owner_call(self,name,arguments=None):
-        return self._guarded(lambda:self._execute(name,arguments if arguments is not None else {},owner=True))
+        return self._guarded(lambda:self._execute(name,arguments if arguments is not None else {},owner=True),name)
 
     def _invoke(self,name,args):
         handlers = {'rdc_file_list':self.files.list,'rdc_file_read':self.files.read,'rdc_file_search':self.files.search,
@@ -175,6 +193,13 @@ class Engine:
             return handlers[name](**args)
         if name == 'rdc_system_status':
             return self.status(summary=True)
+        if name == 'rdc_diagnostics_status':
+            if self.diagnostics is not None:
+                return self.diagnostics.snapshot(**args)
+            report = Diagnostics.read_status(self.settings.state_dir,**args)
+            report.update(available=False,incomplete=True,
+                          capture_scope='retained_history_only_live_capture_unavailable')
+            return report
         if name == 'rdc_credentials_list':
             return self.credentials.list()
         if name == 'rdc_credentials_request':
@@ -311,6 +336,13 @@ class Engine:
         return self.adapters.snapshot(session_id)
 
     def close(self):
-        self.credentials.close()
-        if self.adapters:
-            self.adapters.close()
+        try:
+            self.credentials.close()
+            if self.adapters:
+                self.adapters.close()
+        finally:
+            try:
+                if self.diagnostics is not None:
+                    self.diagnostics.close()
+            except Exception:
+                pass
