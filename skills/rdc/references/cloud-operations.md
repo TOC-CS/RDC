@@ -2,6 +2,8 @@
 
 Use the current RDC App tool schemas. The cloud gateway adds `rdc_connection_status`, `rdc_operation_status`, and a `_rdc_request_id` field to worker tools. Local stdio or loopback worker tools do not need the cloud field unless their advertised schema says otherwise.
 
+Some AI hosts also require `link_id` for account routing. Copy an exact ID from the current advertised account choices and select it using the user's request and established conversation context. Do not derive it from an account name or email. If more than one account remains plausible for a write, resolve the target before dispatch. Retain the selected link with the worker identity and every operation, job, approval, credential and session ID, and keep the same link throughout recovery. Two connections reaching the same worker do not justify switching accounts to retry an uncertain action. Add this field only where the current schema requires it.
+
 ## Select the right recovery ID
 
 | Result or state | Retain | Recover with |
@@ -12,13 +14,15 @@ Use the current RDC App tool schemas. The cloud gateway adds `rdc_connection_sta
 | Credential broker response | `request.id` | `rdc_credentials_status {request_id: request.id}` |
 | Independent browser | `session_id` | Browser observations and `rdc_preview_open` for that session |
 
+The table identifies result IDs; each recovery call must also include the selected host account routing when required by its schema.
+
 Unwrap a completed gateway operation before interpreting the worker result. A cloud operation completing can mean the worker created an owner approval request, rather than that the requested action finished. Owner administration is separate from the agent tool catalog.
 
 For `pending_approval`, tell the owner the action is waiting in the paired computer's owner panel and poll the existing `request_id`. For a credential request's `pending` status, retain `request.id` and use its separate credential status tool. Leave decisions and native authentication to the owner; continue independent authorized work without creating replacement requests. Preview approval/job counts reflect the last status check, so refresh status before relying on them.
 
 ## Dispatch one intended mutation
 
-1. Confirm the connection and worker state, then use the current schema.
+1. Confirm the selected account, connection and worker state, then use the current schema.
 2. Generate a unique `_rdc_request_id` for the intended cloud mutation. Retain it with its exact tool and arguments. Keep a required worker `idempotency_key` as well.
 3. Send the request once. If it returns pending, retrieve the original operation ID until it reaches a meaningful outcome, within a bounded wait.
 4. After transport loss, recover the saved operation ID. If no operation ID was received, reuse the same request key and identical arguments to recover its existing record. Never substitute a new key to retry an uncertain mutation.

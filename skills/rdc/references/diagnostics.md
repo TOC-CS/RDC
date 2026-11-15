@@ -4,7 +4,7 @@ Use this guidance when a connected core 0.1.0a4 or later worker advertises `rdc_
 
 ## Read the report
 
-Call `rdc_diagnostics_status` with an optional integer `limit` from 1 through 50. It is read-only and remains available during owner pause and review mode. There is no repair, action or free-text argument. Keep normal cloud operation recovery authoritative when this call or the original task is pending.
+Call `rdc_diagnostics_status` using its current schema, including required host account routing such as `link_id`, and an optional integer `limit` from 1 through 50. Keep the selected account link through any operation recovery. The report is read-only and remains available during owner pause and review mode. There is no repair, action or free-text argument. Keep normal cloud operation recovery authoritative when this call or the original task is pending.
 
 For an authorized local inspection with a known private state directory, use:
 
