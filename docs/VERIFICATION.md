@@ -2,7 +2,49 @@
 
 Executed 2026-11-15. This record separates real execution, protocol fixtures, configuration examples, and unfinished work.
 
-## Verified source: 0.1.0a3
+## Verified source: 0.1.0a4
+
+The frozen iMac gate passed **254 tests in 67.244 seconds**, with **zero failures, errors, skips, expected failures or unexpected successes** and exit code `0`. Wrapper time was **67.884 seconds**, on **macOS 26.6.2 arm64 with Python 3.14.7**. Discovery and execution both counted 254 tests across 17 modules. All **54 inputs** matched the frozen manifest and remained unchanged: 52 source inputs and two verification helpers. No `ResourceWarning` line was observed; this does not establish the cause of historical warnings.
+
+The runtime was frozen from source commit `4a18ec0a87d30d4f37dea9b03a611098e14bc527` as candidate `diagnostics-0.1.0a4-final1`. The [sanitized public receipt](verification-results-0.1.0a4.json) preserves the exact input hashes, test outcomes and timings, and identifies the original receipt by SHA-256. Personal paths and operational logs are omitted. Live activation and the matching gateway deployment were subsequently verified separately, as recorded below.
+
+| Check | Executed evidence |
+|---|---|
+| Diagnostic recorder | Independent review passed. **21 tests passed**, no skips, in **2.064 seconds**, covering finite data validation, bounded queues and retention, private file handling, corrupt/unsafe storage, incomplete capture, read-only reports and unsupported-platform behavior. |
+| Relay and recorder integration | **55 tests passed**, no skips, in **5.470 seconds**. Existing delivery, restart, unknown-outcome and no-replay behavior remains covered when the recorder fails or secure capture is unavailable. |
+| Credential removal and UI fixture regressions | **14 focused UI contracts passed**, no skips, in **1.412 seconds**. The contracts execute the dashboard source through the DOM fixture, hold the decision's refresh, check disabled removal through re-render, then verify one request, explicit retry and successful removal. LF and CRLF embedded-source variants are exercised. |
+| Real Chromium credential workflow | The enhanced enrollment/consent/removal test passed on the iMac: **1 test in 12.511 seconds**, no skips. Its delayed status response forces the original busy-state race. Test cleanup releases the held response before unregistering its handler. Only synthetic credentials and isolated test state were used. |
+| Gateway source | The matching **52-tool** core catalog was generated from alpha4, alongside the rebuilt embedded resource. **9 gateway contract tests passed**, the TypeScript check exited zero, and the production build passed. The exact source was pushed and deployed as `38ea4b59c04dab8e2f8966317a30e44e0aa72a88`. |
+
+Private diagnostic capture records predefined event categories without arguments, raw errors, paths, credential locators, page content or operation identifiers. Existing relay reconnect and retained-result delivery provide the defined automatic recovery. Unknown device outcomes remain protected against replay; unknown code defects require reproduction, reviewed repairs, tests and approved version activation. Windows secure capture reports unavailable while worker and relay operations continue. See [diagnostics](DIAGNOSTICS.md) for capture, retention and crash limits.
+
+### Verified activation and private cloud route
+
+| Check | Observed result |
+|---|---|
+| Exact source activation | The reviewed installer activated all **52 frozen source inputs** and retained the previous code for rollback. The configuration hash, paired device identity, grants, pause state, protected token-file metadata and existing virtual environment were preserved. |
+| Native ChatGPT status | `rdc_system_status` reported **0.1.0a4**, the same device identity and idle online state after installation and again after gateway deployment. |
+| Real diagnostic store | The local CLI exited zero with `available: true`, `storage_status: ready` and `incomplete: false`. It read **one real relay `result_uploaded` event**, zero dropped events and zero pending events. This confirms that stored observation; it does not identify or certify an unrelated user task. |
+| Matching private gateway | The existing owner-private Site reached terminal deployment success with MCP enabled, from source `38ea4b59c04dab8e2f8966317a30e44e0aa72a88`. Its matching catalog provides **52 core tools plus 2 gateway tools**. |
+| Existing private plugin | App-backed plugin **1.0.4** was saved through the existing update route. All six changed files exactly matched the approved overlay; three protected files (App binding, cloud recovery and credential guidance) exactly matched the prior release. All nine files were accounted for and the private audience was preserved. The rendered publisher label in ChatGPT remains unresolved; no TOC Ministries label correction is claimed. |
+| Host catalog freshness | The active conversation retained an earlier inventory of **41 model-visible tool names**; new mobile and diagnostic names were absent despite the matching **54-tool server catalog**. The real diagnostic store was verified through the CLI. Deployment and saved plugin readback do not establish that a running host conversation has refreshed its inventory. No refresh procedure was verified. |
+| Public alpha4 release | Publication of the integrated alpha4 source and its hosted matrix remain pending exact-revision readback. The earlier successful repair matrix below applies to the alpha3 repair revision. |
+
+The embedded component's production rendering, host display modes and an explicitly approved live cloud browser workflow retain their separate acceptance checks. Existing owner permissions remain authoritative.
+
+### Public alpha3 CI and alpha4 repairs
+
+All **218 intended alpha3 public files** matched their exact blob hashes and modes at commit [`76c5793e924612439d12b8d9ac7e288939fd07aa`](https://github.com/TOC-CS/RDC/commit/76c5793e924612439d12b8d9ac7e288939fd07aa), with no missing or extra paths. Its [hosted workflow run](https://github.com/TOC-CS/RDC/actions/runs/43695142921) completed with a failed matrix:
+
+| Platform | Result | Confirmed cause and repair |
+|---|---|---|
+| macOS | **200 tests passed in 116.152 seconds**. | The job passed. Its output-capture timeout fixture also emitted a subprocess `ResourceWarning`; the warning's cause remains unassigned. |
+| Ubuntu | One credential UI error. | Remove remained enabled while the preceding credential decision awaited its status refresh. The busy guard discarded the click before sending a request. Alpha4 disables existing and newly rendered removal buttons until that action completes, while preserving explicit retries. |
+| Windows | Five embedded UI fixture failures. | The source fixture removed its leading import only for LF line endings. CRLF left an ES-module import inside the VM script. Alpha4 accepts both line endings and adds an explicit regression. |
+
+The repairs were subsequently published at commit [`314ebb850ea4aca2af82c85a7a1a2b96f41e9884`](https://github.com/TOC-CS/RDC/commit/314ebb850ea4aca2af82c85a7a1a2b96f41e9884). [That repair run](https://github.com/TOC-CS/RDC/actions/runs/43697887451) **passed on Linux, macOS and Windows**. This successful matrix applies to the alpha3 repair revision. Integrated alpha4 publication and its hosted matrix remain pending their own exact-source evidence.
+
+## Historical verified source: 0.1.0a3
 
 The final isolated iMac gate passed **200 tests in 67.774 seconds**, with **zero failures, errors, or skips** and exit code `0`. Wrapper time was **68.475 seconds**, on **macOS 26.6.2 arm64 with Python 3.14.7**. All **52 inputs** matched the frozen manifest and remained unchanged: 50 source inputs and two verification helpers. The [0.1.0a3 receipt](verification-results-0.1.0a3.json) records the hashes and result. No `ResourceWarning` line was observed in this run; this does not establish a cause for historical warnings.
 
@@ -10,15 +52,15 @@ This release adds owner-configured Android/iPhone/iPad Appium tools, mobile prev
 
 The preceding 200-test candidate run had one error: an embedded-preview test still expected “different browser session” after the shared browser/mobile preview changed its message to “different session.” Updating that exact assertion was the only input change for the final run; no runtime behavior or deadline was changed. The failed result remains in the verification chronology.
 
-Source qualification, installation, and public-directory availability are separate. The installed alpha2 baseline below is retained as historical evidence until an alpha3 deployment is independently verified.
+Source qualification, installation, and public-directory availability are separate. The alpha3 source passed the isolated Mac gate, its first public hosted matrix failed, and the repair revision subsequently passed all three OS jobs. Alpha4 activation is verified above; the alpha2 installation below remains historical evidence for its recorded source.
 
 ### Earlier hosted alpha2 run
 
-An earlier hosted matrix executed the audited 0.1.0a2 source. Ubuntu passed 147 tests in 80.830 seconds with no skips. macOS passed 147 tests in 123.877 seconds with no skips. Windows ran 147 tests in 87.923 seconds with four fixture failures and one POSIX-only FIFO skip. Three failures assumed LF output where Python printed CRLF; the fourth supplied a real Windows path to a simulated Mac Keychain test. This candidate uses explicit byte-output fixtures and a synthetic POSIX home path. Production output remains raw bytes and native locator validation remains strict. The corrected candidate still requires its own hosted Windows result.
+An earlier hosted matrix executed the audited 0.1.0a2 source. Ubuntu passed 147 tests in 80.830 seconds with no skips. macOS passed 147 tests in 123.877 seconds with no skips. Windows ran 147 tests in 87.923 seconds with four fixture failures and one POSIX-only FIFO skip. Three failures assumed LF output where Python printed CRLF; the fourth supplied a real Windows path to a simulated Mac Keychain test. This candidate uses explicit byte-output fixtures and a synthetic POSIX home path. Production output remains raw bytes and native locator validation remains strict. The later alpha3 repair matrix above supplies passing Windows evidence for its recorded source.
 
 The public repository was reinitialized on 2026-11-15 with a project-only author identity and GitHub no-reply commit metadata. The earlier hosted run belongs to a retained private history and is historical evidence, not a current publicly accessible CI link. Current source publication and hosted checks are verified against the new repository history.
 
-## Audited and installed baseline: 0.1.0a2
+## Historical audited and installed baseline: 0.1.0a2
 
 The final frozen iMac suite passed **147 tests in 55.091 seconds**, with no skips and exit code `0`. Wrapper time was **55.655 seconds**, on **macOS 26.6.2 arm64 with Python 3.14.7**. All **35 recorded runtime/test inputs** matched the manifest and remained unchanged during execution. The [0.1.0a2 receipt](verification-results-0.1.0a2.json) records the platform, result and individual SHA-256 hashes. This is the combined result for the [audit repairs](AUDIT-2026-11-15.md).
 
@@ -94,13 +136,13 @@ Reproduce with `python scripts/benchmark.py --browser` in the installed environm
 
 - Actual Claude model execution: CLI exists on the iMac but reports no logged-in account. Configuration and protocol examples exist; no Claude model result is claimed.
 - Actual Safari: launched the real Apple safaridriver and attempted a W3C session. Safari rejected creation because **Allow remote automation** is disabled in Safari Settings. The setting was not changed. The live fill/click/screenshot check remains blocked until the owner enables it; WebKit cannot substitute for this test.
-- Windows: the hosted baseline ran and exposed the fixture failures recorded above. The new fixture corrections need hosted execution at their published revision. Windows ACLs, native input and actual credential providers require separate device qualification.
+- Windows: the published alpha3 repair revision passed its hosted job after the CRLF fixture repair. Integrated alpha4 still requires its own hosted result. Windows diagnostic capture is intentionally unavailable; ACLs, native input and actual credential providers require separate device qualification.
 - iOS/Android: native adapter and preview fixtures are implemented in the current candidate; no physical phone or tablet was connected. Actual Appium drivers, OS/device behavior and native credential providers remain unqualified. Native saved-password filling is unsupported.
 - Native independence: the desktop adapter is optional, and the Linux Xvfb/container recipe is unbuilt in this session. Actual native-app isolation and live native preview remain incomplete.
 - Browser sessions are daemon-resident. They survive chat/bridge disconnect, not daemon exit. One session currently controls one page; broad popup/tab/frame and upload/download workflows need expansion.
 - Production embedded hosts: the component and host protocol were tested, but rendering inside production ChatGPT or Claude remains pending. Codex's existing built-in preview does not establish third-party MCP Apps rendering support.
 - ChatGPT web: the private gateway and plugin are connected, and native RDC tool calls succeeded. Real host rendering, advertised display modes and an explicitly approved live cloud browser workflow remain unverified. The earlier installation-page navigation obstacle is historical. Desktop/Codex execution cannot substitute for embedded acceptance.
-- Public GitHub repository: the new source publication and its hosted matrix require verification at their exact revisions. Public ChatGPT directory listing and multi-user OAuth onboarding remain separate from public source availability.
+- Public GitHub repository: the full alpha3 tree was verified at its exact revision. Alpha4 publication and hosted checks require their own readback and run evidence. Public ChatGPT directory listing and multi-user OAuth onboarding remain separate from public source availability.
 - Process diagnostic: attribute the timeout-fixture subprocess warning using PID and teardown observations before concluding whether cleanup needs another change.
 
 ## Reproducibility and data handling
@@ -113,4 +155,4 @@ Hosted CI evidence is recorded by exact source revision above. Installation rema
 
 RDC was installed into a separate iMac development directory. A default local owner profile and running worker were created, with a dedicated working root, command execution enabled, per-operation owner review, and native desktop input disabled. Codex and Claude Desktop received a new `rdc connect` entry; existing client settings were backed up and preserved. No application was restarted. The owner dashboard was connected and used in the actual local Chrome browser to start a separate session, navigate a synthetic page, fill a field, click a greeting button, and verify the rendered result. The live tab was retained for owner inspection.
 
-That browser dashboard remains an administrator and diagnostic interface. It does not satisfy the primary requirement for a preview inside the AI application. The portable embedded resource supplies that interface for compatible hosts. The current private ChatGPT connection and 0.1.0a2 worker restart are confirmed above; production UI acceptance remains pending. The worker and relay remain development processes without login-service registration, so a machine restart requires starting them again.
+That browser dashboard remains an administrator and diagnostic interface. It does not satisfy the primary requirement for a preview inside the AI application. The portable embedded resource supplies that interface for compatible hosts. The current private ChatGPT connection and 0.1.0a4 activation are confirmed above; production UI acceptance remains pending. The worker and relay remain development processes without login-service registration, so a machine restart requires starting them again.
