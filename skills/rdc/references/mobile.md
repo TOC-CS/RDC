@@ -1,6 +1,6 @@
 # Phones and tablets
 
-Use the connected tool catalog as the authority. Mobile support begins with core 0.1.0a3 and a matching gateway catalog; a cached host may not expose newly added tools yet. A responsive dashboard alone does not control a phone's operating system.
+Use the connected tool catalog as the authority. Mobile support begins with core 0.1.0a3 and a matching gateway catalog. Confirm that the active worker and gateway have that capability; a prepared release, saved skill or cached host catalog does not establish an active deployment. A responsive dashboard alone does not control a phone's operating system.
 
 ## Select the intended device
 
@@ -16,7 +16,7 @@ Native observations redact editable values and secure-field labels. `secure_inpu
 
 Screenshots require verified native hierarchies before and after capture. A secure field, stale screen, invalid hierarchy or existing privacy latch can make an image unavailable. `screenshot_redaction_required` is a privacy refusal, not a worker disconnect. Continue through safe redacted observations or owner assistance. Never bypass it with raw ADB, another screenshot client, desktop capture, or a new session. Hierarchy-based checks do not classify secrets painted into arbitrary app images.
 
-Observe all truncation indicators. Image source pixels can differ from native logical coordinates; use the reported scale when interpreting a screenshot, and prefer observed handles for control input.
+Observe all truncation indicators. Image source pixels can differ from native logical coordinates; use the reported scale when interpreting a screenshot, and prefer observed handles for control input. A native fill clears the field before sending text; a failed response can leave a partial change. Inspect the current field state before deciding another action.
 
 ## Recover and close
 
@@ -26,4 +26,4 @@ Android ADB adds swipe, long press and explicit package/activity launch through 
 
 ## Evidence boundary
 
-The source includes synthetic Android/iOS protocol tests, privacy tests and UI fixtures. Actual Android, iPhone, iPad, emulator/simulator behavior and production ChatGPT/Claude mobile rendering require device-specific acceptance. Native saved-password providers remain unimplemented. Preserve OS consent and state these limits accurately.
+The source includes synthetic Android/iOS protocol tests, privacy tests and UI fixtures. The 0.1.0a3 candidate recorded 200 passing macOS tests with no skips. Those fixtures establish no physical iPhone 17 Pro Max, other iPhone, iPad, Android, emulator or simulator acceptance. Actual Android, iPhone, iPad, emulator/simulator behavior and production ChatGPT/Claude mobile rendering require device-specific acceptance. Native saved-password providers remain unimplemented. Preserve OS consent and state these limits accurately.
