@@ -93,7 +93,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
   tools.push({name:'rdc_connection_status',description:'Read the authenticated RDC cloud connection, device availability and queue counts without issuing device commands.',
     inputSchema:{type:'object',properties:{},additionalProperties:false},
     annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false}});
-  const serverInfo={name:'rdc',title:'RDC',version:'0.1.0a3',description:'Independent agent workspace with an embedded live preview.',
+  const serverInfo={name:'rdc',title:'RDC',version:'0.1.0a4',description:'Independent agent workspace with an embedded live preview.',
     ...(iconDataUri?{icons:[{src:iconDataUri,mimeType:'image/png'}]}:{})};
   const capabilities={tools:{listChanged:false},resources:{subscribe:false,listChanged:false},extensions:{[UI_EXTENSION]:{}}};
   const instructions='RDC controls the paired device through its existing local grants. Open rdc_preview_open to see the embedded live view. Closing or moving that view never stops work. Mutating cloud tools require a stable _rdc_request_id. When a call returns pending, recover it using rdc_operation_status and the returned operation_id. Never repeat an uncertain mutation under a new ID. Mutation request IDs are retained for 24 hours; preview frame results and operation identities have short retention. Owner approvals remain in the local owner administration.';
