@@ -28,9 +28,23 @@ Private diagnostic capture records predefined event categories without arguments
 | Matching private gateway | The existing owner-private Site reached terminal deployment success with MCP enabled, from source `38ea4b59c04dab8e2f8966317a30e44e0aa72a88`. Its matching catalog provides **52 core tools plus 2 gateway tools**. |
 | Existing private plugin | App-backed plugin **1.0.4** was saved through the existing update route. All six changed files exactly matched the approved overlay; three protected files (App binding, cloud recovery and credential guidance) exactly matched the prior release. All nine files were accounted for and the private audience was preserved. The rendered publisher label in ChatGPT remains unresolved; no TOC Ministries label correction is claimed. |
 | Host catalog freshness | The active conversation retained an earlier inventory of **41 model-visible tool names**; new mobile and diagnostic names were absent despite the matching **54-tool server catalog**. The real diagnostic store was verified through the CLI. Deployment and saved plugin readback do not establish that a running host conversation has refreshed its inventory. No refresh procedure was verified. |
-| Public alpha4 release | Publication of the integrated alpha4 source and its hosted matrix remain pending exact-revision readback. The earlier successful repair matrix below applies to the alpha3 repair revision. |
+| Public alpha4 release | The integrated source was published at [`e4f6f18c8d1002462fccd93f85a1be1e1983cb52`](https://github.com/TOC-CS/RDC/commit/e4f6f18c8d1002462fccd93f85a1be1e1983cb52). Independent readback matched all **225 manifest paths, blob IDs, modes and sizes** to approved local source `12335ccedf6e6464ae8924b051b2742296afd2d3`, with no missing, extra or mismatched files. Its exact-revision hosted matrix passed as detailed below. |
 
 The embedded component's production rendering, host display modes and an explicitly approved live cloud browser workflow retain their separate acceptance checks. Existing owner permissions remain authoritative.
+
+### Public alpha4 hosted matrix
+
+The qualified public source commit is [`e4f6f18c8d1002462fccd93f85a1be1e1983cb52`](https://github.com/TOC-CS/RDC/commit/e4f6f18c8d1002462fccd93f85a1be1e1983cb52), published on **2026-11-15 at 09:34:56 UTC**, with tree `b7b1f0fc4181a86963e498a807f4579d3acb79f5`. That tree exactly matches approved local source `12335ccedf6e6464ae8924b051b2742296afd2d3`. The [exact-revision hosted workflow](https://github.com/TOC-CS/RDC/actions/runs/43699939501) reached **SUCCESS at 09:41:45 UTC**.
+
+| Platform | Tests reported | Executed / passed | Skips | Suite time | Failures / errors | Job result |
+|---|---:|---:|---:|---:|---:|---|
+| Ubuntu | 254 | 254 | 0 | 106.264 seconds | 0 / 0 | Passed |
+| macOS | 254 | 254 | 0 | 118.976 seconds | 0 / 0 | Passed |
+| Windows | 254 | 237 | 17 | 158.131 seconds | 0 / 0 | Passed with skips |
+
+The Windows result reports 254 discovered tests, comprising **237 executed passes and 17 skips**. The skips are one POSIX FIFO contract and **16 secure diagnostic storage contracts** requiring POSIX descriptor operations: 14 `DiagnosticsTests` and two `WorkerDiagnosticTests`. Windows secure capture remains explicitly unavailable. Passing the hosted job does not qualify that unimplemented capture path, physical devices or native credential providers.
+
+The hosted macOS log emitted one `ResourceWarning` for subprocess **5137** during `test_capture_error_survives_command_timeout`, while the test and job passed. Its origin remains unestablished. A targeted review repeated that timeout test 25 times on Linux and ran the full ten-test worker-I/O module with forced collection; all observed children were reaped and no warnings appeared. Those checks did not justify a worker cleanup change, and no runtime change was made. The warning remains unresolved; the evidence establishes neither a harmless warning nor a confirmed surviving-child leak. The separate frozen local Mac run recorded **zero warning lines**. Keep those observations distinct.
 
 ### Public alpha3 CI and alpha4 repairs
 
@@ -42,7 +56,7 @@ All **218 intended alpha3 public files** matched their exact blob hashes and mod
 | Ubuntu | One credential UI error. | Remove remained enabled while the preceding credential decision awaited its status refresh. The busy guard discarded the click before sending a request. Alpha4 disables existing and newly rendered removal buttons until that action completes, while preserving explicit retries. |
 | Windows | Five embedded UI fixture failures. | The source fixture removed its leading import only for LF line endings. CRLF left an ES-module import inside the VM script. Alpha4 accepts both line endings and adds an explicit regression. |
 
-The repairs were subsequently published at commit [`314ebb850ea4aca2af82c85a7a1a2b96f41e9884`](https://github.com/TOC-CS/RDC/commit/314ebb850ea4aca2af82c85a7a1a2b96f41e9884). [That repair run](https://github.com/TOC-CS/RDC/actions/runs/43697887451) **passed on Linux, macOS and Windows**. This successful matrix applies to the alpha3 repair revision. Integrated alpha4 publication and its hosted matrix remain pending their own exact-source evidence.
+The repairs were subsequently published at commit [`314ebb850ea4aca2af82c85a7a1a2b96f41e9884`](https://github.com/TOC-CS/RDC/commit/314ebb850ea4aca2af82c85a7a1a2b96f41e9884). [That repair run](https://github.com/TOC-CS/RDC/actions/runs/43697887451) **passed on Linux, macOS and Windows**. This successful matrix applies to the alpha3 repair revision; the integrated alpha4 source has its own verified publication and hosted matrix above.
 
 ## Historical verified source: 0.1.0a3
 
@@ -136,13 +150,13 @@ Reproduce with `python scripts/benchmark.py --browser` in the installed environm
 
 - Actual Claude model execution: CLI exists on the iMac but reports no logged-in account. Configuration and protocol examples exist; no Claude model result is claimed.
 - Actual Safari: launched the real Apple safaridriver and attempted a W3C session. Safari rejected creation because **Allow remote automation** is disabled in Safari Settings. The setting was not changed. The live fill/click/screenshot check remains blocked until the owner enables it; WebKit cannot substitute for this test.
-- Windows: the published alpha3 repair revision passed its hosted job after the CRLF fixture repair. Integrated alpha4 still requires its own hosted result. Windows diagnostic capture is intentionally unavailable; ACLs, native input and actual credential providers require separate device qualification.
+- Windows: the exact alpha4 hosted job passed with 17 documented POSIX-only skips. Secure diagnostic capture remains unavailable; Windows ACLs, native input and actual credential providers require separate device qualification.
 - iOS/Android: native adapter and preview fixtures are implemented in the current candidate; no physical phone or tablet was connected. Actual Appium drivers, OS/device behavior and native credential providers remain unqualified. Native saved-password filling is unsupported.
 - Native independence: the desktop adapter is optional, and the Linux Xvfb/container recipe is unbuilt in this session. Actual native-app isolation and live native preview remain incomplete.
 - Browser sessions are daemon-resident. They survive chat/bridge disconnect, not daemon exit. One session currently controls one page; broad popup/tab/frame and upload/download workflows need expansion.
 - Production embedded hosts: the component and host protocol were tested, but rendering inside production ChatGPT or Claude remains pending. Codex's existing built-in preview does not establish third-party MCP Apps rendering support.
 - ChatGPT web: the private gateway and plugin are connected, and native RDC tool calls succeeded. Real host rendering, advertised display modes and an explicitly approved live cloud browser workflow remain unverified. The earlier installation-page navigation obstacle is historical. Desktop/Codex execution cannot substitute for embedded acceptance.
-- Public GitHub repository: the full alpha3 tree was verified at its exact revision. Alpha4 publication and hosted checks require their own readback and run evidence. Public ChatGPT directory listing and multi-user OAuth onboarding remain separate from public source availability.
+- Public GitHub repository: all 225 alpha4 files matched the approved release tree, and the exact-revision hosted matrix passed with the Windows skips recorded above. Public ChatGPT directory listing and multi-user OAuth onboarding remain separate from public source availability.
 - Process diagnostic: attribute the timeout-fixture subprocess warning using PID and teardown observations before concluding whether cleanup needs another change.
 
 ## Reproducibility and data handling
