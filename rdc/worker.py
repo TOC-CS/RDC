@@ -198,9 +198,15 @@ def run(state_dir, job_id):
         if process is not None:
             try:
                 terminate_tree(process)
-                exit_code = process.wait(timeout=10)
             except Exception:
                 pass
+            # A backend can signal the child and then fail. Reap independently
+            # of that attempt, while keeping cleanup bounded if it is still live.
+            try:
+                exit_code = process.wait(timeout=10)
+            except Exception:
+                if exit_code is None:
+                    error += ' Owned child exit could not be confirmed after cleanup.'
     finally:
         stopped.set()
         writer_done.wait(.2)
