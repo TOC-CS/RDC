@@ -8,7 +8,7 @@ RDC (Remote Desktop Commander) is an independent TOC Ministries project: a free,
 
 The local worker requires no RDC account, subscription, hosted service, telemetry, or model API key. Optional gateway hosting and your AI provider have their own terms and costs. This repository contains no Desktop Commander proprietary service code or assets.
 
-**Version: 0.1.0a3 (alpha).** This release adds owner-configured Android, iPhone and iPad native sessions, touch controls, and mobile previews. It also corrects Windows-specific test fixture assumptions. Read [verification](docs/VERIFICATION.md), the [audit](docs/AUDIT-2026-11-15.md), and [mobile setup and limits](docs/MOBILE.md) for the exact executed evidence. Physical phones/tablets, native mobile credential providers, production AI-host rendering, a native desktop live viewer, automatically provisioned Mac/Windows VMs, and public ChatGPT web OAuth onboarding still require implementation or qualification. [Platform details](docs/platforms.md).
+**Version: 0.1.0a4 (alpha).** This release adds private diagnostic reports for worker failures and relay recovery, fixes credential removal during a pending owner decision, and corrects CRLF handling in the embedded UI test fixture. Android, iPhone and iPad native sessions, touch controls, and mobile previews remain available through owner-configured adapters. Read [verification](docs/VERIFICATION.md), the [audit](docs/AUDIT-2026-11-15.md), [diagnostic limits](docs/DIAGNOSTICS.md), and [mobile setup](docs/MOBILE.md) for executed evidence. Physical devices, native credential providers, production AI-host rendering, native desktop streaming, automatic Mac/Windows VM provisioning, and public ChatGPT web OAuth onboarding retain separate qualification or implementation work. [Platform details](docs/platforms.md).
 
 ## What works
 
@@ -21,6 +21,7 @@ The local worker requires no RDC account, subscription, hosted service, telemetr
 - Persisted owner review and a pause gate. An agent token cannot call owner API routes. Grants are configured by the owner, outside the MCP catalog.
 - A private credential broker with opaque saved-password aliases, owner Allow Once / Always Allow for this site / Deny, and revocation. Passwords go through a private browser fill path; native Keychain or device authentication remains under the operating system's control. [Setup and limits](docs/CREDENTIALS.md).
 - An optional outbound device relay for the companion private ChatGPT Sites gateway. It retains request/result state, verifies exact request hashes, and recovers pending results without automatically replaying uncertain actions.
+- Private, bounded incident capture for guarded worker failures and relay outcomes, with a read-only report through `rdc_diagnostics_status` or `rdc diagnostics`. Supported POSIX runtimes capture predefined categories without arguments, raw errors, paths or credentials. Windows capture reports unavailable while worker and relay operations continue. [Diagnostics and recovery](docs/DIAGNOSTICS.md).
 - Optional PyAutoGUI desktop and authorized Android ADB routes, including Android swipe, long press and explicit activity launch. These require OS permissions and device setup. A native screenshot includes the scaling between captured image and logical input coordinates.
 - Owner-configured Appium sessions for Android through UiAutomator2 and iPhone/iPad through XCUITest. Observe native controls, tap, fill nonsecure fields, swipe, and view privacy-checked screenshots in the existing preview. Physical-device input uses that device's screen; use a separate emulator, simulator or dedicated device for independent work. See [mobile setup](docs/MOBILE.md).
 
@@ -76,11 +77,13 @@ Run the relay alongside the worker, selecting its matching private state:
 rdc relay --config /absolute/path/to/private/relay-config.json
 ```
 
-The local catalog contains **51 tools**. The gateway adds `rdc_connection_status` and `rdc_operation_status`, for **53 tools** when its bundled catalog matches this version. Gateway source deployment and actual rendering inside ChatGPT are separate acceptance checks. An embedded component, a registered route, or a logo asset alone does not establish that the production AI host renders RDC's preview or tool identity.
+The local catalog contains **52 tools**. The gateway adds `rdc_connection_status` and `rdc_operation_status`, for **54 tools** when its bundled catalog matches this version. Gateway source deployment and actual rendering inside ChatGPT are separate acceptance checks. An embedded component, a registered route, or a logo asset alone does not establish that the production AI host renders RDC's preview or tool identity.
 
-Native RDC tools are connected and functional in ChatGPT. Connection status, worker status and preview open succeeded; identical cloud request-ID reuse returned the same pending owner approval ID without granting approval. The private App-backed plugin 1.0.2 was saved and read back, the worker restart confirmed 0.1.0a2 with unchanged configuration, and the private gateway deployment succeeded. The preview-open check had no active browser sessions. Rendering of the embedded component and an owner-approved live cloud browser workflow remain unverified. See the [audit evidence](docs/AUDIT-2026-11-15.md#current-chatgpt-connection).
+Native RDC tools are connected and functional in ChatGPT. The installed **0.1.0a4** worker reported the same device identity and idle online state after activation and again after the matching private gateway deployment. The frozen source passed **254 tests on macOS with no failures, errors or skips**. Configuration, grants, pause state and protected file metadata were preserved, and the local diagnostic report read a real relay event with no drops or pending capture. Private App-backed plugin **1.0.4** was saved and read back with its existing App binding and private audience preserved. The ChatGPT publisher label remains unresolved. Production embedded rendering and an owner-approved live cloud browser workflow remain unverified. See the [audit evidence](docs/AUDIT-2026-11-15.md#current-chatgpt-connection).
 
 The local stdio package still works without a relay. Hosted clients need a reachable authenticated route; their `127.0.0.1` does not point to the user's computer. Direct HTTP clients that support the worker's bearer authentication can use an appropriately secured endpoint.
+
+Check the connected host's actual tool inventory before using newly deployed tools. At post-deployment verification, the active conversation retained an older catalog without the new mobile or diagnostic names, despite the matching server catalog. The real diagnostic store was verified through the local CLI. Host catalog freshness and embedded rendering each need their own observation.
 
 ### Preview window behavior
 
@@ -138,6 +141,12 @@ If WebDriver creates a session but later setup fails, RDC attempts to close that
 
 Empty relay polls gradually back off from 250 milliseconds to five seconds, using the longer of the gateway's bounded poll interval and the local delay. Receiving work immediately resets the local delay and the pump checks for more work after returning its result. At steady idle, each empty response is followed by a five-second delay; server-side long polling can reduce the request rate further. A newly queued task after a quiet period may incur up to five seconds of additional pickup delay, plus network time. Heartbeats during execution and operation-expiry checks remain separate.
 
+### Private diagnostics and recovery
+
+Use `rdc_diagnostics_status` with an optional `limit` from 1 to 50, or run `rdc diagnostics --state-dir /path/to/private/rdc-state --limit 20`. The report distinguishes connection interruptions, verified reconnection, retained result delivery, and unknown outcomes. Capture uses a queue of at most 256 entries and retains at most 2048 predefined events in a separate private store. Check `available`, `incomplete`, `storage_status` and the capture counters before relying on a report. Windows capture is unavailable in this release; a CLI history read cannot establish another process's live capture state.
+
+The relay automatically reconnects transports and retries delivery of retained results under its existing rules. Uncertain actions remain protected from replay. Unknown code defects require reproduction, a reviewed repair, tests and activation of an approved version. The recorder neither generates repair code nor installs updates. See [the diagnostic contract](docs/DIAGNOSTICS.md) for finite data fields, bounded storage, dropped events and crash limits.
+
 ## Saved-password permissions
 
 The owner enrolls an existing native credential in the owner administration page by supplying a safe alias, exact HTTPS origin and native item locator. macOS enrollment now requires the specific classic **Keychain file**, server and account. The private version-2 locator binds one HTTPS origin; older server/account-only aliases require removal and re-enrollment before filling. The form never asks for a password or enumerates the vault. It generates an opaque ID and writes the private `credential-locators.json`; advanced owners may edit that mapping privately. Enrollment does not authorize a fill or verify that the native entry exists. With no mapping file, this feature is simply unconfigured. The agent can list safe aliases, request a fill into a fresh observed password field, and inspect request status. It cannot enroll or remove credentials, approve a request, create a persistent grant, or revoke a grant through MCP.
@@ -165,7 +174,7 @@ For a guided run inside a real AI host, follow [client acceptance](docs/ACCEPTAN
 .venv/bin/python scripts/benchmark.py --browser
 ```
 
-Use the installed virtual environment. The managed system Python may contain an older incompatible MCP SDK. CI defines Linux, macOS, and Windows runs; a workflow file is not evidence that those runs have happened. Tests report unavailable browser runtimes as skips. macOS and Windows hardware/permission checks are separate from a fake WebDriver protocol test.
+Use the installed virtual environment. The managed system Python may contain an older incompatible MCP SDK. Hosted Linux, macOS and Windows results are recorded by exact revision in [verification](docs/VERIFICATION.md). Tests report unavailable browser runtimes as skips. macOS and Windows hardware and permission checks remain separate from protocol fixtures.
 
 Benchmarks report local worker latency and call counts. They do not establish that RDC is faster than Codex or Desktop Commander. Comparable task success, recovery, total round trips, and end-to-end time are the intended performance measures.
 
@@ -173,5 +182,5 @@ Benchmarks report local worker latency and call counts. They do not establish th
 
 See [design](docs/superpowers/specs/2026-11-15-rdc-design.md), [implementation plan](docs/superpowers/plans/2026-11-15-rdc-plan.md), [comparison](docs/COMPARISON.md), [TOC migration](docs/TOC-MIGRATION.md), [release verification](docs/VERIFICATION.md), and the [current audit and priorities](docs/AUDIT-2026-11-15.md). Contributions should include a reproducer and actual platform evidence. Use synthetic fixtures rather than personal credentials or production data.
 
-Priority next work: public multiuser ChatGPT OAuth onboarding and production host acceptance, native desktop streaming and input handoff, browser tabs/popups/frames/download-upload workflows, verified Safari and Windows runs, native credential-provider qualification, mobile device qualification, and packaging/signing. See the platform matrix for precisely what is implemented.
+Priority next work: public multiuser ChatGPT OAuth onboarding and production host acceptance, native desktop streaming and input handoff, browser tabs/popups/frames/download-upload workflows, actual Safari and native Windows qualification, native credential-provider qualification, mobile device qualification, and packaging/signing. See the platform matrix for precisely what is implemented.
 
