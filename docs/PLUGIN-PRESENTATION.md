@@ -1,6 +1,6 @@
 # RDC plugin presentation
 
-Status checked on 2026-11-15. The public source package contains the proposed branding below. **The connected private App's listing has not been updated by these source changes.** Public directory submission is a separate process.
+Status checked on 2026-11-15. The public source package contains the proposed branding below. The connected private App's description already credits TOC Ministries, while its generic icon and developer label remain unresolved. **Source branding does not establish a change to the installed App's presentation.** The owner has kept both branding requests open and accepts the personal developer name if that change is unsupported. These requests do not block the rest of development. Public directory submission is a separate process.
 
 ## Proposed identity and descriptions
 
@@ -24,9 +24,9 @@ Remote Desktop Commander (RDC) is an independent TOC Ministries project: a free,
 
 ## Connected App editing constraints
 
-The current Sites editing tool exposes a Site display-title change. It does not expose publisher, App-logo, or App-description editing. Plugin Creator's App-backed update contract preserves the App's identity, bindings, descriptions, and presentation. Its supported package edits therefore cannot apply this branding to the connected App. Changing the website's logo or portable `plugin.json` does not establish that the ChatGPT listing changed.
+The current Sites editing tool exposes a Site display-title change. Owner-supplied ChatGPT settings screenshots independently show App name and App description editors plus Refresh tools, with no icon or publisher editor. Those UI controls and the package-editing API have different capabilities. Plugin Creator's App-backed update contract permits skills and support-file updates while preserving the App's bindings, name and presentation. It exposes no supported icon or publisher setter for this App. Changing the website's logo or portable `plugin.json` does not establish that the ChatGPT listing or chat activity icon changed.
 
-OpenAI documents name and logo editing in an App's **Manage** menu when those controls are available. That documentation does not establish a publisher or description editor for this private App. The available tools and documentation were inspected without changing the App, global profile, permissions, or audience. No duplicate App or plugin was created. Use a supported management control for the existing App when available; do not replace its connection or invent metadata fields to bypass the restriction.
+The documented public publishing workflow supports a primary icon and verified developer identity, but no in-place publishing route preserving this private Sites App's identity has been established. Use a supported management or ownership-preserving submission route for the existing App when available. Do not replace its connection, create a duplicate wrapper, change the global account profile, or invent metadata fields to bypass the editing limit. Refresh tools is a tool/resource metadata action; it has not been shown to change this App's icon or publisher.
 
 ## Public distribution
 
@@ -36,6 +36,6 @@ Each owner must connect their own worker, credentials, and devices. The current 
 
 ## Official references
 
-- [Connecting custom MCP servers in ChatGPT](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt), existing-App name and logo controls.
+- [Connect and test your plugin](https://developers.openai.com/plugins/deploy/connect-chatgpt), tool/resource metadata refresh and host verification.
 - [Upload and submit your plugin](https://developers.openai.com/plugins/deploy/submission), publishing identity and listing fields.
 - [Plugin submission errors](https://developers.openai.com/plugins/deploy/submission-errors), developer identity defaults and presentation limits.
