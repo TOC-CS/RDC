@@ -1,0 +1,23 @@
+services:
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    init: true
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      RDC_DESKTOP_MODE: disabled
+      RDC_ENABLE_EXEC: "0"
+    volumes:
+      - worker-state:/home/rdc/state
+      - worker-files:/workspace
+    shm_size: 1gb
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+volumes:
+  worker-state:
+  worker-files:
