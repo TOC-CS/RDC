@@ -2,7 +2,35 @@
 
 Executed 2026-11-15. This record separates real execution, protocol fixtures, configuration examples, and unfinished work.
 
-## Verified source: 0.1.0a4
+## Verified and installed source: 0.1.0a5
+
+The frozen iMac gate passed **256 tests in 106.095 seconds**, with **zero failures, errors, skips, expected failures or unexpected successes** and exit code `0`. Wrapper time was **107.145 seconds**, on **macOS 26.6.2 arm64 with Python 3.14.7**. Discovery and execution both counted 256 tests across 17 modules. All **54 inputs** matched the frozen manifest and remained unchanged: 52 source inputs and two verification helpers. No `ResourceWarning` line was observed; this does not establish the cause of historical subprocess warnings.
+
+The tested runtime was frozen from source commit `499fac031519746e558f0172b15a22aa205d0835` as candidate `repairs-0.1.0a5-final1`. The [sanitized public receipt](verification-results-0.1.0a5.json) retains its input hashes, counts, timings and qualification limits, and identifies the raw proof by SHA-256. Personal locations, identities, operational logs and private installation metadata are omitted. The coordinator independently verified the receipt and all 54 before/after hashes. This documentation update leaves all 52 tested source inputs unchanged.
+
+The a5 repair source starts from the complete 225-file public a4 baseline and integrates two independently reviewed corrections: bounded waiting for an owned child remains reachable when termination cleanup raises, and credential alias, grant and decision controls all reflect the dashboard's busy state. The primary worker error remains authoritative; an unconfirmed child exit retains a null exit code and explicit uncertainty. Credential removal still requires an explicit retry after failure.
+
+The preceding combined Linux gate passed **30 tests in 15.386 seconds**, with no failures, errors, skips or warning output and exit code `0`: 14 source UI contracts plus 16 worker-I/O and durable-job contracts. All 225 tracked file hashes remained unchanged during that execution. Local discovery found 256 tests without running the full suite. The known local browser sandbox restriction was respected; the subsequent isolated iMac execution supplies the complete native fixture gate above.
+
+The embedded resource was rebuilt with the existing pinned MCP Apps SDK **2.0.4** and esbuild **0.28.2**, without installing or upgrading dependencies. All 17 installed dependency versions matched the lockfile. The 2,021,249-byte result matches the a4 bundle except for its explicit version string; SHA-256 is `076fbae87ce3829e3129c0604cf7b4b028dbd32cc8c347a493c27d3aabc3ce94`. Original logo bytes and third-party notices are unchanged. The gateway asset-sync script copied that resource; its 52-tool catalog and icon remain identical to a4. Gateway tests, a production build and deployment were not performed for this source preparation.
+
+### Separate a5 activation, private cloud release and remaining gates
+
+| Check | Observed result |
+|---|---|
+| Exact source activation | Independent post-install verification confirmed all **52 live source input hashes** match the frozen a5 manifest. The complete previous runtime backup matched its recorded inventory, and protected state was preserved. |
+| Process and listener checks | The previous processes had exited, and the sole worker listener matched the installed worker. Private process identifiers are omitted. |
+| Public a5 release and hosted CI | Pending. The historical public a4 matrix below does not qualify a5. |
+| Matching private gateway | The coordinator verified source `f4ea8d5d4f89cf34bb97f08ce88d8faca04efb59`, containing only the two version/embedded-resource updates relative to a4. **9 gateway tests passed with no skips**, TypeScript checking and the production build passed, and deployment reached terminal success with MCP enabled. The owner-private audience was preserved. |
+| Existing private plugin | The coordinator independently read back all **9 files** of App-backed plugin **1.0.6** exactly. Five files changed: two version-only manifests, the skill, cloud operations and compatibility guidance. The App binding, existing description and App-owned presentation, credential/mobile/diagnostic guidance and private audience were preserved. |
+| Current native host checks | Worker status returned **0.1.0a5**. The current catalog exposes **53 model-visible tools**, matching 54 server tools with app-only `rdc_preview_frame`; host account routing is advertised. The old 41-tool snapshot is historical. Existing owner requests were preserved. |
+| Native diagnostic report | The post-deployment call returned `available: true`, `storage_status: ready`, `incomplete: false` and `capture_scope: retained_history_and_current_process`. It reported 50 retained events, with zero dropped, pending or invalid diagnostic events. These counters do not establish the outcome of an unrelated task. |
+| Configured mobile availability | Native listing returned zero profiles and sessions. No physical phone/tablet workflow is qualified. |
+| Independent guardian | Not deployed. No guardian maintenance or automatic code-activation behavior is qualified by this suite or installation. |
+
+The public suite receipt covers isolated automated fixtures; installation was verified separately. Native saved credentials, physical phones/tablets, actual AI-host rendering and an approved live cloud browser workflow retain their own qualification gates. The worker repair demonstrates a separate exception-path defect; the passing a5 run does not identify the cause of the historical hosted macOS subprocess warning. The 254-test a4 receipt below remains unchanged and applies only to its recorded source.
+
+## Historical verified source: 0.1.0a4
 
 The frozen iMac gate passed **254 tests in 67.244 seconds**, with **zero failures, errors, skips, expected failures or unexpected successes** and exit code `0`. Wrapper time was **67.884 seconds**, on **macOS 26.6.2 arm64 with Python 3.14.7**. Discovery and execution both counted 254 tests across 17 modules. All **54 inputs** matched the frozen manifest and remained unchanged: 52 source inputs and two verification helpers. No `ResourceWarning` line was observed; this does not establish the cause of historical warnings.
 
@@ -20,6 +48,8 @@ Private diagnostic capture records predefined event categories without arguments
 
 ### Verified activation and private cloud route
 
+The later a4 host and guidance observations below are preserved from the [concurrent public follow-up](https://github.com/TOC-CS/RDC/commit/e9fdae89d07552075ae4ba2ada02f2af916e818f). This reconciliation verified the published content and preserves its dated claims; it did not repeat that follow-up's private plugin readback, screenshots or host actions. The separately qualified a5 coordinator checks are recorded above.
+
 | Check | Observed result |
 |---|---|
 | Exact source activation | The reviewed installer activated all **52 frozen source inputs** and retained the previous code for rollback. The configuration hash, paired device identity, grants, pause state, protected token-file metadata and existing virtual environment were preserved. |
@@ -35,9 +65,9 @@ Private diagnostic capture records predefined event categories without arguments
 
 The embedded component's production rendering, host display modes and an explicitly approved live cloud browser workflow retain their separate acceptance checks. Existing owner permissions remain authoritative. The source inspection found the preview tool/resource binding and self-contained UI bundle present; that check does not establish the resource response or rendering observed by the production host.
 
-### Skill guidance follow-up
+### Reported a4 skill guidance follow-up
 
-The existing App-backed plugin was updated to **1.0.5** on 2026-11-15. All nine files were read back exactly: six changed files provide required host account routing, corrected diagnostic arguments and current qualification notes; the App binding, credential guidance and mobile guidance were retained. App-owned presentation and the private audience were preserved. This is a guidance-only update; runtime, tests, gateway assets and core version remain unchanged from the qualified alpha4 release. A focused planning check retained the selected account and original operation identity without replaying an uncertain edit or mobile fill. Personal-skill icon updates using the original logo were replaced with a generated SVG during saving. The original logo asset remains intact, but no custom-logo correction is claimed for the personal skill, plugin listing or integration activity.
+The concurrent public follow-up records an update of the existing App-backed plugin to **1.0.5** on 2026-11-15, with all nine files read back exactly: six changed files provide required host account routing, corrected diagnostic arguments and current qualification notes; the App binding, credential guidance and mobile guidance were retained. It reports that App-owned presentation and the private audience were preserved. This was a guidance-only update; runtime, tests, gateway assets and core version remained unchanged from the qualified alpha4 release. Its focused planning check retained the selected account and original operation identity without replaying an uncertain edit or mobile fill. It also records that personal-skill icon updates using the original logo were replaced with a generated SVG during saving. The original logo asset remains intact, but no custom-logo correction is claimed for the personal skill, plugin listing or integration activity. These reported 1.0.5 observations are separate from the coordinator's exact 1.0.6 readback above.
 
 ### Public alpha4 hosted matrix
 
@@ -51,7 +81,7 @@ The qualified public source commit is [`e4f6f18c8d1002462fccd93f85a1be1e1983cb52
 
 The Windows result reports 254 discovered tests, comprising **237 executed passes and 17 skips**. The skips are one POSIX FIFO contract and **16 secure diagnostic storage contracts** requiring POSIX descriptor operations: 14 `DiagnosticsTests` and two `WorkerDiagnosticTests`. Windows secure capture remains explicitly unavailable. Passing the hosted job does not qualify that unimplemented capture path, physical devices or native credential providers.
 
-The hosted macOS log emitted one `ResourceWarning` for subprocess **5137** during `test_capture_error_survives_command_timeout`, while the test and job passed. Its origin remains unestablished. A targeted review repeated that timeout test 25 times on Linux and ran the full ten-test worker-I/O module with forced collection; all observed children were reaped and no warnings appeared. Those checks did not justify a worker cleanup change, and no runtime change was made. The warning remains unresolved; the evidence establishes neither a harmless warning nor a confirmed surviving-child leak. The separate frozen local Mac run recorded **zero warning lines**. Keep those observations distinct.
+The concurrent a4 follow-up reports a subprocess `ResourceWarning` during `test_capture_error_survives_command_timeout`, while the test and job passed; the retained coordinator summary counts two ResourceWarning lines. Its origin remains unestablished. That follow-up reports a targeted Linux review with 25 repetitions of the timeout test and the full ten-test worker-I/O module under forced collection: all observed children were reaped and no warnings appeared. It found no basis for a runtime change in that review. Those historical checks predate the separately reproduced a5 exception-path repair and do not identify the hosted warning's cause. The warning remains unresolved; the evidence establishes neither a harmless warning nor a confirmed surviving-child leak. The separate frozen a4 and a5 local Mac runs each recorded **zero ResourceWarning lines**.
 
 ### Public alpha3 CI and alpha4 repairs
 
@@ -73,7 +103,7 @@ This release adds owner-configured Android/iPhone/iPad Appium tools, mobile prev
 
 The preceding 200-test candidate run had one error: an embedded-preview test still expected “different browser session” after the shared browser/mobile preview changed its message to “different session.” Updating that exact assertion was the only input change for the final run; no runtime behavior or deadline was changed. The failed result remains in the verification chronology.
 
-Source qualification, installation, and public-directory availability are separate. The alpha3 source passed the isolated Mac gate, its first public hosted matrix failed, and the repair revision subsequently passed all three OS jobs. Alpha4 activation is verified above; the alpha2 installation below remains historical evidence for its recorded source.
+Source qualification, installation, and public-directory availability are separate. The alpha3 source passed the isolated Mac gate, its first public hosted matrix failed, and the repair revision subsequently passed all three OS jobs. Alpha5 activation and the historical alpha4 activation are recorded above; the alpha2 installation below remains historical evidence for its recorded source.
 
 ### Earlier hosted alpha2 run
 
@@ -162,9 +192,9 @@ Reproduce with `python scripts/benchmark.py --browser` in the installed environm
 - Native independence: the desktop adapter is optional, and the Linux Xvfb/container recipe is unbuilt in this session. Actual native-app isolation and live native preview remain incomplete.
 - Browser sessions are daemon-resident. They survive chat/bridge disconnect, not daemon exit. One session currently controls one page; broad popup/tab/frame and upload/download workflows need expansion.
 - Production embedded hosts: the component and host protocol were tested, but rendering inside production ChatGPT or Claude remains pending. Codex's existing built-in preview does not establish third-party MCP Apps rendering support.
-- ChatGPT web: the private gateway and plugin are connected, and native RDC tool calls succeeded. Real host rendering, advertised display modes and an explicitly approved live cloud browser workflow remain unverified. The earlier installation-page navigation obstacle is historical. Desktop/Codex execution cannot substitute for embedded acceptance.
-- Public GitHub repository: all 225 alpha4 files matched the approved release tree, and the exact-revision hosted matrix passed with the Windows skips recorded above. Public ChatGPT directory listing and multi-user OAuth onboarding remain separate from public source availability.
-- Process diagnostic: attribute the timeout-fixture subprocess warning using PID and teardown observations before concluding whether cleanup needs another change.
+- ChatGPT web: the matching a5 private gateway and plugin 1.0.6 were verified, and native worker/diagnostic calls succeeded. The concurrent public follow-up's "App unavailable" preview observation remains unresolved. Real host rendering, advertised display modes and an explicitly approved live cloud browser workflow remain unverified. Desktop/Codex execution cannot substitute for embedded acceptance.
+- Public GitHub repository: all 225 alpha4 files matched the approved release tree, and its exact-revision hosted matrix passed with the Windows skips recorded above. Public a5 publication and its hosted matrix remain pending. Public ChatGPT directory listing and multi-user OAuth onboarding remain separate from public source availability.
+- Process diagnostic: attribute the historical timeout-fixture subprocess warning using owned-process and teardown observations before concluding whether cleanup needs another change.
 
 ## Reproducibility and data handling
 
@@ -176,4 +206,4 @@ Hosted CI evidence is recorded by exact source revision above. Installation rema
 
 RDC was installed into a separate iMac development directory. A default local owner profile and running worker were created, with a dedicated working root, command execution enabled, per-operation owner review, and native desktop input disabled. Codex and Claude Desktop received a new `rdc connect` entry; existing client settings were backed up and preserved. No application was restarted. The owner dashboard was connected and used in the actual local Chrome browser to start a separate session, navigate a synthetic page, fill a field, click a greeting button, and verify the rendered result. The live tab was retained for owner inspection.
 
-That browser dashboard remains an administrator and diagnostic interface. It does not satisfy the primary requirement for a preview inside the AI application. The portable embedded resource supplies that interface for compatible hosts. The current private ChatGPT connection and 0.1.0a4 activation are confirmed above; production UI acceptance remains pending. The worker and relay remain development processes without login-service registration, so a machine restart requires starting them again.
+That browser dashboard remains an administrator and diagnostic interface. It does not satisfy the primary requirement for a preview inside the AI application. The portable embedded resource supplies that interface for compatible hosts. The a5 activation, matching gateway and plugin 1.0.6 are recorded above; production UI acceptance remains pending. The worker and relay remain development processes without login-service registration, so a machine restart requires starting them again.
