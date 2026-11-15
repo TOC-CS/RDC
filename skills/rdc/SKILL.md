@@ -1,11 +1,11 @@
 ---
 name: rdc
-description: Use RDC (Remote Desktop Commander) by TOC Ministries for independent browser or configured Android/iPhone/iPad workflows, embedded live previews, file operations, durable jobs, recovery of pending cloud operations, and owner-approved saved-password fills through its connected App.
+description: Use RDC (Remote Desktop Commander) by TOC Ministries for independent browser or configured Android/iPhone/iPad workflows, embedded live previews, file operations, durable jobs, private incident reports, recovery of pending cloud operations, and owner-approved saved-password fills through its connected App.
 ---
 
 # RDC (Remote Desktop Commander)
 
-Use the existing connected RDC App and its current tool schemas. Keep the user's worker, authorization, and task context together. Read [cloud operations](references/cloud-operations.md) when a call is pending or reconnecting, [credentials](references/credentials.md) for saved-password fills, [mobile](references/mobile.md) for phones and tablets, and [compatibility](references/compatibility.md) before making platform or host-support claims.
+Use the existing connected RDC App and its current tool schemas. Keep the user's worker, authorization, and task context together. Read [cloud operations](references/cloud-operations.md) when a call is pending or reconnecting, [diagnostics](references/diagnostics.md) for incident reports, [credentials](references/credentials.md) for saved-password fills, [mobile](references/mobile.md) for phones and tablets, and [compatibility](references/compatibility.md) before making platform or host-support claims.
 
 ## Establish the working connection
 
@@ -25,6 +25,12 @@ Interpret the worker result only after gateway recovery. It may identify a backg
 Report `pending_approval` or a credential request's `pending` status as waiting for owner review. Retain and poll the same request within bounded waits, preserve the owner's decision, and continue independent authorized work.
 
 Treat `outcome_unknown`, an expired mutation result, or a missing retained record as incomplete evidence. Inspect the worker's file, browser, or job state before deciding on a new action. Fresh read-only observations are appropriate when their short-lived preview results have expired.
+
+## Inspect private incident reports
+
+When the current catalog exposes `rdc_diagnostics_status`, use this read-only report to inspect recent worker failures and observed relay recovery. Supply only its optional integer `limit` from 1 through 50. Inspect `available`, `storage_status`, `incomplete` and `capture_scope`; a readable history or an empty list cannot establish worker liveness or a complete incident record.
+
+Recover the original cloud operation and inspect its actual result before concluding a user task succeeded. `reconnected` confirms an observed transport recovery; `result_uploaded` confirms delivery of a recorded result, which may itself contain an error or unknown outcome. Preserve the original request identity and never replay an uncertain action from an incident entry. Follow [diagnostics](references/diagnostics.md) for report limits, local CLI use, platform qualification and repair boundaries.
 
 ## Preview inside the AI host
 
@@ -60,7 +66,7 @@ Treat queued stdin as admission only. If delivery fails or becomes uncertain, re
 
 ## Preserve owner control and report evidence
 
-For phones and tablets, choose an owner-configured profile with `rdc_mobile_list`, start or recover its `mobile-` session, and act through fresh observation IDs and handles. Never submit arbitrary driver endpoints, capabilities, scripts or locators. Physical-device input affects that device's user. Use a separate prepared emulator, simulator or dedicated device when the task must leave the owner's phone alone. Native secure fields require owner input; the browser credential broker does not fill native fields. Preserve screenshot refusals across capture routes. Follow [mobile](references/mobile.md) for lifecycle and uncertain-result recovery.
+Use mobile tools only when the connected App advertises them and the selected worker supports them. For phones and tablets, choose an owner-configured profile with `rdc_mobile_list`, start or recover its `mobile-` session, and act through fresh observation IDs and handles. Never submit arbitrary driver endpoints, capabilities, scripts or locators. Physical-device input affects that device's user. Use a separate prepared emulator, simulator or dedicated device when the task must leave the owner's phone alone. Native secure fields require owner input; the browser credential broker does not fill native fields. Preserve screenshot refusals across capture routes. Follow [mobile](references/mobile.md) for lifecycle and uncertain-result recovery.
 
 Honor pause, review, roots, and granted actions. Owner approvals remain outside the agent tool catalog. An authorized shell runs with the worker account's operating-system privileges; application file roots do not create an OS sandbox.
 
