@@ -20,7 +20,7 @@ The embedded resource was rebuilt with the existing pinned MCP Apps SDK **2.0.4*
 |---|---|
 | Exact source activation | Independent post-install verification confirmed all **52 live source input hashes** match the frozen a5 manifest. The complete previous runtime backup matched its recorded inventory, and protected state was preserved. |
 | Process and listener checks | The previous processes had exited, and the sole worker listener matched the installed worker. Private process identifiers are omitted. |
-| Public a5 release and hosted CI | Pending. The historical public a4 matrix below does not qualify a5. |
+| Public a5 release and hosted CI | Exact public head `cdf709cb2ba391c43b0e797760e50d8e168864f6` matched all 226 reviewed files. [Run 43707243784](https://github.com/TOC-CS/RDC/actions/runs/43707243784) completed successfully on Linux, macOS and Windows. The platform counts and skips are recorded below. |
 | Matching private gateway | The coordinator verified source `f4ea8d5d4f89cf34bb97f08ce88d8faca04efb59`, containing only the two version/embedded-resource updates relative to a4. **9 gateway tests passed with no skips**, TypeScript checking and the production build passed, and deployment reached terminal success with MCP enabled. The owner-private audience was preserved. |
 | Existing private plugin | The coordinator independently read back all **9 files** of App-backed plugin **1.0.6** exactly. Five files changed: two version-only manifests, the skill, cloud operations and compatibility guidance. The App binding, existing description and App-owned presentation, credential/mobile/diagnostic guidance and private audience were preserved. |
 | Current native host checks | Worker status returned **0.1.0a5**. The current catalog exposes **53 model-visible tools**, matching 54 server tools with app-only `rdc_preview_frame`; host account routing is advertised. The old 41-tool snapshot is historical. Existing owner requests were preserved. |
@@ -29,6 +29,22 @@ The embedded resource was rebuilt with the existing pinned MCP Apps SDK **2.0.4*
 | Independent guardian | Not deployed. No guardian maintenance or automatic code-activation behavior is qualified by this suite or installation. |
 
 The public suite receipt covers isolated automated fixtures; installation was verified separately. Native saved credentials, physical phones/tablets, actual AI-host rendering and an approved live cloud browser workflow retain their own qualification gates. The worker repair demonstrates a separate exception-path defect; the passing a5 run does not identify the cause of the historical hosted macOS subprocess warning. The 254-test a4 receipt below remains unchanged and applies only to its recorded source.
+
+### Public a5 source readback and exact-head hosted gate
+
+The public release [cdf709cb2ba391c43b0e797760e50d8e168864f6](https://github.com/TOC-CS/RDC/commit/cdf709cb2ba391c43b0e797760e50d8e168864f6) has tree `7382715a73aae8890b91d679b3b78351d892912c`, identical to reviewed source `689b799052304e01aef9dc9a205801cc04a751a8`. The untruncated recursive GitHub tree matched **226 files / 9,457,650 bytes**, plus 48 directory objects, on path, blob identity, mode, size and type. There were no missing or extra files. All 11 publication commits after the preserved concurrent head `e9fdae89d07552075ae4ba2ada02f2af916e818f` used TOC/GitHub names and GitHub no-reply attribution. Private source ancestry was not republished.
+
+The [hosted workflow](https://github.com/TOC-CS/RDC/actions/runs/43707243784) ran against that exact public head and reached terminal **success at 2026-11-15 11:11:03 UTC**. Decoded job logs establish these results:
+
+| Hosted platform | Discovery | Executed passes | Explicit skips | Suite time | Test-suite warnings / ResourceWarnings |
+|---|---:|---:|---:|---:|---:|
+| Ubuntu | 256 | 256 | 0 | 100.359 s | 0 / 0 |
+| macOS | 256 | 256 | 0 | 140.463 s | 0 / 0 |
+| Windows | 256 | 239 | 17 | 135.196 s | 0 / 0 |
+
+Windows skips comprise 16 secure diagnostic-storage cases requiring POSIX descriptor operations and one POSIX FIFO contract. Windows diagnostic capture therefore remains unavailable; a green job does not remove that limit. Each job also emitted five infrastructure Node deprecation lines, separately from the test suite: three `DEP0040`, one `DEP0169`, and one notice concerning the Node 20 action runtime. These infrastructure notices are retained as observed evidence. The passing matrix does not identify the cause of historical subprocess warnings or qualify native devices, vaults, desktop isolation or AI-host rendering.
+
+This later documentation-only evidence update preserves all 52 frozen runtime/test source inputs. The tested source remains the exact release head above; the documentation commit is not presented as another full test run.
 
 ## Historical verified source: 0.1.0a4
 
