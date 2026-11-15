@@ -5,7 +5,7 @@ document.querySelectorAll('[data-rdc-logo]').forEach(image => { image.src = bran
 
 // The host mediates every request. This view never contacts a worker URL,
 // receives owner credentials, or changes worker/session/job lifetime.
-const app = new App({name: 'RDC Preview', version: '0.1.0a3'}, {
+const app = new App({name: 'RDC Preview', version: '0.1.0a4'}, {
   availableDisplayModes: ['inline', 'fullscreen', 'pip'],
 });
 const el = id => document.getElementById(id);
