@@ -549,3 +549,92 @@ class RelayTransportTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class RelayDiagnosticTests(RelayDurabilityTests):
+    """Repeat durability contracts with a failing observer as well as outcome checks."""
+    def setUp(self):
+        super().setUp()
+        self.events = []
+        class Recorder:
+            def record(inner, component, event, tool=None):
+                self.events.append((component, event, tool))
+        self.pump = RelayPump(config(), self.journal, self.gateway, self.worker, CATALOG, diagnostics=Recorder())
+
+    def test_unknown_and_upload_retry_are_distinct_and_never_replay(self):
+        self.worker.error = RuntimeError('synthetic-password /private')
+        self.gateway.failures = 1
+        async def run():
+            await self.pump.handle(operation())
+            with self.assertRaises(RelayTransientError): await self.pump.flush()
+            await self.pump.flush()
+        anyio.run(run)
+        names = [row[1] for row in self.events]
+        self.assertIn('outcome_unknown', names)
+        self.assertIn('result_upload_retry', names)
+        self.assertIn('result_uploaded', names)
+        self.assertEqual(len(self.worker.calls), 1)
+        self.assertNotIn('synthetic-password', json.dumps(self.events))
+
+    def test_broken_reporter_cannot_change_delivery_or_reexecute(self):
+        class Broken:
+            def record(self, *args): raise RuntimeError('secret')
+        self.pump.diagnostics = Broken()
+        async def run():
+            await self.pump.handle(operation())
+            await self.pump.flush()
+            await self.pump.handle(operation())
+        anyio.run(run)
+        self.assertEqual(len(self.worker.calls), 1)
+        self.assertEqual(len(self.gateway.results), 1)
+
+    def test_reconnection_report_requires_a_successful_authenticated_poll(self):
+        events = []
+        class Recorder:
+            def __init__(self, *args): pass
+            def record(self, component, event, tool=None): events.append(event)
+            def close(self): pass
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory); state.chmod(0o700)
+            (state / 'agent-token').write_text('agent-fixture-' + 'a' * 48)
+            (state / 'agent-token').chmod(0o600)
+            cfg = state / 'config.json'
+            cfg.write_text(json.dumps({'gateway_url': 'https://relay.example.test', 'device_id': 'device-test',
+                'device_key': SECRET, 'sites_service_token': SITE_SECRET})); cfg.chmod(0o600)
+            sessions = 0
+            @asynccontextmanager
+            async def session(*args):
+                nonlocal sessions
+                sessions += 1
+                if sessions <= 2: raise RelayTransientError('synthetic-password')
+                yield FakeWorker(), CATALOG
+            async def run():
+                stop = anyio.Event()
+                class GatewayFixture(FakeGateway):
+                    async def poll(inner, claim=True):
+                        self.assertNotIn('reconnected', events)
+                        stop.set()
+                        return None, .25
+                async def instant_sleep(seconds): pass
+                with patch('rdc.relay.Diagnostics', Recorder), patch('rdc.relay._worker_session', session), \
+                        patch('rdc.relay.Gateway', return_value=GatewayFixture()), patch('rdc.relay.anyio.sleep', instant_sleep):
+                    await run_relay(cfg, state, stop_event=stop)
+            anyio.run(run)
+        self.assertEqual(events.count('connection_interrupted'), 2)
+        self.assertEqual(events.count('reconnect_attempt'), 2)
+        self.assertEqual(events.count('reconnected'), 1)
+        self.assertGreater(events.index('reconnected'), events.index('reconnect_attempt'))
+
+
+class RelayUnsupportedDiagnosticTests(RelayDurabilityTests):
+    def setUp(self):
+        super().setUp()
+        from rdc.diagnostics import Diagnostics
+        self.capability = patch.object(Diagnostics, '_supported', return_value=False)
+        self.capability.start()
+        self.diagnostics = Diagnostics(self.directory.name)
+        self.pump.diagnostics = self.diagnostics
+
+    def tearDown(self):
+        self.diagnostics.close()
+        self.capability.stop()
+        super().tearDown()
