@@ -1,0 +1,7 @@
+# Merge into your local Codex MCP configuration after installing RDC.
+# Start rdc serve --open first; connect shares its browser sources and live preview.
+# Add --state-dir and your initialized state path if using a nondefault directory.
+# The rdc executable must be available on the launching application's PATH.
+[mcp_servers.rdc]
+command = "rdc"
+args = ["connect", "--url", "http://127.0.0.1:8765/mcp"]
