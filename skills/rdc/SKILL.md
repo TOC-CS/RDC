@@ -14,6 +14,8 @@ Use the existing connected RDC App and its current tool schemas. Keep the user's
 3. Use the selected App binding. Do not register another App, replace its connection settings, expose a worker port, or put tokens in ordinary tool arguments to solve a missing connection.
 4. Choose dedicated file/API tools, independent browser sessions, or durable command jobs according to the task. Inspect state, act, and independently verify the outcome.
 
+When the host schema requires `link_id`, select an exact advertised account ID using the user's request and established conversation context. Retain that link with the worker and all operation, job, approval, credential and session IDs, and use it throughout recovery. If more than one account remains plausible for a write, resolve the target before dispatch; never invent an ID or switch accounts to retry an uncertain action. Local clients need no host account field unless their schema requires it.
+
 ## Execute and recover cloud operations
 
 Supply one stable `_rdc_request_id` for each intended cloud mutation whenever its schema requires the field. Retain the exact arguments and any separate worker `idempotency_key`. Reusing the same key with different arguments is a conflict.
@@ -28,7 +30,7 @@ Treat `outcome_unknown`, an expired mutation result, or a missing retained recor
 
 ## Inspect private incident reports
 
-When the current catalog exposes `rdc_diagnostics_status`, use this read-only report to inspect recent worker failures and observed relay recovery. Supply only its optional integer `limit` from 1 through 50. Inspect `available`, `storage_status`, `incomplete` and `capture_scope`; a readable history or an empty list cannot establish worker liveness or a complete incident record.
+When the current catalog exposes `rdc_diagnostics_status`, use this read-only report to inspect recent worker failures and observed relay recovery. Follow the current schema, including required host account routing such as `link_id`, and optionally set integer `limit` from 1 through 50. The report accepts no repair action or free-text payload. Inspect `available`, `storage_status`, `incomplete` and `capture_scope`; a readable history or an empty list cannot establish worker liveness or a complete incident record.
 
 Recover the original cloud operation and inspect its actual result before concluding a user task succeeded. `reconnected` confirms an observed transport recovery; `result_uploaded` confirms delivery of a recorded result, which may itself contain an error or unknown outcome. Preserve the original request identity and never replay an uncertain action from an incident entry. Follow [diagnostics](references/diagnostics.md) for report limits, local CLI use, platform qualification and repair boundaries.
 
