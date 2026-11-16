@@ -546,7 +546,7 @@ class RelayBoundaryTests(unittest.TestCase):
 
 
 class RelayTransportTests(unittest.TestCase):
-    def test_idle_poll_backoff_reduces_call_rate_and_resets_immediately_on_work(self):
+    def test_idle_poll_backoff_credits_long_poll_time_and_resets_on_work(self):
         """Run the real loop and journal with a virtual wait boundary, not real delays."""
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / 'state'; state.mkdir(mode=0o700)
@@ -566,16 +566,19 @@ class RelayTransportTests(unittest.TestCase):
 
             async def run():
                 stop = anyio.Event()
-                replies = [(None, .25)] * 8 + [(operation('wake-one'), .25),
-                    (None, .25), (None, 1.5), (operation('wake-two'), .25), (None, .25)]
+                replies = [(None, .25, 0)] * 8 + [(None, .25, 10), (None, 1.5, 10),
+                    (operation('wake-one'), .25, 0), (None, .25, 0), (None, 1.5, 0),
+                    (operation('wake-two'), .25, 0), (None, .25, 0)]
                 class GatewayFixture(FakeGateway):
                     async def poll(self, claim=True):
+                        nonlocal virtual_time
                         if not claim:
                             return None, .25
                         poll_times.append(virtual_time)
-                        reply = replies.pop(0)
+                        work, minimum_delay, elapsed = replies.pop(0)
+                        virtual_time += elapsed
                         if not replies: stop.set()
-                        return reply
+                        return work, minimum_delay
                 gateway = GatewayFixture()
 
                 async def clocked_sleep(seconds):
@@ -587,14 +590,18 @@ class RelayTransportTests(unittest.TestCase):
 
                 with patch('rdc.relay.Gateway', return_value=gateway), \
                      patch('rdc.relay._worker_session', worker_session), \
-                     patch('rdc.relay.anyio.sleep', clocked_sleep):
+                     patch('rdc.relay.anyio.sleep', clocked_sleep), \
+                     patch('rdc.relay.time', wraps=time) as relay_clock:
+                    relay_clock.monotonic.side_effect = lambda: virtual_time
                     await run_relay(cfg, state, stop_event=stop)
 
             anyio.run(run)
             self.assertEqual(scheduled_waits[:8], [.25, .5, 1, 2, 4, 5, 5, 5])
             self.assertGreaterEqual(poll_times[8], 22, 'Eight idle polls must not remain a four-per-second loop')
-            self.assertEqual(poll_times[9], poll_times[8], 'After work, the next claim must have no idle delay')
-            self.assertEqual(scheduled_waits[8:], [.25, 1.5, .25], 'Activity resets local delay while preserving the server minimum')
+            self.assertEqual(scheduled_waits[8:10], [.25, 1.5], 'Long polls must not add the full five-second backoff, but must honor the server minimum')
+            self.assertEqual(poll_times[9] - poll_times[8], 10.25)
+            self.assertEqual(poll_times[11], poll_times[10], 'After work, the next claim must have no idle delay')
+            self.assertEqual(scheduled_waits[10:], [.25, 1.5, .25], 'Activity resets local delay while preserving the server minimum')
             self.assertEqual(worker.calls, [('rdc_fixture_write', {'text': 'hello'})] * 2)
 
     def test_legacy_session_delete_has_a_finite_socket_read_deadline(self):
