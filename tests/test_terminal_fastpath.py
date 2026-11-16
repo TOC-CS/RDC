@@ -1,6 +1,7 @@
 """Real detached-worker acceptance for the bounded RDC terminal fast path."""
 from pathlib import Path
 import os
+import subprocess
 from unittest.mock import patch
 import sys
 import tempfile
@@ -19,10 +20,28 @@ class TerminalFastPathTests(unittest.TestCase):
             state_dir=self.root / "state", roots=[self.root],
             browser_backend="disabled", approval_mode="trusted", allow_exec=True,
         ))
+        # Retain actual child handles: a terminal DB row precedes interpreter exit.
+        # The inherited worker log remains locked on Windows until that exit.
+        self.workers = []
+        real_popen = subprocess.Popen
+
+        def launch(*args, **kwargs):
+            process = real_popen(*args, **kwargs)
+            self.workers.append(process)
+            return process
+
+        launcher = patch("rdc.jobs.subprocess.Popen", side_effect=launch)
+        launcher.start()
+        self.addCleanup(launcher.stop)
 
     def tearDown(self):
-        self.engine.close()
-        self.tmp.cleanup()
+        deadline = time.monotonic() + 12
+        try:
+            for process in self.workers:
+                process.wait(timeout=max(.01, deadline - time.monotonic()))
+        finally:
+            self.engine.close()
+            self.tmp.cleanup()
 
     def run_command(self, script, **kwargs):
         return self.engine.call("rdc_job_run", {
@@ -37,7 +56,7 @@ class TerminalFastPathTests(unittest.TestCase):
         self.assertTrue(result["complete"], result)
         self.assertEqual(result["job"]["status"], "completed")
         self.assertEqual(result["job"]["exit_code"], 0)
-        self.assertEqual(result["output"]["text"], "ONE-CALL-READY\n")
+        self.assertEqual(result["output"]["text"], "ONE-CALL-READY" + os.linesep)
         self.assertTrue(result["output"]["complete"])
         self.assertEqual(result["output"]["job_id"], result["job"]["id"])
 
@@ -57,7 +76,7 @@ class TerminalFastPathTests(unittest.TestCase):
         self.assertEqual(state["job"]["status"], "completed")
         output = self.engine.call("rdc_job_output", {"job_id": identifier})
         self.assertTrue(output["ok"], output)
-        self.assertEqual(output["text"], "LATE-READY\n")
+        self.assertEqual(output["text"], "LATE-READY" + os.linesep)
 
     def test_same_key_reuses_job_and_different_spec_conflicts(self):
         script = "print('DEDUP-READY')"
@@ -97,7 +116,7 @@ class TerminalFastPathTests(unittest.TestCase):
         self.assertTrue(retry["ok"], retry)
         self.assertTrue(retry["reused"])
         self.assertEqual(retry["job"]["id"], identity)
-        self.assertEqual(retry["output"]["text"], "RECOVERABLE-ONE\n")
+        self.assertEqual(retry["output"]["text"], "RECOVERABLE-ONE" + os.linesep)
 
     def test_zero_wait_does_not_read_output_or_touch_unneeded_log(self):
         with patch.object(self.engine.jobs, "output", side_effect=OSError("unexpected immediate I/O")):
