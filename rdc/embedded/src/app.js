@@ -15,6 +15,7 @@ const state = {
   sessionId: null, deviceId: null, frame: null, haveOpenResult: false,
   availability: null, selectionLost: false, setupProblem: null,
   mode: 'inline', modes: ['inline'], presentationBridge: 'mcp',
+  autoFloatAttempted: false, floatPending: false, modeRequest: 0, openPresentationRequested: false,
   resizeEnabled: false, resizeBlocked: false, pendingResize: null, resizedFor: null, resizeActual: null,
   pendingOpen: null, pendingFrames: new Map(), blockedFrames: new Map(),
   recoveryTimer: null, recoveryWake: null, retiredOpens: new Set(), retiredObservations: new Map(),
@@ -562,6 +563,7 @@ async function retryPreview() {
   else await refreshFrame(true);
 }
 function hidePreview() {
+  state.modeRequest += 1; state.floatPending = false; state.autoFloatAttempted = false; state.openPresentationRequested = false;
   state.hidden = true; state.generation += 1; stopPolling(); interruptRecovery();
   if (state.frame) {
     empty('Waiting for the live view', 'The preview reconnects to this session when you reopen it.');
@@ -572,22 +574,36 @@ function hidePreview() {
   el('reopen').focus();
 }
 function reopenPreview() {
-  state.hidden = false; state.generation += 1;
+  state.hidden = false; state.generation += 1; state.autoFloatAttempted = false;
   el('closed-card').hidden = true; el('panel').hidden = false;
   setBusy(state.busy);
   schedule(0);
   void retainSelection();
   el('hide').focus();
+  requestAutomaticFloat();
 }
 function applyLayout() {
   el('canvas').dataset.mode = state.mode;
   el('expand').hidden = state.mode === 'fullscreen' || !state.modes.includes('fullscreen');
   el('float').hidden = state.mode === 'pip' || !canFloatInHost();
+  el('float').disabled = state.floatPending;
   el('inline').hidden = state.mode === 'inline' || !state.modes.includes('inline');
   updateCursor();
 }
 function canFloatInHost() {
   return state.modes.includes('pip') || typeof window.openai?.requestDisplayMode === 'function';
+}
+function floatingNotice(message = '') {
+  text('float-note', message);
+  el('float-note').hidden = !message;
+}
+const FLOAT_UNAVAILABLE = 'Floating is unavailable in this host.';
+function requestAutomaticFloat() {
+  if (!visibleConnected() || !sourceId(state.sessionId) || state.autoFloatAttempted || state.floatPending) return;
+  if (state.mode === 'pip') { state.autoFloatAttempted = true; floatingNotice(); return; }
+  if (!canFloatInHost()) { floatingNotice(FLOAT_UNAVAILABLE); return; }
+  state.autoFloatAttempted = true;
+  void requestMode('pip');
 }
 function hostContextChanged(context = {}) {
   if (state.disposed) return;
@@ -599,46 +615,83 @@ function hostContextChanged(context = {}) {
     state.mode = window.openai.displayMode;
     text('mode-note', '');
   }
+  if (state.mode === 'pip') floatingNotice();
   applyLayout();
+  requestAutomaticFloat();
 }
 async function requestMode(mode) {
   if (!state.connected || state.disposed || (!state.modes.includes(mode) && !(mode === 'pip' && canFloatInHost()))) return;
-  let timeout;
+  const request = ++state.modeRequest;
+  const currentRequest = () => !state.disposed && request === state.modeRequest;
+  const legacy = typeof window.openai?.requestDisplayMode === 'function' &&
+    (state.presentationBridge === 'openai' || (mode === 'pip' && !state.modes.includes('pip')));
+  if (legacy) state.presentationBridge = 'openai';
+  if (mode === 'pip') { state.autoFloatAttempted = true; state.floatPending = true; floatingNotice(); applyLayout(); }
+  async function change(requested) {
+    let timeout;
+    try {
+      // Request only an in-host presentation; never create an OS window.
+      return legacy ? await Promise.race([
+        window.openai.requestDisplayMode({mode: requested}),
+        new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('Host timeout')), 10000); }),
+      ]) : await app.requestDisplayMode({mode: requested}, {timeout: 10000});
+    } finally { clearTimeout(timeout); }
+  }
+  const actualMode = result => result?.mode || (legacy ? window.openai?.displayMode : null);
   try {
-    // Optional documented host bridge. Never create an OS window or escape the
-    // iframe. A method's presence is permission to request, not proof of PiP.
-    const legacy = typeof window.openai?.requestDisplayMode === 'function' &&
-      (state.presentationBridge === 'openai' || (mode === 'pip' && !state.modes.includes('pip')));
-    if (legacy) state.presentationBridge = 'openai';
-    const result = legacy ? await Promise.race([
-      window.openai.requestDisplayMode({mode}),
-      new Promise((_,reject) => { timeout=setTimeout(() => reject(new Error('Host timeout')),10000); }),
-    ]) : await app.requestDisplayMode({mode}, {timeout: 10000});
-    if (state.disposed) return;
-    const actual = result?.mode || (legacy ? window.openai?.displayMode : null);
+    let actual = actualMode(await change(mode));
+    if (!currentRequest()) return;
     if (!['inline','fullscreen','pip'].includes(actual)) {
-      text('mode-note', 'This host did not confirm a floating view.'); return;
+      if (mode === 'pip') floatingNotice(FLOAT_UNAVAILABLE);
+      else text('mode-note', 'The app did not confirm the display mode.');
+      return;
     }
     state.presentationBridge = legacy ? 'openai' : 'mcp';
+    if (mode === 'pip' && actual !== 'pip') {
+      floatingNotice(FLOAT_UNAVAILABLE);
+      if (actual === 'fullscreen') {
+        // A fullscreen substitution is never accepted as floating. Ask once
+        // to return inline, without a retry loop if the host refuses that too.
+        const restored = actualMode(await change('inline'));
+        if (!currentRequest()) return;
+        if (['inline','fullscreen','pip'].includes(restored)) actual = restored;
+        if (actual !== 'inline') floatingNotice('Floating is unavailable. This host did not return inline.');
+      }
+    } else {
+      if (mode === 'pip') floatingNotice();
+      text('mode-note', mode === actual ? '' : 'The app kept its current display mode.');
+    }
     state.mode = actual;
     applyLayout();
-    text('mode-note', mode === actual ? '' : mode === 'pip' ? 'This host did not confirm a floating view.' : 'The app kept its current display mode.');
-  } catch { text('mode-note', 'The app could not change the display mode.'); }
-  finally { clearTimeout(timeout); }
+  } catch {
+    if (currentRequest()) {
+      if (mode === 'pip') floatingNotice(FLOAT_UNAVAILABLE);
+      else text('mode-note', 'The app could not change the display mode.');
+    }
+  } finally {
+    if (mode === 'pip' && request === state.modeRequest) state.floatPending = false;
+    if (currentRequest()) { applyLayout(); requestAutomaticFloat(); }
+  }
 }
 function dispose() {
-  state.disposed = true; state.generation += 1; stopPolling(); interruptRecovery();
+  state.disposed = true; state.generation += 1; state.modeRequest += 1; stopPolling(); interruptRecovery();
   clearFrame();
   // A discarded viewer never changes its source or the worker.
 }
 app.ontoolinput = ({arguments: args}) => {
-  if (state.disposed || state.sessionId || !sourceId(args?.session_id)) return;
+  if (state.disposed || !sourceId(args?.session_id)) return;
+  if (state.sessionId) {
+    if (args.session_id === state.sessionId) state.openPresentationRequested = true;
+    return;
+  }
   state.sessionId = args.session_id;
   if (state.pendingOpen) state.pendingOpen.sessionId ||= state.sessionId;
+  requestAutomaticFloat();
 };
 app.ontoolresult = result => {
   if (state.disposed || (state.connected && !state.bridgeReady)) return;
   try {
+    const wasOpen = state.haveOpenResult;
     const data = dataOf(result);
     const metaId = result?._meta?.['rdc/operation_id'];
     if (operationId(data.operation_id) && operationId(metaId) && data.operation_id !== metaId) {
@@ -661,6 +714,15 @@ app.ontoolresult = result => {
       // original request remains available for explicit inspection.
       if (!data.preview_unavailable && state.pendingOpen) { state.pendingOpen = null; retireOpen(id); }
       acceptOpen(checkResult(result));
+      if (!data.preview_unavailable && state.haveOpenResult && Array.isArray(data.sessions)) {
+        const explicitOpen = state.openPresentationRequested;
+        state.openPresentationRequested = false;
+        if (state.hidden) { if (explicitOpen) reopenPreview(); }
+        else {
+          if (wasOpen) state.autoFloatAttempted = false;
+          requestAutomaticFloat();
+        }
+      }
       if (id && !data.preview_unavailable) retireOpen(id);
     }
     schedule(0);
@@ -733,6 +795,7 @@ async function connect() {
       return;
     }
     setBusy(false);
+    requestAutomaticFloat();
     // The host already invoked preview_open. Wait for its result.
     schedule(0);
   } catch {
