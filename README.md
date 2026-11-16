@@ -8,11 +8,17 @@ RDC (Remote Desktop Commander) is an independent TOC Ministries project: a free,
 
 The local worker requires no RDC account, subscription, hosted service, telemetry, or model API key. Optional gateway hosting and your AI provider have their own terms and costs. This repository contains no Desktop Commander proprietary service code or assets.
 
-**Version: 0.1.0a5 (alpha).** The frozen macOS gate passed **256 tests in 106.095 seconds**, with no failures, errors, skips or ResourceWarning lines. The matching runtime was installed and its 52 source inputs were independently verified. This repair keeps the owned-child wait reachable after a termination-backend error and extends the credential dashboard's busy state to grant and decision controls. The a4 private diagnostics, mobile adapters and CRLF fixture correction are preserved. The matching private gateway and plugin **1.0.6** were verified separately. The public release matched all **226 reviewed files** exactly, and its [hosted workflow](https://github.com/TOC-CS/RDC/actions/runs/43707243784) passed on Linux, macOS and Windows: 256 tests on Linux and macOS, and 239 executed tests plus 17 explicit platform skips on Windows. All three test suites recorded zero ResourceWarning lines. Read [verification](docs/VERIFICATION.md), the [audit](docs/AUDIT-2026-11-15.md), [diagnostic limits](docs/DIAGNOSTICS.md), and [mobile setup](docs/MOBILE.md) for executed evidence. Physical devices, native credential providers, production AI-host rendering, native desktop streaming, automatic Mac/Windows VM provisioning, and public ChatGPT web OAuth onboarding retain separate qualification or implementation work. [Platform details](docs/platforms.md).
+**Preview v7 repair on the 0.1.0a8 production baseline.** Each view is bound to this chat's exact browser/device/native-window session. It shows the live image, cursor when available and viewer controls only. No desktop fallback, dashboard, jobs or session picker. Hiding or closing leaves work running. The resource is `ui://rdc/preview-v7.html`; published v1–v6 aliases remain readable. Native Mac capture works without activating the window; resizing requires the owner's Accessibility grant. [Guided macOS setup](docs/MACOS-SETUP.md) checks the separate RDC Window Preview helper. Shared native input requires owner approval even in trusted mode.
+
+OpenAI's current MCP extension supports inline/fullscreen, not the built-in floating computer-use viewer. RDC now requests inline by default to avoid opening the tall side panel automatically; hosts still control presentation. Outer App branding and separate-chat ChatGPT web acceptance remain distinct checks. See [host contracts](docs/EMBEDDED-HOSTS.md).
+
+**Historical 0.1.0a6 verification.** This release improves preview connection recovery and the private gateway's opening response. A mounted view offers explicit retry after a failed host handshake or an authorized offline/busy response. It retains the selected session and original pending operation, and rejects older responses that could erase a newer availability notice. The gateway queues an online open once and immediately returns its recovery reference. **28 focused UI/tool contracts and 19 gateway contracts passed without skips.** The advertised resource is `ui://rdc/preview-v2.html`, with the published v1 URI retained for compatibility. The owner-private gateway deployment succeeded, and live opens, original-operation recovery and a synthetic browser image were verified separately. Actual ChatGPT rendering remains unobserved at this checkpoint; the local Sites preview relay was unavailable. Read the [alpha.6 verification and limits](docs/VERIFICATION.md#alpha6-preview-reliability) before treating source checks as host acceptance.
+
+**Historical 0.1.0a5 verification.** The frozen macOS gate passed **256 tests in 106.095 seconds**, with no failures, errors, skips or ResourceWarning lines. The matching runtime was installed and its 52 source inputs were independently verified. This repair keeps the owned-child wait reachable after a termination-backend error and extends the credential dashboard's busy state to grant and decision controls. The a4 private diagnostics, mobile adapters and CRLF fixture correction are preserved. The matching private gateway and plugin **1.0.6** were verified separately. The public release matched all **226 reviewed files** exactly, and its [hosted workflow](https://github.com/TOC-CS/RDC/actions/runs/43707243784) passed on Linux, macOS and Windows: 256 tests on Linux and macOS, and 239 executed tests plus 17 explicit platform skips on Windows. All three test suites recorded zero ResourceWarning lines. Read [verification](docs/VERIFICATION.md), the [audit](docs/AUDIT-2026-11-15.md), [diagnostic limits](docs/DIAGNOSTICS.md), and [mobile setup](docs/MOBILE.md) for executed evidence. Physical devices, native credential providers, production AI-host rendering, native desktop streaming, automatic Mac/Windows VM provisioning, and public ChatGPT web OAuth onboarding retain separate qualification or implementation work. [Platform details](docs/platforms.md).
 
 ## What works
 
-- A self-contained MCP Apps preview with the original RDC logo, live screenshots and cursor, session selection, host-negotiated expansion/float, and hide/reopen. In fullscreen, its panel can move and resize within the area allocated by the AI host. Hosts control outer positioning and supported display modes.
+- A self-contained MCP Apps view of the selected live session, with its agent cursor and host display controls. Hiding and reopening the view leaves the work running.
 - A shared HTTP worker and a stdio bridge let ChatGPT/Codex, Claude configurations, and the owner preview use the same browser sessions. Disconnecting the bridge leaves the worker and its sessions running.
 - Independent Playwright Chromium, Firefox, and WebKit contexts. Actual Safari uses configured W3C WebDriver. WebKit is not Safari.
 - Browser text and control observations, fill/click, viewport pointer and keyboard input, navigation, image capture, and session cleanup. Screenshots use MCP image blocks instead of duplicating base64 into model text.
@@ -53,7 +59,7 @@ Default state directory:
 
 Every command accepts `--state-dir` for a separate worker/profile. Token files are restricted on POSIX. Windows relies on the account profile and deployment ACLs; dedicated Windows ACL hardening remains a release qualification item.
 
-## Connect AI clients to the shared preview
+## Connect AI clients to the shared worker
 
 Start `rdc serve` once. Then configure your client to run:
 
@@ -65,7 +71,7 @@ Add the matching `--state-dir` if the worker uses a custom state directory. `con
 
 Use the ready examples for [Codex](examples/client-codex.toml), [Claude Desktop](examples/client-claude-desktop.json), or [direct HTTP](examples/client-http.py). They contain placeholders for your installation paths. A model can use RDC when its host supports the relevant MCP transport. Client permissions, tool approvals, image support, and context limits still apply.
 
-`rdc stdio` also runs a standalone worker inside one client's process. Its browser sessions end when that process exits and are separate from a separately launched dashboard. Choose `connect` when you want the shared preview.
+`rdc stdio` also runs a standalone worker inside one client's process. Its browser sessions end when that process exits and are separate from a separately launched dashboard. Choose `connect` to retain the worker while each chat keeps its own preview source.
 
 ### Private ChatGPT web gateway
 
@@ -77,33 +83,21 @@ Run the relay alongside the worker, selecting its matching private state:
 rdc relay --config /absolute/path/to/private/relay-config.json
 ```
 
-The local catalog contains **52 tools**. The gateway adds `rdc_connection_status` and `rdc_operation_status`, for **54 tools** when its bundled catalog matches this version. Gateway source deployment and actual rendering inside ChatGPT are separate acceptance checks. An embedded component, a registered route, or a logo asset alone does not establish that the production AI host renders RDC's preview or tool identity.
+The alpha.7 local catalog contains **53 tools**. The gateway adds `rdc_connection_status` and `rdc_operation_status`, for **55 tools** when its bundled catalog matches this version. `rdc_preview_frame` and `rdc_preview_activity` are app-only observers. Gateway source deployment and actual rendering inside ChatGPT are separate acceptance checks. An embedded component, a registered route, or a logo asset alone does not establish that the production AI host renders RDC's preview or tool identity.
 
 The **0.1.0a5** installation was verified separately from its frozen test gate: all 52 live source hashes matched, the complete previous runtime backup matched its inventory, and protected state was preserved. The matching owner-private gateway passed nine tests, TypeScript checking and its production build, then reached terminal deployment success with MCP enabled. Private plugin **1.0.6** passed exact nine-file readback while preserving its App binding, presentation and private audience. Native worker status reported a5, and the diagnostic tool returned an available, ready report with `incomplete: false`. The independent guardian remains undeployed. The concurrent public follow-up records an unresolved "App unavailable" preview; the current release checks do not establish that rendering was repaired. The requested publisher and icon changes, production embedded rendering and an owner-approved live cloud browser workflow remain separate checks. See the [audit evidence](docs/AUDIT-2026-11-15.md#current-chatgpt-connection).
 
 The local stdio package still works without a relay. Hosted clients need a reachable authenticated route; their `127.0.0.1` does not point to the user's computer. Direct HTTP clients that support the worker's bearer authentication can use an appropriately secured endpoint.
 
-The current coordinated host check exposes **53 model-visible tools**, including mobile and diagnostics, matching the 54-tool server catalog with app-only `rdc_preview_frame`. The earlier 41-tool snapshot is historical. Follow the actual tool schemas, including advertised account routing such as `link_id`, and retain the same account through operation recovery. Native mobile listing succeeded with no configured profiles or sessions; tool discovery does not qualify a phone workflow. Catalog freshness and embedded rendering each need their own observation.
+The last coordinated a5 host check exposed **53 model-visible tools**, including mobile and diagnostics, matching the 54-tool server catalog with app-only `rdc_preview_frame`. The earlier 41-tool snapshot is historical. Follow the actual tool schemas, including advertised account routing such as `link_id`, and retain the same account through operation recovery. Native mobile listing succeeded with no configured profiles or sessions; tool discovery does not qualify a phone workflow. Catalog freshness and embedded rendering each need their own observation.
 
 ### Preview window behavior
 
-`rdc_preview_open` opens the embedded component in an MCP Apps-capable host. Pass an existing `session_id` to reopen that specific session. It never creates or cancels a browser session. The worker must stay running. Inline screenshots and ordinary tool results remain available to clients without embedded UI.
+Call `rdc_preview_open` with the `session_id` of the RDC browser or configured device that is doing the work. The host opens one live view for that source. The view displays frames and the agent cursor when available. A missing or ended source stays empty until the task opens a specific new source. Terminal output, session discovery, and approvals use their own tools.
 
-| Control | Effect on the view | Effect on work |
-|---|---|---|
-| Expand / return inline | Requests a mode supported by the host | Session and jobs continue |
-| Float | Requests picture-in-picture when the host offers it | Session and jobs continue |
-| Move / resize panel | Adjusts the panel within the allocated fullscreen canvas | Browser viewport and task remain unchanged |
-| Hide / reopen | Stops frame polling, then reattaches to the same session | No browser close or job cancellation |
-| Dismiss | Requests removal of the view from the host | Worker remains running |
+Hiding, closing, and reopening the view affects observation only. The same browser and jobs continue. The AI host controls panel sizing, expansion, and floating, and may decline a mode request. A tool response alone does not confirm that a host rendered the preview. See [host contracts](docs/EMBEDDED-HOSTS.md) and [real-host acceptance](docs/ACCEPTANCE.md).
 
-Moving the host's outer window is controlled by the AI application. Standard MCP alone does not guarantee any embedded rendering. See [host contracts](docs/EMBEDDED-HOSTS.md) and [plugin installation](docs/PLUGIN-INSTALL.md). ChatGPT and Claude document MCP Apps support; actual RDC rendering in each production host is a separate acceptance test. Codex's built-in preview does not establish third-party UI support.
-
-The committed UI bundle runs without Node, a CDN, or direct network access from the iframe. To rebuild after editing `rdc/embedded/src`, run `npm ci` and `npm run build` inside `rdc/embedded`. The pinned build preserves bundled dependency licenses.
-
-On the private cloud route, the preview can recover a pending open, session refresh or frame by its existing operation ID. Hiding and reopening retains that recovery identity. If an ended session is reported through pending-operation recovery, the viewer clears that selection, fetches one available-session list and waits for an explicit choice. A newer selection made during recovery is preserved. A bounded recovery deadline eventually asks for a fresh observation; it never silently redispatches an uncertain operation.
-
-The footer identifies pending action reviews and directs the owner to RDC's owner panel on the paired computer. Job and review counts are labeled as the last status check and update when Sessions is refreshed. The embedded component has no owner credential or approval controls. Session labels use the actual browser name where available.
+The committed bundle runs without Node, a CDN, or direct network access from the iframe. To update it, run `npm ci --ignore-scripts` and `npm run build` in `rdc/embedded`, then sync the gateway assets with `cloud-gateway/scripts/sync-rdc-assets.py`. The view can recover the original pending open or frame and request a new read of the same source once expiry is confirmed.
 
 ## Work without taking over the owner's desktop
 

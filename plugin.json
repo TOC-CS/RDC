@@ -1,13 +1,19 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "rdc",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.8",
   "description": "Remote Desktop Commander by TOC Ministries: a free, MIT-licensed local worker for compatible MCP clients, with files, durable jobs, independent browsers, owner consent, embedded previews, and optional device adapters.",
   "author": {
     "name": "TOC Ministries"
   },
   "license": "MIT",
-  "keywords": ["mcp", "mcp-apps", "computer-use", "browser", "automation"],
+  "keywords": [
+    "mcp",
+    "mcp-apps",
+    "computer-use",
+    "browser",
+    "automation"
+  ],
   "extensions": {
     "com.openai": {
       "interface": {
@@ -16,7 +22,12 @@
         "longDescription": "Remote Desktop Commander (RDC) is an independent TOC Ministries project: a free, MIT-licensed local worker for self-hosted use with compatible MCP clients. Manage files and durable jobs, use independent browsers, and request saved-password fills with owner consent. The embedded live preview requires MCP Apps support; display modes depend on the host. Optional Android ADB and Appium adapters support configured Android, iPhone, and iPad workflows. Appium requires owner device setup, UiAutomator2 or XCUITest, and a compatible driver host. Native input uses the selected device's screen. This portable package requires an installed RDC command and configured worker; owner grants and OS permissions apply.",
         "developerName": "TOC Ministries",
         "category": "Productivity",
-        "capabilities": ["Files", "Durable jobs", "Independent browser", "Embedded preview"],
+        "capabilities": [
+          "Files",
+          "Durable jobs",
+          "Independent browser",
+          "Embedded preview"
+        ],
         "defaultPrompt": [
           "Check the connected RDC worker and its available capabilities.",
           "Open the live RDC preview for my existing browser session.",
@@ -26,7 +37,8 @@
         "brandColorDark": "#00DFA5",
         "composerIcon": "./rdc/assets/rdc-logo.png",
         "logo": "./rdc/assets/rdc-logo.png"
-      }
+      },
+      "onboardingSkill": "./skills/rdc-setup/SKILL.md"
     }
   }
 }

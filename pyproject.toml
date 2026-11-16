@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rdc-agent-workspace"
-version = "0.1.0a5"
+version = "0.1.0a8"
 description = "Open agent workspaces with durable jobs, independent browsers, and a live preview"
 requires-python = ">=3.11"
 license = "MIT"
@@ -23,5 +23,5 @@ rdc = "rdc.cli:main"
 include = ["rdc*"]
 
 [tool.setuptools.package-data]
-rdc = ["web/*", "embedded/preview.html", "embedded/THIRD_PARTY_NOTICES.txt", "assets/*.png"]
+rdc = ["web/*", "embedded/preview.html", "embedded/THIRD_PARTY_NOTICES.txt", "assets/*.png", "native/*.swift"]
 
