@@ -34,6 +34,10 @@ Run only the permission request you need. These commands request access; they ca
 
 For an installer or support check, `rdc setup-macos --json` returns separate `screen_recording`, `accessibility`, `ready` and `helper_path` fields. `rdc doctor` also checks them for an enabled native adapter. Missing resize permission does not stop capture of the already bound window. The app can impose minimum sizes even after permission is allowed.
 
+## Enabled switch but denied at runtime
+
+Check permissions from the same launch route as the worker. macOS can attribute a directly spawned helper to its parent application. In the v7 live test, the named helper was enabled but its request was attributed to the AI host, and Accessibility remained false. Do not repeatedly toggle the helper or grant the AI host broader access to hide this mismatch. Resolve the supported app/service launch ownership first, then rerun the worker check. Setup is incomplete until that real path succeeds. See [the acceptance queue](preview-repair.md).
+
 ## Updates and background operation
 
 Keep the helper in the same location. This source installation signs locally; a rebuilt helper can require a fresh OS decision. Recheck after updates. Do not reset all privacy permissions, edit TCC databases, approve unrelated apps, or promise permanent permission across ad-hoc rebuilds. A distributable, consistently signed and notarized installer remains separate release work.
