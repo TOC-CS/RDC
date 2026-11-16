@@ -68,7 +68,7 @@ def compare(baseline_ref, rounds, trials, warmups):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--baseline-ref", default="3461af5")
+    parser.add_argument("--baseline-ref", default="8a4a86e788be9b91eb8143d4d475c10e56524842")
     parser.add_argument("--rounds", type=int, default=4)
     parser.add_argument("--trials", type=int, default=10)
     parser.add_argument("--warmups", type=int, default=3)
