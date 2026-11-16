@@ -564,3 +564,63 @@ test('fast terminal command result arrives inside first cloud tool call before d
   assert.equal(body.output.text,'RDC-READY\n');
   assert.equal((await s.poll()).body.operation,null);
 });
+
+test('claimed short cloud operation detects its uploaded result before the next 500ms sweep',async()=>{
+  let s,claimed,completed=false,start=0,last=0;
+  const intervals=[];
+  s=setup({callWaitMs:1500,pollStepMs:500},catalog,async()=>{
+    const now=s.now();
+    intervals.push(now-last);
+    last=now;
+    if(intervals.length===1){
+      claimed=(await s.poll()).body.operation;
+      assert.ok(claimed,'Simulated device must claim original queued operation');
+    }else if(!completed){
+      const uploaded=await s.complete(claimed,result('quick-completion'));
+      assert.equal(uploaded.status,200);
+      completed=true;
+    }
+  });
+  await s.poll({claim:false});
+  start=last=s.now();
+  const reply=await s.mcp('rdc_file_write',{value:'short',_rdc_request_id:'claimed-fast-detection'});
+  assert.equal(reply.status,200);
+  assert.equal(reply.body.result.structuredContent.value,'quick-completion');
+  assert.deepEqual(intervals,[500,100],'Only post-claim result-checking may use a faster interval');
+  assert.equal(s.now()-start,600);
+  assert.equal(s.env.DB.sqlite.prepare('SELECT count(*) AS n FROM gateway_operations').get().n,1);
+});
+
+test('claimed completion probes stay bounded and never increase queued idle checks',async()=>{
+  let s,last=0,start=0,claimed;
+  const intervals=[];
+  s=setup({callWaitMs:2300,pollStepMs:500},catalog,async()=>{
+    const now=s.now();
+    intervals.push(now-last);
+    last=now;
+    if(intervals.length===1)claimed=(await s.poll()).body.operation;
+  });
+  await s.poll({claim:false});
+  start=last=s.now();
+  const pending=await s.mcp('rdc_file_write',{value:'slow',_rdc_request_id:'bounded-claimed-probes'});
+  assert.equal(pending.body.result.structuredContent.pending,true);
+  assert.ok(claimed);
+  assert.deepEqual(intervals.slice(0,5),[500,100,100,100,500],
+    'Once fast probes are exhausted the existing 500ms interval must resume');
+  assert.equal(intervals.filter(ms=>ms===100).length,3);
+  assert.equal(s.now()-start,2300);
+  assert.equal((await s.poll()).body.operation,null,'The claimed operation must not be dispatched again');
+
+  let queued,lastQueued=0;
+  const queuedIntervals=[];
+  queued=setup({callWaitMs:1500,pollStepMs:500},catalog,async()=>{
+    const now=queued.now();
+    queuedIntervals.push(now-lastQueued);
+    lastQueued=now;
+  });
+  await queued.poll({claim:false});
+  lastQueued=queued.now();
+  const unclaimed=await queued.mcp('rdc_file_write',{value:'still queued',_rdc_request_id:'queued-no-extra-reads'});
+  assert.equal(unclaimed.body.result.structuredContent.pending,true);
+  assert.deepEqual(queuedIntervals,[500,500,500],'Unclaimed commands must retain all original idle poll intervals');
+});
