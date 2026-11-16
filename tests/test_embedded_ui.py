@@ -15,6 +15,7 @@ import sys
 import tempfile
 import time
 import unittest
+from tests.ui_artifacts import artifact_path
 
 EMBEDDED = Path(__file__).resolve().parents[1] / 'rdc' / 'embedded'
 SESSION = 'b2957a7b-2062-483f-b174-9c0a3d113d55'
@@ -36,8 +37,18 @@ window.workerTicks = 0; window.workerAlive = true; window.sessionAlive = true;
 window.teardownRequests = 0; window.teardownAcks = 0; window.delayMs = 0;
 window.deniedMode = null; window.wrongSession = false; window.frameErrorCode = null; window.currentMode = 'inline';
 window.openResult = structuredClone(OPEN); window.contextUpdates = [];
+const selected = config.get('session') || window.openResult.session_id;
+if (config.get('worker')!=='real' && selected !== window.openResult.session_id) {
+  window.openResult.sessions.push({session_id:selected,kind:'mobile',viewport:{width:390,height:844}});
+  window.openResult.session_id=selected;
+}
+if(config.get('initial')==='unbound') delete window.openResult.viewer;
+if(config.get('resize')==='1') window.openResult.sessions.find(s=>s.session_id===selected).resize_to_view=true;
+
 window.pendingResults = new Map(); window.statusCalls = 0; window.openCalls = 0;
 window.deferFrames = 0; window.deferOpen = 0; window.recoveryAllowed = true;
+window.resizeErrorCode=config.get('resize_error'); window.deferResizes=Number(config.get('resize_pending')||0);
+window.nativeWidth=null; window.nativeHeight=null;
 window.completedRecoveryIDs = []; let pendingSequence = 0;
 function pendingResult(id) {
   const data={ok:true,pending:true,operation_id:id,status:'claimed',recovery_tool:'rdc_operation_status'};
@@ -55,7 +66,8 @@ function context() {
 window.mountPreview = function() {
   frame = document.createElement('iframe'); frame.id = 'app-frame';
   frame.title = 'Embedded RDC protocol fixture'; frame.sandbox = 'allow-scripts';
-  frame.src = '/preview.html'; document.getElementById('mount').replaceChildren(frame);
+  frame.src = '/preview.html';
+  if(config.get('short_mount')==='1') frame.style.height='80px'; document.getElementById('mount').replaceChildren(frame);
 };
 window.addEventListener('message', event => {
   if (event.source !== frame?.contentWindow || event.data?.jsonrpc !== '2.0') return;
@@ -69,13 +81,14 @@ window.addEventListener('message', event => {
       hostInfo:{name:'RDC fixture host',version:'1.0.0'},
       hostCapabilities:config.get('bridge')==='0'?{}:{serverTools:{},updateModelContext:{text:{}}},hostContext:context()});
   } else if (message.method === 'ui/notifications/initialized') {
+    if(config.get('initial')!=='unbound') send({method:'ui/notifications/tool-input',params:{arguments:{session_id:selected}}});
     if(config.get('worker')==='real') {
-      fetch('/fixture/tool',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'rdc_preview_open',arguments:{}})})
+      fetch('/fixture/tool',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'rdc_preview_open',arguments:{session_id:selected}})})
         .then(response=>response.json()).then(result=>send({method:'ui/notifications/tool-result',params:result}));
     } else {
       let result={structuredContent:window.openResult,content:[{type:'text',text:JSON.stringify(window.openResult)}]};
       if(config.get('initial')==='pending') {
-        const id='initial-open-operation'; window.pendingResults.set(id,{result,remaining:2}); result=pendingResult(id);
+        const id='initial-open-operation'; window.pendingResults.set(id,{result,remaining:2,kind:'primary'}); result=pendingResult(id);
       }
       send({method:'ui/notifications/tool-result',params:result});
     }
@@ -83,6 +96,7 @@ window.addEventListener('message', event => {
     const {name,arguments:args} = message.params;
     window.toolCalls.push({name,arguments:args});
     window.activeRequests += 1; window.maxRequests = Math.max(window.maxRequests,window.activeRequests);
+    const finishRequest = () => {window.activeRequests -= 1;};
     if (name === 'rdc_preview_frame') window.frameCalls += 1;
     if (name === 'rdc_preview_open') window.openCalls += 1;
     setTimeout(async () => {
@@ -90,7 +104,7 @@ window.addEventListener('message', event => {
         try {
           const response = await fetch('/fixture/tool',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,arguments:args})});
           reply(message.id,await response.json());
-        } finally { window.activeRequests -= 1; }
+        } finally { finishRequest(); }
         return;
       }
       if(name==='rdc_operation_status') {
@@ -99,30 +113,34 @@ window.addEventListener('message', event => {
         if(!pending) reply(message.id,{isError:true,structuredContent:{ok:false,error:{message:'Unknown test operation'}},content:[]});
         else if(!window.recoveryAllowed || pending.remaining-->0) reply(message.id,pendingResult(args.operation_id));
         else {window.completedRecoveryIDs.push(args.operation_id);reply(message.id,pending.result);}
-        window.activeRequests -= 1; return;
+        finishRequest(); return;
       }
       let data = structuredClone(window.openResult), content;
       if (name === 'rdc_preview_frame') {
         data = {ok:true,device_id:'fixture-device',session_id:window.wrongSession?'wrong-session':args.session_id,
           width:900,height:560,viewport:{width:900,height:560},cursor:{x:280,y:200,visible:true},
           paused:false,mime_type:'image/png',image_in_content:true,captured_at:new Date().toISOString()};
+        if(window.nativeWidth) Object.assign(data,{window_width:window.nativeWidth,window_height:window.nativeHeight});
         content = [{type:'image',mimeType:'image/png',data:PNG}];
         if(window.frameErrorCode) {data={ok:false,error:{code:window.frameErrorCode,message:'Synthetic capture refusal'}};content=[];}
       } else if (name === 'rdc_preview_open') {
         if(args.session_id && !data.sessions.some(item=>item.session_id===args.session_id)) data={ok:false,error:{code:'session_not_found',message:'Requested fixture session ended'}};
         else data.session_id=args.session_id||data.sessions[0]?.session_id||null;
+      } else if (name === 'rdc_preview_resize' && config.get('resize')==='1') {
+        data={ok:true,session_id:args.session_id,device_id:'fixture-device',width:args.width,height:args.height,size_constrained:false};
+        if(window.resizeErrorCode) data={ok:false,error:{code:window.resizeErrorCode}};
       } else {
         window.workerAlive = false; window.sessionAlive = false;
         data = {ok:false,error:{message:'Forbidden mutation in read-only fixture'}};
       }
       let result={structuredContent:data,content:content||[{type:'text',text:JSON.stringify(data)}]};
-      if((name==='rdc_preview_frame'&&window.deferFrames>0)||(name==='rdc_preview_open'&&window.deferOpen>0)) {
-        if(name==='rdc_preview_frame') window.deferFrames-=1; else window.deferOpen-=1;
+      if((name==='rdc_preview_frame'&&window.deferFrames>0)||(name==='rdc_preview_open'&&window.deferOpen>0)||(name==='rdc_preview_resize'&&window.deferResizes>0)) {
+        if(name==='rdc_preview_frame') window.deferFrames-=1; else if(name==='rdc_preview_resize') window.deferResizes-=1; else window.deferOpen-=1;
         const id='pending-preview-'+(++pendingSequence);
-        window.pendingResults.set(id,{result,remaining:1}); result=pendingResult(id);
+        window.pendingResults.set(id,{result,remaining:1,kind:'preview'}); result=pendingResult(id);
       }
       reply(message.id,result);
-      window.activeRequests -= 1;
+      finishRequest();
     }, window.delayMs);
   } else if (message.method === 'ui/update-model-context') {
     window.contextUpdates.push(message.params); reply(message.id,{});
@@ -144,6 +162,20 @@ window.addEventListener('message', event => {
 });
 window.mountPreview();
 </script></body></html>'''
+
+
+def real_worker_tool_result(engine, request):
+    """Test-host bridge with the exact local worker observation allowlist."""
+    if engine is None or request['name'] not in ('rdc_preview_open', 'rdc_preview_frame'):
+        raise ValueError('Forbidden fixture tool')
+    result = engine.call(request['name'], request['arguments'])
+    metadata = {key: value for key, value in result.items() if key != 'data'}
+    content = []
+    if result.get('mime_type') and result.get('data'):
+        metadata['image_in_content'] = True
+        content.append({'type': 'image', 'mimeType': result['mime_type'], 'data': result['data']})
+    content.insert(0, {'type': 'text', 'text': json.dumps(metadata)})
+    return {'structuredContent': metadata, 'content': content, 'isError': result.get('ok') is False}
 
 
 class EmbeddedResourceTests(unittest.TestCase):
@@ -185,7 +217,7 @@ class EmbeddedPreviewTests(unittest.TestCase):
         open_result = {'ok': True, 'device_id': 'fixture-device', 'session_id': SESSION,
             'sessions': [{'session_id': SESSION, 'backend': 'chromium', 'url': 'https://example.test/rdc-fixture', 'viewport': {'width': 900, 'height': 560}}],
             'paused': False, 'active_jobs': 1, 'pending_approvals': 0,
-            'viewer': {'close_keeps_working': True, 'worker_required': True}}
+            'viewer': {'bound_to_session': True, 'close_keeps_working': True}}
         cls.host_html = HOST.replace('__OPEN__', json.dumps(open_result)).replace('__PNG__', json.dumps(base64.b64encode(output.getvalue()).decode()))
         host_html = cls.host_html
         cls.real_engine = None
@@ -205,16 +237,13 @@ class EmbeddedPreviewTests(unittest.TestCase):
                 # Test-host-only shim. The production view has no direct network
                 # access and still calls the official MCP Apps server-tool bridge.
                 request = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-                if self.path != '/fixture/tool' or request['name'] not in ('rdc_preview_open', 'rdc_preview_frame') or cls.real_engine is None:
+                if self.path != '/fixture/tool':
                     self.send_error(403); return
-                result = cls.real_engine.call(request['name'], request['arguments'])
-                metadata = {key: value for key, value in result.items() if key != 'data'}
-                content = []
-                if result.get('mime_type') and result.get('data'):
-                    metadata['image_in_content'] = True
-                    content.append({'type': 'image', 'mimeType': result['mime_type'], 'data': result['data']})
-                content.insert(0, {'type': 'text', 'text': json.dumps(metadata)})
-                payload = json.dumps({'structuredContent': metadata, 'content': content, 'isError': result.get('ok') is False}).encode()
+                try:
+                    result = real_worker_tool_result(cls.real_engine, request)
+                except ValueError:
+                    self.send_error(403); return
+                payload = json.dumps(result).encode()
                 self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(payload)))
                 self.end_headers(); self.wfile.write(payload)
         cls.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
@@ -250,24 +279,153 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.view.get_by_role('img', name='Live RDC workspace', exact=True).wait_for(timeout=15000)
         self.wait_condition('window.frameCalls > 0 && window.activeRequests === 0')
 
+    def assert_singleflight_reads(self):
+        self.assertLessEqual(self.page.evaluate('window.maxRequests'), 1)
+
+    def assert_pinned(self, session_id=SESSION):
+        calls = self.page.evaluate('window.toolCalls')
+        frames = [call['arguments']['session_id'] for call in calls if call['name'] == 'rdc_preview_frame']
+        self.assertTrue(frames)
+        self.assertEqual(set(frames), {session_id})
+
     def assert_read_only(self):
         calls = self.page.evaluate('window.toolCalls')
         self.assertTrue(all(call['name'] in ('rdc_preview_open', 'rdc_preview_frame', 'rdc_operation_status') for call in calls))
         self.assertTrue(self.page.evaluate('window.workerAlive && window.sessionAlive'))
         self.assertEqual(self.errors, [])
 
+    def test_preview_only_shows_the_bound_source_and_does_not_poll_dashboard(self):
+        self.live()
+        self.assertEqual(self.view.get_by_role('combobox').count(), 0)
+        self.assertEqual(self.view.locator('details, pre').count(), 0)
+        self.wait_condition('window.frameCalls >= 2')
+        calls = self.page.evaluate('window.toolCalls')
+        self.assertNotIn('rdc_preview_activity', [call['name'] for call in calls])
+        self.assert_pinned()
+        self.assert_read_only()
+
+    def test_live_image_fills_the_panel_in_light_mode(self):
+        self.live()
+        self.page.evaluate("window.sendContext({theme:'light'})")
+        self.view.locator('html[data-theme="light"]').wait_for()
+        panel = self.view.locator('#panel').bounding_box()
+        screen = self.view.locator('#screen').bounding_box()
+        self.assertGreater(screen['height'] / panel['height'], 0.85)
+        self.assertEqual(self.view.locator('#frame').evaluate('(image) => image.naturalWidth'), 900)
+        self.assert_read_only()
+
+    def test_native_window_resizes_to_landscape_in_tall_host_and_hide_stops_resizing(self):
+        window_session='window-'+SESSION
+        self.page.goto(self.base+'?session='+window_session+'&resize=1')
+        self.page.set_viewport_size({'width':400,'height':900})
+        self.live()
+        self.wait_condition("window.toolCalls.some(c=>c.name==='rdc_preview_resize'&&c.arguments.width<400)")
+        requests=self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_preview_resize')")
+        args=requests[-1]['arguments']
+        self.assertEqual(args['session_id'],window_session)
+        self.assertLess(args['width'],400)
+        self.assertAlmostEqual(args['width']/args['height'],16/9,delta=.02)
+        self.assertTrue(args['_rdc_request_id'])
+        panel=self.view.locator('#panel').bounding_box()
+        host=self.page.locator('#app-frame').bounding_box()
+        self.assertAlmostEqual(panel['height'],host['height'],delta=2)
+        self.view.get_by_role('button',name='Hide preview',exact=True).click()
+        count=len(self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_preview_resize')"))
+        self.page.set_viewport_size({'width':500,'height':800})
+        self.page.wait_for_timeout(1800)
+        self.assertEqual(len(self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_preview_resize')")),count)
+        self.assertTrue(self.page.evaluate('window.workerAlive && window.sessionAlive'))
+
+    def test_inline_landscape_size_recovers_after_hide_and_short_mount(self):
+        self.live()
+        self.view.get_by_role('button',name='Hide preview',exact=True).click()
+        self.wait_condition("document.getElementById('app-frame').clientHeight<100")
+        self.view.get_by_role('button',name='Reopen preview',exact=True).click()
+        self.live()
+        self.wait_condition("document.getElementById('app-frame').clientHeight>400")
+        screen=self.view.locator('#screen').bounding_box()
+        self.assertAlmostEqual(screen['width']/screen['height'],16/9,delta=.02)
+        self.page.goto(self.base+'?short_mount=1');self.live()
+        self.wait_condition("document.getElementById('app-frame').clientHeight>400")
+        screen=self.view.locator('#screen').bounding_box()
+        self.assertAlmostEqual(screen['width']/screen['height'],16/9,delta=.02)
+
+    def test_window_permission_retry_retires_only_definitively_unperformed_resize(self):
+        for pending in (0,1):
+            self.page.goto(self.base+'?session=window-'+SESSION+'&resize=1&resize_error=accessibility_permission_required&resize_pending='+str(pending))
+            self.live()
+            self.view.get_by_role('button',name='Retry window resizing',exact=True).wait_for(timeout=15000)
+            self.assertIn('current size',self.view.locator('#mode-note').inner_text())
+            first=self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_preview_resize')")
+            self.assertEqual(len(first),1)
+            self.page.evaluate('window.resizeErrorCode=null')
+            self.view.get_by_role('button',name='Retry window resizing',exact=True).click()
+            self.wait_condition("window.toolCalls.filter(c=>c.name==='rdc_preview_resize').length===2")
+            self.live()
+            calls=self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_preview_resize')")
+            self.assertEqual(len(calls),2)
+            self.assertNotEqual(calls[0]['arguments']['_rdc_request_id'],calls[1]['arguments']['_rdc_request_id'])
+
+    def test_window_frame_uses_current_native_dimensions_after_external_resize(self):
+        self.page.goto(self.base+'?session=window-'+SESSION+'&resize=1')
+        self.live()
+        self.page.evaluate('window.nativeWidth=720;window.nativeHeight=820')
+        self.view.locator('#frame').evaluate("image=>image.dataset.before=image.style.width")
+        self.wait_condition('window.frameCalls>=2')
+        self.assertEqual(self.view.locator('#frame').evaluate('image=>[image.style.width,image.style.height]'),['720px','820px'])
+
+    def test_uncertain_resize_keeps_exact_capture_and_original_recovery_identity(self):
+        for pending in (0,1):
+            self.page.goto(self.base+'?session=window-'+SESSION+'&resize=1&resize_error=host_tool_unavailable&resize_pending='+str(pending))
+            self.live()
+            self.assertIn('unconfirmed',self.view.locator('#mode-note').inner_text())
+            calls=self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_preview_resize')")
+            self.assertEqual(len(calls),1)
+            self.wait_condition('window.frameCalls>=2')
+            self.assertEqual(len(self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_preview_resize')")),1)
+            self.view.get_by_role('button',name='Retry window resizing',exact=True).click()
+            self.live()
+            if pending:
+                self.assertEqual(len(self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_preview_resize')")),1)
+                ids=self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_operation_status').map(c=>c.arguments.operation_id)")
+                self.assertEqual(len(set(ids)),1)
+            else:
+                self.wait_condition("window.toolCalls.filter(c=>c.name==='rdc_preview_resize').length===2")
+                after=self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_preview_resize')")
+                self.assertEqual(after[0]['arguments'],after[1]['arguments'])
+            self.page.evaluate("window.frameErrorCode='screenshot_redaction_required'")
+            self.view.get_by_role('heading',name='Preview hidden for privacy').wait_for(timeout=15000)
+            self.assertTrue(self.view.locator('#frame').is_hidden())
+            self.assert_pinned('window-'+SESSION)
+
+    def test_legacy_desktop_binding_never_captures_or_requests_mode(self):
+        self.page.goto(self.base+'?session=desktop')
+        self.view.get_by_role('heading',name='No visual source').wait_for(timeout=5000)
+        self.assertTrue(self.view.locator('#frame').is_hidden())
+        self.assertEqual(self.page.evaluate('window.toolCalls'),[])
+        self.assertEqual(self.page.evaluate('window.requestedModes'),[])
+
+    def test_unbound_legacy_open_never_reads_the_global_source(self):
+        self.page.goto(self.base + '?initial=unbound')
+        self.view = self.page.frame_locator('#app-frame')
+        self.view.get_by_role('heading', name='No visual source').wait_for()
+        self.assertTrue(self.view.locator('#frame').is_hidden())
+        self.assertEqual(self.page.evaluate('window.toolCalls'), [])
+
     def test_hide_reopen_and_host_teardown_preserve_worker_session(self):
         self.live()
         self.view.get_by_role('button', name='Hide preview', exact=True).click()
-        self.view.get_by_text('Preview hidden', exact=True).wait_for()
+        self.view.get_by_text('Preview hidden. Work keeps running.', exact=True).wait_for()
         calls = self.page.evaluate('window.frameCalls')
         ticks = self.page.evaluate('window.workerTicks')
-        self.page.wait_for_timeout(1750)
+        hidden_at = self.page.evaluate('performance.now()')
+        self.wait_condition('(snapshot) => window.workerTicks > snapshot.ticks && performance.now() - snapshot.at >= 1750',
+                            arg={'ticks': ticks, 'at': hidden_at})
         self.assertEqual(self.page.evaluate('window.frameCalls'), calls)
         self.assertGreater(self.page.evaluate('window.workerTicks'), ticks)
         self.view.get_by_role('button', name='Reopen preview', exact=True).click()
         self.wait_condition('(n) => window.frameCalls > n', arg=calls)
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), SESSION)
+        self.assert_pinned()
         self.wait_condition('window.contextUpdates.some(item=>item.structuredContent?.rdc_preview?.session_id)')
         self.view.get_by_role('button', name='Hide preview', exact=True).click()
         self.view.get_by_role('button', name='Dismiss view', exact=True).click()
@@ -276,61 +434,34 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.assert_read_only()
         self.page.evaluate('window.mountPreview()')
         self.view = self.page.frame_locator('#app-frame'); self.live()
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), SESSION)
+        self.assert_pinned()
         self.assert_read_only()
 
-    def test_selected_second_session_survives_refresh_and_expired_session_is_explicit(self):
+    def test_ended_source_never_falls_back_to_another_active_session(self):
         self.live()
-        second = '1830547e-5ecd-4b37-9ba1-08e96b5d0754'
-        self.page.evaluate('''sid => window.openResult.sessions.push({session_id:sid,backend:'firefox',url:'https://second.test/',viewport:{width:900,height:560}})''', second)
-        self.view.get_by_role('button', name='Sessions', exact=True).click()
-        self.view.get_by_label('Workspace session', exact=True).select_option(second)
-        self.wait_condition('window.activeRequests === 0')
-        self.view.get_by_role('button', name='Sessions', exact=True).click()
-        self.wait_condition('window.activeRequests === 0')
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), second)
-        self.page.evaluate('sid => window.openResult.sessions = window.openResult.sessions.filter(item=>item.session_id!==sid)', second)
-        self.view.get_by_role('button', name='Sessions', exact=True).click()
-        self.view.get_by_text('The selected session is no longer active', exact=True).wait_for()
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), '')
-        self.view.get_by_label('Workspace session', exact=True).select_option(SESSION)
-        self.live()
-        self.assert_read_only()
-
-    def test_mobile_label_shared_input_and_private_capture_keep_work_alive(self):
-        self.live()
-        mobile = 'mobile-87654321-4321-4321-4321-cba987654321'
-        self.page.evaluate('''sid => window.openResult.sessions.push({session_id:sid,kind:'mobile',backend:'appium',platform:'Android',profile:'fixture-phone',width:390,height:844,input_notice:'Input is shared with the configured mobile device.'})''', mobile)
-        self.view.get_by_role('button', name='Sessions', exact=True).click()
-        selector = self.view.get_by_label('Workspace session', exact=True)
-        selector.select_option(mobile)
-        self.live()
-        self.assertIn('Android · fixture-phone', selector.locator('option:checked').inner_text())
-        self.assertIn('shared', self.view.locator('#work-state').inner_text())
-        self.assertEqual(self.view.locator('#page-address').inner_text(), 'Android · fixture-phone')
-        self.page.evaluate("window.frameErrorCode='screenshot_redaction_required'")
-        self.view.get_by_role('button', name='Refresh', exact=True).click()
-        self.view.get_by_text('Preview hidden for privacy', exact=True).wait_for()
+        self.page.evaluate('''() => {
+            window.openResult.sessions.push({session_id:'1830547e-5ecd-4b37-9ba1-08e96b5d0754',browser:'chromium'});
+            window.frameErrorCode='session_not_found';
+        }''')
+        self.view.get_by_role('heading', name='Session ended').wait_for()
         self.assertTrue(self.view.locator('#frame').is_hidden())
-        self.assertEqual(selector.input_value(), mobile)
-        self.assertIn('1 active job', self.view.locator('#work-state').inner_text())
+        self.assertEqual(self.page.evaluate('window.openCalls'), 0)
+        self.assert_pinned()
         self.assert_read_only()
 
-    def test_ended_mobile_capture_stops_until_explicit_read_retry(self):
-        self.live()
+    def test_mobile_capture_refusal_clears_pixels_and_retains_source(self):
         mobile = 'mobile-87654321-4321-4321-4321-cba987654321'
-        self.page.evaluate('''sid => {window.openResult.sessions.push({session_id:sid,kind:'mobile',backend:'appium',platform:'iOS',profile:'fixture-ipad'});window.frameErrorCode='mobile_session_gone';}''', mobile)
-        self.view.get_by_role('button', name='Sessions', exact=True).click()
-        self.view.get_by_label('Workspace session', exact=True).select_option(mobile)
-        self.view.get_by_text('The native session has ended', exact=True).wait_for()
-        self.wait_condition('window.activeRequests === 0')
-        calls = self.page.evaluate('window.frameCalls')
-        self.page.wait_for_timeout(1750)
-        self.assertEqual(self.page.evaluate('window.frameCalls'), calls)
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), mobile)
-        self.assertIn('owner panel', self.view.locator('#empty-copy').inner_text())
-        self.view.get_by_role('button', name='Refresh', exact=True).click()
-        self.wait_condition('(n) => window.frameCalls === n + 1 && window.activeRequests === 0', calls)
+        self.page.goto(self.base + '?session=' + mobile)
+        self.view = self.page.frame_locator('#app-frame')
+        self.live()
+        self.page.evaluate("window.frameErrorCode='screenshot_redaction_required'")
+        self.view.get_by_role('heading', name='Preview hidden for privacy').wait_for()
+        self.assertTrue(self.view.locator('#frame').is_hidden())
+        self.assertIsNone(self.view.locator('#frame').get_attribute('src'))
+        self.page.evaluate('window.frameErrorCode=null')
+        self.view.get_by_role('button', name='Retry preview').click()
+        self.live()
+        self.assert_pinned(mobile)
         self.assert_read_only()
 
     def test_short_fullscreen_host_keeps_panel_and_controls_inside_canvas(self):
@@ -343,12 +474,45 @@ class EmbeddedPreviewTests(unittest.TestCase):
         panel = self.view.locator('#panel').bounding_box()
         self.assertGreaterEqual(panel['y'], 0)
         self.assertLessEqual(panel['y'] + panel['height'], 200)
-        refresh = self.view.get_by_role('button', name='Refresh', exact=True)
-        refresh.scroll_into_view_if_needed()
-        control = refresh.bounding_box()
+        hide = self.view.get_by_role('button', name='Hide preview', exact=True)
+        control = hide.bounding_box()
         self.assertGreaterEqual(control['y'], 0)
         self.assertLessEqual(control['y'] + control['height'], 200)
         self.assert_read_only()
+
+    def test_two_live_viewers_keep_their_own_browser_sources(self):
+        from rdc.config import Settings
+        from rdc.engine import Engine
+        from urllib.parse import quote
+        from playwright.sync_api import expect
+        with tempfile.TemporaryDirectory(prefix='rdc-two-viewers-') as directory:
+            root=Path(directory).resolve()
+            engine=Engine(Settings(state_dir=root/'state',roots=[root],approval_mode='trusted'))
+            type(self).real_engine=engine
+            second_page=self.browser.new_page(viewport={'width':900,'height':800})
+            try:
+                ids=[]
+                for title,color in [('Task A','#ee4444'),('Task B','#2244ee')]:
+                    result=engine.call('rdc_browser_start',{'browser':'chromium'});self.assertTrue(result['ok'],result)
+                    ids.append(result['session_id'])
+                    result=engine.call('rdc_browser_navigate',{'session_id':ids[-1],'url':'data:text/html,'+quote('<title>'+title+'</title><body style="background:'+color+'"><h1>'+title+'</h1>')})
+                    self.assertTrue(result['ok'],result)
+                self.page.goto(self.base+'?worker=real&session='+ids[0]);self.live()
+                second_page.goto(self.base+'?worker=real&session='+ids[1])
+                other=second_page.frame_locator('#app-frame').locator('#frame');expect(other).to_be_visible(timeout=15000)
+                first=self.view.locator('#frame');a=first.get_attribute('src');b=other.get_attribute('src');self.assertNotEqual(a,b)
+                engine.call('rdc_browser_navigate',{'session_id':ids[0],'url':'data:text/html,'+quote('<title>A changed</title><body style="background:green"><h1>A changed</h1>')})
+                expect(first).not_to_have_attribute('src',a,timeout=6000)
+                second_page.wait_for_timeout(1700)
+                self.assertEqual(other.get_attribute('src'),b)
+                for page,session in [(self.page,ids[0]),(second_page,ids[1])]:
+                    self.assertTrue(all(c['arguments'].get('session_id')==session for c in page.evaluate('window.toolCalls') if c['name'] in ('rdc_preview_open','rdc_preview_frame')))
+                    self.assertEqual(page.evaluate('window.requestedModes'),[])
+                self.view.get_by_role('button',name='Hide preview',exact=True).click()
+                expect(other).to_be_visible()
+                self.assertEqual(len(engine.call('rdc_browser_list',{})['sessions']),2)
+            finally:
+                second_page.close();type(self).real_engine=None;engine.close()
 
     def test_real_worker_job_and_browser_survive_hidden_and_remounted_view(self):
         from rdc.config import Settings
@@ -366,9 +530,20 @@ class EmbeddedPreviewTests(unittest.TestCase):
                 demo = '<!doctype html><title>RDC live worker proof</title><style>body{font:24px system-ui;background:#edf6f5;color:#173447;padding:45px}main{border:1px solid #adcfc9;background:white;border-radius:16px;padding:32px}button{background:#65dfbd;border:0;border-radius:8px;padding:14px;font:inherit}</style><main><h1>Independent RDC workspace</h1><p>This frame comes from a real browser worker.</p><button>Browser session stays active</button></main>'
                 navigated = engine.call('rdc_browser_navigate', {'session_id': session_id, 'url': 'data:text/html;charset=utf-8,' + quote(demo)})
                 self.assertTrue(navigated['ok'], navigated)
-                self.page.goto(self.base + '?worker=real')
+                self.page.goto(self.base + '?worker=real&session=' + session_id)
                 self.view = self.page.frame_locator('#app-frame'); self.live()
-                self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), session_id)
+                self.assert_pinned(session_id)
+                from playwright.sync_api import expect
+                cursor = self.view.locator('#cursor')
+                old_position = cursor.get_attribute('style') or ''
+                observation = engine.call('rdc_browser_observe', {'session_id': session_id})
+                moved = engine.call('rdc_browser_pointer', {
+                    'session_id': session_id, 'observation_id': observation['observation_id'],
+                    'action': 'move', 'x': 300, 'y': 190,
+                })
+                self.assertTrue(moved['ok'], moved)
+                expect(cursor).to_be_visible(timeout=5000)
+                expect(cursor).not_to_have_attribute('style', old_position)
                 script = "import pathlib,time; time.sleep(4); pathlib.Path('view-lifecycle.txt').write_text('RDC worker survived view lifecycle\\n'); print('RDC lifecycle job complete',flush=True)"
                 job = engine.call('rdc_job_start', {'argv': [sys.executable, '-c', script], 'cwd': str(work), 'idempotency_key': 'embedded-lifecycle'})
                 self.assertTrue(job['ok'], job); job_id = job['job']['id']
@@ -379,16 +554,15 @@ class EmbeddedPreviewTests(unittest.TestCase):
                 self.assertIn(engine.call('rdc_job_status', {'job_id': job_id})['job']['status'], ('queued', 'running'))
                 self.view.get_by_role('button', name='Reopen preview', exact=True).click()
                 self.wait_condition('(count)=>window.frameCalls>count && window.activeRequests===0', arg=calls)
-                self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), session_id)
-                out = EMBEDDED.parents[1] / 'test-results'; out.mkdir(exist_ok=True)
-                self.page.screenshot(path=str(out / 'embedded-preview.png'), full_page=True)
+                self.assert_pinned(session_id)
+                self.page.screenshot(path=str(artifact_path('embedded-preview.png')), full_page=True)
                 self.view.get_by_role('button', name='Hide preview', exact=True).click()
                 self.view.get_by_role('button', name='Dismiss view', exact=True).click()
                 self.wait_condition('window.teardownAcks===1')
                 self.assertIn(session_id, [item['session_id'] for item in engine.call('rdc_browser_list', {})['sessions']])
                 self.page.evaluate('window.mountPreview()')
                 self.view = self.page.frame_locator('#app-frame'); self.live()
-                self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), session_id)
+                self.assert_pinned(session_id)
                 deadline = time.monotonic() + 12
                 while time.monotonic() < deadline:
                     status = engine.call('rdc_job_status', {'job_id': job_id})['job']
@@ -412,39 +586,21 @@ class EmbeddedPreviewTests(unittest.TestCase):
                         while time.monotonic() < deadline and engine.call('rdc_job_status', {'job_id': job_id})['job']['status'] in ('queued', 'running', 'cancelling'):
                             time.sleep(0.05)
                 engine.close(); type(self).real_engine = None
-    def test_modes_constrained_move_resize_and_host_denial(self):
+    def test_display_mode_tracks_host_and_does_not_change_source(self):
         self.live()
         self.view.get_by_role('button', name='Expand', exact=True).click()
         self.wait_condition('window.currentMode === "fullscreen"')
-        panel = self.view.locator('#panel')
-        before = panel.bounding_box()
-        resize = self.view.get_by_role('button', name='Resize preview within RDC canvas', exact=True)
-        resize.focus(); resize.press('ArrowLeft'); resize.press('ArrowUp')
-        smaller = panel.bounding_box()
-        self.assertLess(smaller['width'], before['width']); self.assertLess(smaller['height'], before['height'])
-        move = self.view.get_by_role('button', name='Move preview within RDC canvas', exact=True)
-        move.focus(); move.press('ArrowRight'); move.press('ArrowDown')
-        moved = panel.bounding_box()
-        self.assertGreater(moved['x'], smaller['x']); self.assertGreater(moved['y'], smaller['y'])
-        # Actual pointer drag stays bounded by the host's allocated canvas.
-        point = move.bounding_box()
-        self.page.mouse.move(point['x'] + point['width']/2, point['y'] + point['height']/2)
-        self.page.mouse.down(); self.page.mouse.move(2000, 2000); self.page.mouse.up()
-        bounded = panel.bounding_box()
-        self.assertGreaterEqual(bounded['x'], 0); self.assertGreaterEqual(bounded['y'], 0)
-        self.assertLessEqual(bounded['x'] + bounded['width'], 1440)
-        self.assertLessEqual(bounded['y'] + bounded['height'], 1000)
+        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'), 'fullscreen')
         self.view.get_by_role('button', name='Float', exact=True).click()
         self.wait_condition('window.currentMode === "pip"')
         self.view.get_by_role('button', name='Inline', exact=True).click()
         self.wait_condition('window.currentMode === "inline"')
         self.page.evaluate('window.deniedMode = "inline"')
         self.view.get_by_role('button', name='Expand', exact=True).click()
-        self.view.get_by_text('Your AI app kept the preview in its current display mode.', exact=True).wait_for()
+        self.view.get_by_text('The app kept its current display mode.', exact=True).wait_for()
         self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'), 'inline')
+        self.assert_pinned()
         self.assert_read_only()
-        out = EMBEDDED.parents[1] / 'test-results'; out.mkdir(exist_ok=True)
-        self.page.screenshot(path=str(out / 'embedded-protocol-host.png'), full_page=True)
 
     def test_small_screen_and_missing_display_modes(self):
         self.page.set_viewport_size({'width': 390, 'height': 844})
@@ -457,20 +613,20 @@ class EmbeddedPreviewTests(unittest.TestCase):
         # initialized parent source is allowed to send host notifications.
         self.view.locator('html').evaluate('''() => window.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{structuredContent:{ok:true,sessions:[{session_id:'forged'}],session_id:'forged'},content:[]}}, '*')''')
         self.page.wait_for_timeout(100)
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), SESSION)
+        self.assert_pinned()
         self.assert_read_only()
 
     def test_single_inflight_read_and_reject_wrong_session_frame(self):
         self.live()
         self.page.evaluate('window.delayMs = 600; window.wrongSession = true')
-        self.view.get_by_role('button', name='Refresh', exact=True).click()
         self.view.get_by_text('The preview response belongs to a different session.', exact=True).wait_for()
-        self.assertEqual(self.page.evaluate('window.maxRequests'), 1)
+        self.assertTrue(self.view.locator('#frame').is_hidden())
+        self.assert_singleflight_reads()
         self.page.evaluate('window.wrongSession = false')
-        self.view.get_by_role('button', name='Refresh', exact=True).click()
-        self.wait_condition('window.activeRequests === 0')
-        self.assertEqual(self.page.evaluate('window.maxRequests'), 1)
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), SESSION)
+        self.view.get_by_role('button', name='Retry preview', exact=True).click()
+        self.live()
+        self.assert_singleflight_reads()
+        self.assert_pinned()
         self.assert_read_only()
 
     def test_initial_pending_open_recovers_original_without_another_open(self):
@@ -479,14 +635,13 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.assertEqual(self.page.evaluate('window.openCalls'), 0)
         self.assertGreaterEqual(self.page.evaluate('window.statusCalls'), 3)
         self.assertIn('initial-open-operation', self.page.evaluate('window.completedRecoveryIDs'))
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), SESSION)
-        self.assertEqual(self.page.evaluate('window.maxRequests'), 1)
+        self.assert_pinned()
+        self.assert_singleflight_reads()
         self.assert_read_only()
 
     def test_pending_frame_hide_reopen_resumes_the_same_operation(self):
         self.live()
         self.page.evaluate('window.deferFrames=1; window.recoveryAllowed=false')
-        self.view.get_by_role('button', name='Refresh', exact=True).click()
         self.wait_condition('window.statusCalls>0 && window.activeRequests===0')
         original = self.page.evaluate('[...window.pendingResults.keys()][0]')
         self.view.get_by_role('button', name='Hide preview', exact=True).click()
@@ -498,98 +653,32 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.view.get_by_role('button', name='Reopen preview', exact=True).click()
         self.wait_condition('(id)=>window.completedRecoveryIDs.includes(id)', arg=original)
         self.assertEqual(self.page.evaluate('window.frameCalls'), frames)
-        self.assertEqual(self.page.evaluate('window.maxRequests'), 1)
+        self.assert_singleflight_reads()
         self.assert_read_only()
 
-    def test_pending_sessions_refresh_recovers_existing_operation(self):
-        self.live()
-        self.page.evaluate('window.deferOpen=1')
-        before = self.page.evaluate('window.openCalls')
-        self.view.get_by_role('button', name='Sessions', exact=True).click()
-        self.wait_condition('window.completedRecoveryIDs.length>0 && window.activeRequests===0')
-        self.assertEqual(self.page.evaluate('window.openCalls'), before + 1)
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), SESSION)
-        self.assertEqual(self.page.evaluate('window.maxRequests'), 1)
-        self.assert_read_only()
-
-    def test_pending_ended_session_fetches_one_list_and_requires_explicit_selection(self):
-        self.live()
-        remaining = '1830547e-5ecd-4b37-9ba1-08e96b5d0754'
-        # Both the failed selected-session read and the replacement list take
-        # the cloud pending-operation route. Neither may be dispatched twice.
-        self.page.evaluate('''sid => {
-            window.openResult.sessions = [{session_id:sid,backend:'firefox',url:'https://remaining.test/',viewport:{width:900,height:560}}];
-            window.deferOpen = 2;
-        }''', remaining)
-        before = self.page.evaluate('window.openCalls')
-        self.view.get_by_role('button', name='Sessions', exact=True).click()
-        self.view.get_by_text('The selected session is no longer active', exact=True).wait_for()
-        self.wait_condition('window.activeRequests === 0 && window.completedRecoveryIDs.length === 2')
-        self.assertEqual(self.page.evaluate('window.openCalls'), before + 2)
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), '')
-        opens = self.page.evaluate('window.toolCalls.filter(call=>call.name === "rdc_preview_open").map(call=>call.arguments)')
-        self.assertEqual(opens[-2:], [{'session_id': SESSION}, {}])
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).locator('option').count(), 2)
-        self.view.get_by_label('Workspace session', exact=True).select_option(remaining)
-        self.live()
-        self.assertEqual(self.view.get_by_label('Workspace session', exact=True).input_value(), remaining)
-        self.assertEqual(self.page.evaluate('window.maxRequests'), 1)
-        self.assert_read_only()
-
-    def test_approval_waiting_identifies_owner_panel_and_clears_at_zero(self):
-        self.live()
-        self.page.evaluate('window.openResult.pending_approvals=3; window.openResult.active_jobs=2')
-        self.view.get_by_role('button', name='Sessions', exact=True).click()
-        self.view.get_by_text('3 actions awaiting review', exact=False).wait_for()
-        message = self.view.locator('#work-state').inner_text()
-        self.assertIn('Last status check:', message)
-        self.assertIn('2 active jobs', message)
-        self.assertIn("RDC's owner panel on the paired computer", message)
-        self.wait_condition('window.activeRequests === 0')
-        self.page.evaluate('window.openResult.pending_approvals=0; window.openResult.active_jobs=0')
-        self.view.get_by_role('button', name='Sessions', exact=True).click()
-        self.view.get_by_text('Hiding this view keeps the worker running.', exact=True).wait_for()
-        message = self.view.locator('#work-state').inner_text()
-        self.assertNotIn('awaiting review', message)
-        self.assertNotIn('active jobs', message)
-        self.assertNotIn('owner panel', message)
-        self.assert_read_only()
-
-    def test_session_label_prefers_browser_name_over_backend(self):
-        self.live()
-        self.page.evaluate("window.openResult.sessions[0].backend='playwright'; window.openResult.sessions[0].browser='firefox'")
-        self.view.get_by_role('button', name='Sessions', exact=True).click()
-        option = self.view.get_by_label('Workspace session', exact=True).locator('option:checked').filter(has_text='firefox')
-        option.wait_for(state='attached')
-        self.wait_condition('window.activeRequests === 0')
-        self.assertEqual(option.inner_text(), f'firefox · {SESSION[:8]}')
-        self.assert_read_only()
-
-    def test_pending_recovery_deadline_requires_manual_new_observation(self):
+    def test_pending_recovery_deadline_requires_manual_original_observation(self):
         self.live()
         self.page.evaluate('window.deferFrames=1; window.recoveryAllowed=false')
-        self.view.get_by_role('button', name='Refresh', exact=True).click()
         self.wait_condition('window.statusCalls>0 && window.activeRequests===0')
         # Advance only the view's test clock to exercise the two-minute bound.
         self.view.locator('html').evaluate('''() => { const actual=performance.now.bind(performance); Object.defineProperty(performance,'now',{value:()=>actual()+130000}); }''')
-        self.view.get_by_text('The preview recovery wait ended. Use Refresh to request a new observation.', exact=True).wait_for()
+        self.view.get_by_text('The preview recovery wait ended. Retry preview checks the original observation.', exact=True).wait_for()
         frames = self.page.evaluate('window.frameCalls'); statuses = self.page.evaluate('window.statusCalls')
         self.page.wait_for_timeout(800)
         self.assertEqual(self.page.evaluate('window.frameCalls'), frames)
         self.assertEqual(self.page.evaluate('window.statusCalls'), statuses)
         self.page.evaluate('window.recoveryAllowed=true')
-        self.view.get_by_role('button', name='Refresh', exact=True).click()
-        self.wait_condition('(n)=>window.frameCalls>n && window.activeRequests===0', arg=frames)
-        self.assertEqual(self.page.evaluate('window.statusCalls'), statuses)
+        self.view.get_by_role('button', name='Retry preview', exact=True).click()
+        self.wait_condition('(n)=>window.statusCalls>n && window.activeRequests===0', arg=statuses)
+        self.assertEqual(self.page.evaluate('window.frameCalls'), frames)
         self.assert_read_only()
 
     def test_missing_server_tool_bridge_never_polls(self):
         self.page.goto(self.base + '?bridge=0')
         self.view = self.page.frame_locator('#app-frame')
-        self.view.get_by_text('This AI app does not provide the server-tool bridge needed for live preview.', exact=True).wait_for()
+        self.view.get_by_text('This app does not provide the live preview connection.', exact=True).wait_for()
         self.page.wait_for_timeout(1750)
         self.assertEqual(self.page.evaluate('window.toolCalls'), [])
-        self.assertTrue(self.view.get_by_role('button', name='Refresh', exact=True).is_disabled())
         self.assert_read_only()
 
 

@@ -95,7 +95,7 @@ class SharedWorkerContracts(unittest.TestCase):
 
     def parameters(self, state, url, *extra):
         return StdioServerParameters(command=sys.executable,
-            args=['-m', 'rdc', 'connect', '--state-dir', str(state), '--url', url + '/mcp', *extra])
+            args=['-B', '-m', 'rdc', 'connect', '--state-dir', str(state), '--url', url + '/mcp', *extra])
 
     def test_stdio_browser_actions_share_owner_preview_and_outlive_disconnect(self):
         engine = BrowserWorkerFixture()

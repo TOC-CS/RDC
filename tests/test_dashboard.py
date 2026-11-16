@@ -10,6 +10,7 @@ from urllib.parse import urlparse, parse_qs
 import json
 import shutil
 import unittest
+from tests.ui_artifacts import artifact_path
 
 WEB = Path(__file__).resolve().parents[1] / 'rdc' / 'web'
 
@@ -162,18 +163,14 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.page.evaluate('Object.keys(localStorage)'), [])
         self.assertNotIn('owner-test-secret', self.page.url)
         self.assertEqual(self.errors, [])
-        out = WEB.parents[1] / 'test-results'
-        out.mkdir(exist_ok=True)
-        self.page.screenshot(path=str(out / 'dashboard-desktop.png'), full_page=True)
+        self.page.screenshot(path=str(artifact_path('dashboard-desktop.png')), full_page=True)
 
     def test_phone_layout_and_disconnect_clear_private_content(self):
         self.page.set_viewport_size({'width': 390, 'height': 844})
         self.connect()
         self.page.get_by_role('img', name='Live browser workspace').wait_for()
         self.assertFalse(self.page.evaluate('document.documentElement.scrollWidth > innerWidth'))
-        out = WEB.parents[1] / 'test-results'
-        out.mkdir(exist_ok=True)
-        self.page.screenshot(path=str(out / 'dashboard-phone.png'), full_page=True)
+        self.page.screenshot(path=str(artifact_path('dashboard-phone.png')), full_page=True)
         self.page.get_by_role('button', name='Disconnect', exact=True).click()
         self.page.get_by_text('Disconnected', exact=True).wait_for()
         self.assertEqual(self.page.get_by_label('Owner access token').input_value(), '')

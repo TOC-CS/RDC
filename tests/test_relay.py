@@ -58,6 +58,183 @@ class FakeGateway:
         return None, .25
 
 
+class RelayObservationTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.journal = Journal(Path(self.directory.name) / 'relay.sqlite3', 'observer-test')
+        self.catalog = CATALOG | {'rdc_preview_activity': {
+            'type': 'object', 'properties': {}, 'additionalProperties': False}}
+
+    def tearDown(self):
+        self.journal.close()
+        self.directory.cleanup()
+
+    def test_activity_is_claimed_and_delivered_before_blocked_primary_finishes(self):
+        async def run():
+            started, release, observed = anyio.Event(), anyio.Event(), anyio.Event()
+            primary = operation('primary-blocked')
+            activity = operation('activity-live', {}, name='rdc_preview_activity')
+            calls = []
+            class Worker:
+                async def call_tool(inner, name, arguments, **kwargs):
+                    calls.append(name)
+                    if name == 'rdc_fixture_write':
+                        started.set()
+                        await release.wait()
+                    return types.CallToolResult(content=[], structured_content={'ok': True, 'source': name})
+            class GatewayFixture(FakeGateway):
+                supports_activity_observer = True
+                async def poll(inner, claim=True, observation_only=False):
+                    self.assertTrue(claim)
+                    self.assertTrue(observation_only)
+                    return (activity if not inner.polls else None), .25
+                async def submit(inner, op, result_json):
+                    inner.polls.append(True)
+                    await super().submit(op, result_json)
+                    if op.operation_id == activity.operation_id:
+                        observed.set()
+            gateway = GatewayFixture(failures=1)
+            pump = RelayPump(config(), self.journal, gateway, Worker(), self.catalog)
+            with patch('rdc.relay.OBSERVER_POLL_SECONDS', .01, create=True):
+                async with anyio.create_task_group() as tasks:
+                    tasks.start_soon(pump.handle, primary)
+                    await started.wait()
+                    with anyio.fail_after(1):
+                        await observed.wait()
+                    self.assertEqual(self.journal.get(primary.operation_id)['state'], 'executing')
+                    self.assertEqual(self.journal.get(activity.operation_id)['state'], 'delivered')
+                    self.assertEqual(calls, ['rdc_fixture_write', 'rdc_preview_activity'])
+                    self.assertEqual(gateway.results[0], gateway.results[1])
+                    release.set()
+            await pump.flush()
+            self.assertFalse(pump.worker_lost)
+            self.assertEqual(self.journal.get(primary.operation_id)['state'], 'delivered')
+        anyio.run(run)
+
+    def test_observer_rejects_mutation_before_touching_existing_primary_identity(self):
+        primary = operation('same-primary')
+        self.journal.remember(primary)
+        self.journal.mark_executing(primary.operation_id)
+        worker, gateway = FakeWorker(), FakeGateway()
+        pump = RelayPump(config(), self.journal, gateway, worker, self.catalog)
+        async def run():
+            with self.assertRaises(RelayPermanentError):
+                await pump.observe(primary)
+        anyio.run(run)
+        self.assertEqual(worker.calls, [])
+        self.assertEqual(self.journal.get(primary.operation_id)['state'], 'executing')
+        self.assertIsNone(self.journal.get(primary.operation_id)['result_json'])
+
+    def test_observer_failure_does_not_mark_primary_worker_lost_or_replay(self):
+        worker, gateway = FakeWorker(error=RuntimeError('private details')), FakeGateway()
+        pump = RelayPump(config(), self.journal, gateway, worker, self.catalog)
+        activity = operation('activity-error', {}, name='rdc_preview_activity')
+        async def run():
+            await pump.observe(activity)
+            await pump.observe(activity)
+        anyio.run(run)
+        self.assertFalse(pump.worker_lost)
+        self.assertEqual(worker.calls, [('rdc_preview_activity', {})])
+        self.assertEqual(gateway.results[0], gateway.results[1])
+        self.assertNotIn('private details', gateway.results[0][1])
+        self.assertEqual(json.loads(gateway.results[0][1])['structuredContent']['error']['code'], 'outcome_unknown')
+
+    def test_primary_completion_cancels_observer_into_retained_terminal_result(self):
+        async def run():
+            started, observer_started, release = anyio.Event(), anyio.Event(), anyio.Event()
+            primary = operation('primary-finishes')
+            activity = operation('activity-cancelled', {}, name='rdc_preview_activity')
+            calls = []
+            class Worker:
+                async def call_tool(inner, name, arguments, **kwargs):
+                    calls.append(name)
+                    if name == 'rdc_fixture_write':
+                        started.set()
+                        await release.wait()
+                        return types.CallToolResult(content=[], structured_content={'ok': True, 'value': 'actual primary result'})
+                    observer_started.set()
+                    await anyio.sleep_forever()
+            class GatewayFixture(FakeGateway):
+                supports_activity_observer = True
+                async def poll(inner, claim=True, observation_only=False):
+                    self.assertTrue(observation_only)
+                    return activity, .25
+            gateway = GatewayFixture()
+            pump = RelayPump(config(), self.journal, gateway, Worker(), self.catalog)
+            with patch('rdc.relay.OBSERVER_POLL_SECONDS', .01, create=True):
+                async with anyio.create_task_group() as tasks:
+                    tasks.start_soon(pump.handle, primary)
+                    await started.wait()
+                    with anyio.fail_after(1):
+                        await observer_started.wait()
+                    release.set()
+            self.assertEqual(self.journal.get(activity.operation_id)['state'], 'ready')
+            await pump.flush()
+            await pump.observe(activity)
+            self.assertFalse(pump.worker_lost)
+            self.assertEqual(calls, ['rdc_fixture_write', 'rdc_preview_activity'])
+            primary_result = json.loads(next(value for identifier, value in gateway.results if identifier == primary.operation_id))
+            self.assertEqual(primary_result['structuredContent']['value'], 'actual primary result')
+            observed_result = json.loads(next(value for identifier, value in gateway.results if identifier == activity.operation_id))
+            self.assertEqual(observed_result['structuredContent']['error']['code'], 'observation_interrupted')
+        anyio.run(run)
+
+    def test_observer_retains_schema_deadline_and_local_allowlist(self):
+        worker, gateway = FakeWorker(), FakeGateway()
+        pump = RelayPump(config(), self.journal, gateway, worker, self.catalog)
+        cases = [operation('activity-schema', {'unexpected': True}, name='rdc_preview_activity'),
+                 operation('activity-expired', {}, name='rdc_preview_activity', remaining=-1)]
+        async def run():
+            for op in cases:
+                await pump.observe(op)
+            restricted = RelayPump(config(allowed_tools=('rdc_fixture_write',)), self.journal, gateway, worker, self.catalog)
+            await restricted.observe(operation('activity-forbidden', {}, name='rdc_preview_activity'))
+        anyio.run(run)
+        self.assertEqual(worker.calls, [])
+        codes = [json.loads(result)['structuredContent']['error']['code'] for _, result in gateway.results]
+        self.assertEqual(codes, ['invalid_arguments', 'operation_expired', 'tool_forbidden'])
+
+    def test_gateway_requires_observer_advertisement_before_sending_a_claim(self):
+        requests = []
+        def respond(request):
+            requests.append(json.loads(request.content))
+            return httpx2.Response(200, json={'ok': True, 'device_id': 'device-test',
+                'server_time_ms': int(time.time()*1000), 'operation': None})
+        async def run():
+            async with httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as client:
+                gateway = Gateway(config(), client)
+                await gateway.poll(claim=False)
+                self.assertFalse(gateway.supports_activity_observer)
+                with self.assertRaises(RelayPermanentError):
+                    await gateway.poll(observation_only=True)
+        anyio.run(run)
+        self.assertEqual(len(requests), 1)
+        self.assertFalse(requests[0]['claim'])
+        self.assertNotIn('observation_only', requests[0])
+
+    def test_gateway_observer_claim_requires_explicit_activity_only_confirmation(self):
+        requests = []
+        def respond(request):
+            payload = json.loads(request.content)
+            requests.append(payload)
+            return httpx2.Response(200, json={'ok': True, 'device_id': 'device-test',
+                'server_time_ms': int(time.time()*1000), 'operation': None,
+                'observation_tools': ['rdc_preview_activity'],
+                'observation_only': payload.get('observation_only') is True and len(requests) == 2})
+        async def run():
+            async with httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as client:
+                gateway = Gateway(config(), client)
+                await gateway.poll(claim=False)
+                self.assertTrue(gateway.supports_activity_observer)
+                await gateway.poll(observation_only=True)
+                with self.assertRaises(RelayPermanentError):
+                    await gateway.poll(observation_only=True)
+        anyio.run(run)
+        self.assertEqual(len(requests), 3)
+        self.assertTrue(requests[1]['claim'])
+        self.assertTrue(requests[1]['observation_only'])
+
+
 class RelayDurabilityTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

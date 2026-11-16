@@ -189,11 +189,13 @@ class CliContracts(unittest.TestCase):
         async def exchange(state, root):
             from mcp import ClientSession
             from mcp.client.stdio import stdio_client, StdioServerParameters
-            params = StdioServerParameters(command=sys.executable, args=['-m', 'rdc', 'stdio', '--state-dir', str(state)])
+            params = StdioServerParameters(command=sys.executable, args=['-B', '-m', 'rdc', 'stdio', '--state-dir', str(state)])
             async with stdio_client(params) as streams:
                 async with ClientSession(*streams) as session:
                     info = await session.initialize()
                     self.assertEqual(info.server_info.name, 'rdc')
+                    from rdc import __version__
+                    self.assertEqual(info.server_info.version, __version__)
                     tools = await session.list_tools()
                     self.assertIn('rdc_file_read', [tool.name for tool in tools.tools])
                     result = await session.call_tool('rdc_file_read', {'file_path': str(root / 'fixture.txt')})

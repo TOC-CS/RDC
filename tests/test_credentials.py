@@ -20,6 +20,7 @@ from rdc.config import Settings
 from rdc.engine import Engine
 from rdc.errors import RDCError
 from rdc.adapters import Adapters
+from tests.ui_artifacts import artifact_path
 
 ALIAS = '5fa92907-4a83-4fe4-81a4-3a2af7267cef'
 SESSION = '147472fb-e594-4bdd-a937-37f8c751afff'
@@ -717,9 +718,7 @@ class CredentialEnrollmentUITests(unittest.TestCase):
                     page.get_by_label('Keychain file', exact=True).fill('/synthetic/owner-selected.keychain-db')
                     page.get_by_label('Keychain server', exact=True).fill('example.test')
                     page.get_by_label('Keychain account', exact=True).fill('synthetic-account')
-                    artifact = Path(__file__).resolve().parents[1] / 'test-results' / 'credential-enrollment.png'
-                    artifact.parent.mkdir(exist_ok=True)
-                    page.locator('.credential-owner-panel').screenshot(path=str(artifact))
+                    page.locator('.credential-owner-panel').screenshot(path=str(artifact_path('credential-enrollment.png')))
                     page.get_by_role('button', name='Save credential mapping', exact=True).click()
                     try:
                         page.get_by_role('button', name='Remove Synthetic login mapping', exact=True).wait_for()

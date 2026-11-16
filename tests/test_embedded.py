@@ -49,7 +49,7 @@ class EmbeddedContracts(unittest.TestCase):
 
     def test_open_and_frame_are_read_only_even_while_agent_paused(self):
         self.engine.pause(True)
-        opened = self.engine.call('rdc_preview_open', {})
+        opened = self.engine.call('rdc_preview_open', {'session_id': SID})
         self.assertTrue(opened['ok'], opened)
         self.assertEqual(opened['session_id'], SID)
         self.assertTrue(opened['viewer']['close_keeps_working'])
@@ -60,6 +60,25 @@ class EmbeddedContracts(unittest.TestCase):
         self.assertEqual(frame['cursor'], {'x': 42, 'y': 35})
         self.assertEqual(self.engine.store.approvals(), [])
         self.assertTrue(all('close' not in c for c in self.engine.adapters.calls))
+
+    def test_open_without_source_never_attaches_to_an_unrelated_browser(self):
+        result = self.engine.call('rdc_preview_open', {})
+        self.assertTrue(result['ok'], result)
+        self.assertIsNone(result['session_id'])
+        self.assertEqual(result['sessions'], [])
+        self.assertEqual(self.engine.adapters.calls, [])
+
+    def test_explicit_open_exposes_only_the_requested_session(self):
+        other = '87654321-4321-4321-4321-cba987654321'
+        self.engine.adapters.sessions.append({
+            **self.engine.adapters.sessions[0], 'session_id': other, 'title': 'UNRELATED-TASK',
+        })
+        result = self.engine.call('rdc_preview_open', {'session_id': SID})
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(result['session_id'], SID)
+        self.assertEqual([s['session_id'] for s in result['sessions']], [SID])
+        self.assertNotIn('active_jobs', result)
+        self.assertNotIn('pending_approvals', result)
 
     def test_empty_and_unknown_sessions_do_not_create_or_switch_browser(self):
         unknown = '87654321-4321-4321-4321-cba987654321'

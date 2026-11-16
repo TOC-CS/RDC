@@ -100,7 +100,7 @@ class MobileIntegrationTests(unittest.TestCase):
         opened = engine.call('rdc_preview_open', {'session_id': MOBILE})
         self.assertTrue(opened['ok'], opened)
         self.assertEqual(opened['session_id'], MOBILE)
-        self.assertEqual({s['session_id'] for s in opened['sessions']}, {BROWSER, MOBILE})
+        self.assertEqual({s['session_id'] for s in opened['sessions']}, {MOBILE})
         selected = next(s for s in opened['sessions'] if s['session_id'] == MOBILE)
         self.assertEqual(selected['viewport'], {'width': 390, 'height': 844})
         self.assertEqual(selected['kind'], 'mobile')

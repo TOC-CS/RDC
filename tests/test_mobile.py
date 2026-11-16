@@ -187,6 +187,9 @@ class MobileTests(unittest.TestCase):
                 except Exception as exc: errors.append(exc)
                 finally: reads_done.set()
             try:
+                # The synthetic browser owner also publishes its current metadata,
+                # as real browser work does before preview reads the cached view.
+                engine.adapters._publish_browser_status(SimpleNamespace(status=lambda:{'sessions':[browser]}),busy=False)
                 with patch.object(engine.adapters.mobile, '_http', side_effect=gated_http), \
                         patch.object(engine.adapters, '_browser', return_value={'sessions':[browser]}):
                     threads.append(threading.Thread(target=start)); threads[-1].start()
