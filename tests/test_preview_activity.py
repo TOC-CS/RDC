@@ -218,12 +218,12 @@ class PreviewActivityContracts(unittest.TestCase):
         self.assertTrue(observed_active)
         self.assertEqual(job['status'], 'completed')
         tail = data['job_output']
-        self.assertEqual(tail['bytes_available'], len((marker+'\n'+'x'*12000+'\n').encode()))
+        self.assertEqual(tail['bytes_available'], len((marker+os.linesep+'x'*12000+os.linesep).encode()))
         self.assertEqual(tail['next_offset']-tail['offset'], 8192)
         self.assertEqual(len(tail['text'].encode()), 8192)
         self.assertTrue(tail['complete'])
         self.assertTrue(tail['truncated'])
-        self.assertEqual(tail['text'], ('x'*12000+'\n')[-8192:])
+        self.assertEqual(tail['text'], ('x'*12000+os.linesep)[-8192:])
         self.assertNotIn('job_output', self.activity())
         for name,args in [('rdc_job_status',{'job_id':job_id}),('rdc_job_output',{'job_id':job_id}),('rdc_job_list',{})]:
             self.call(name,args)
