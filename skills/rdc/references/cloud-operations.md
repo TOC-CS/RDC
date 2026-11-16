@@ -18,7 +18,7 @@ The table identifies result IDs; each recovery call must also include the select
 
 Unwrap a completed gateway operation before interpreting the worker result. A cloud operation completing can mean the worker created an owner approval request, rather than that the requested action finished. Owner administration is separate from the agent tool catalog.
 
-For `pending_approval`, tell the owner the action is waiting in the paired computer's owner panel and poll the existing `request_id`. For a credential request's `pending` status, retain `request.id` and use its separate credential status tool. Leave decisions and native authentication to the owner; continue independent authorized work without creating replacement requests. Preview approval/job counts reflect the last status check, so refresh status before relying on them.
+For `pending_approval`, tell the owner the action is waiting in the paired computer's owner panel and poll the existing `request_id`. For a credential request's `pending` status, retain `request.id` and use its separate credential status tool. Leave decisions and native authentication to the owner; continue independent authorized work without creating replacement requests. Check approvals and jobs with their dedicated tools; the live view does not report their counts.
 
 ## Dispatch one intended mutation
 
@@ -54,6 +54,6 @@ Current request/result/upload limits are 1 MiB, 12 MiB, and 16 MiB respectively.
 
 ## Preview lifecycle
 
-Open `rdc_preview_open` through the App host and preserve the selected session. The embedded component recovers pending frame operations by ID. It uses the host's tool/resource bridge, without embedding worker or owner credentials. If a selected session ended, refresh offers the remaining sessions for explicit selection. Preview status counts describe the last status check; approval requests must be reviewed in the owner panel on the paired computer.
+Call `rdc_preview_open` with the exact `session_id` of this task's source on the same account and worker. The view is read only and uses the host bridge. It never chooses another session when the source is absent or has ended. Job output and approvals stay in their separate workflows.
 
-Hiding, closing, resizing, moving, changing display mode, or tearing down the iframe affects only the viewer. Those actions do not cancel jobs, close browser sessions, stop the relay, or terminate the worker. Use explicit authorized tools for those actions. Reopen the same session when appropriate.
+Recover the existing open or frame by its original operation ID. Hiding suspends polling and reopening resumes the same view. When the gateway confirms that a read's retained result expired, only a fresh read of the same source is appropriate; an unknown mutation is never replayed. Host dismissal or iframe teardown releases the viewer, leaving browser sessions, jobs and relay running.
