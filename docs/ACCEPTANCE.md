@@ -14,15 +14,15 @@ The client must call RDC's actual tools. Reading a README, displaying a mockup o
 
 Ask:
 
-> Create an RDC browser session with a small synthetic page containing a name field and a greeting button. Open its live preview inside this conversation. Fill the name with RDC, click the greeting button and verify the resulting text from a fresh observation.
+> Create an RDC browser session with a small synthetic page containing a name field and a greeting button. Use the session ID returned by that browser to open its live preview inside this conversation. Fill the name with RDC, click the greeting button and verify the resulting text from a fresh observation.
 
 Resolve any requested owner review in the local administration page. Confirm that the normal browser and desktop remain usable while the dedicated session changes. Save the full session ID. A separate administration tab or static screenshot does not prove in-chat rendering.
 
 ## 3. Check view lifecycle
 
-Use Expand and return inline. Try Float only if the host offers it. Move or resize the RDC panel within its expanded canvas. Hide and reopen it, then dismiss and reopen the same saved session ID.
+Exercise the controls the host offers, such as Expand, Inline or Float. Resize the host panel if available. Hide and reopen, then dismiss and reopen with the same saved session ID.
 
-The session ID and page state should remain the same. No view control should close the browser, cancel a job or stop the worker. The AI host may decline a presentation request; RDC should state the actual resulting mode. Closing the worker itself ends browser sessions and is a different test.
+The session ID and page state should remain the same. Start a second test browser and a harmless job through a separate task; the first viewer must keep its original frame source and never show the second task or its output. An open without a source and an ended source must not render the other test browser. No view control should close the browser, cancel a job or stop the worker. The AI host may decline a presentation request; RDC should state the actual resulting mode. Closing the worker itself ends browser sessions and is a different test.
 
 ## 4. Check durable work and reconnect
 

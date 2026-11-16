@@ -42,6 +42,12 @@ Keep `rdc serve` running while AI clients connect. It owns the browser sessions.
 
 The primary preview opens inside a compatible AI host. `rdc serve --open` optionally opens the separate owner administration dashboard for approvals and diagnosis.
 
+### macOS permission walkthrough
+
+For native-window previews, run `rdc setup-macos` with the worker's existing state directory. Setup prepares **RDC Window Preview**, checks Screen Recording and Accessibility separately, and explains how to add the exact helper in System Settings. The older **RDC** entry is separate. The owner must complete macOS consent/authentication; RDC cannot silently grant it. See the [step-by-step setup](MACOS-SETUP.md). Headless browsers need neither permission. Recheck after updating the helper.
+
+Shared native mouse and keyboard actions require individual owner decisions even in trusted mode. This does not place an approval queue in the preview. Headless browser input and exact-window capture/resizing remain separate background routes.
+
 ## Make the command resolvable by the AI host
 
 The portable manifest intentionally uses the executable name `rdc`. It must be on the `PATH` of the process launching the MCP server. Activating a virtual environment in one terminal does not automatically change the environment of an already running desktop app.
@@ -57,7 +63,7 @@ Use the host's documented local-plugin or development-package workflow to load t
 After installing or refreshing the connection:
 
 1. Call `rdc_system_status` and confirm the intended device and grants.
-2. Call `rdc_preview_open` for an existing session, or without a session to inspect available sessions.
+2. Retain this chat's actual browser/device/native-window session ID and pass it explicitly to `rdc_preview_open`. Native Mac windows use `rdc_window_list` then `rdc_window_open`. Never substitute the global desktop or another chat's source.
 3. Confirm a live view actually renders inside the AI application before claiming embedded support.
 4. Expand, restore, and close the viewer while a synthetic task runs. Reopen and verify the same job/session identity.
 5. Confirm the host displays the RDC logo for the installed plugin. An image in the preview alone does not verify tool-identity branding.
