@@ -10,6 +10,7 @@ import uuid
 from jsonschema import Draft202012Validator
 
 from . import __version__
+from .activity import Activity
 from .diagnostics import Diagnostics, safe_record
 from .errors import RDCError
 from .files import Files
@@ -27,7 +28,7 @@ def tool(name, description, properties=None, required=(), mutating=False, **flag
 
 STRING = {'type':'string','minLength':1,'maxLength':4096}
 JOB_ID = {'type':'string','pattern':r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'}
-PREVIEW_SESSION_ID = {'type':'string','pattern':r'^(?:mobile-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'}
+PREVIEW_SESSION_ID = {'type':'string','pattern':r'^(?:(?:(?:mobile|window)-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|desktop|android-adb)$'}
 SHA = {'type':'string','pattern':r'^[0-9a-f]{64}$'}
 LIMIT = {'type':'integer','minimum':1,'maximum':262144}
 
@@ -39,6 +40,7 @@ class Engine:
         self.files = Files(settings)
         self.jobs = Jobs(settings,self.store,self.files)
         self._input_lock = threading.RLock()
+        self.activity = Activity()
         try:
             from .adapters import Adapters
             self.adapters = Adapters(settings)
@@ -63,11 +65,18 @@ class Engine:
                  'Does not repair code, replay actions, or change permissions.',
                  {'limit':{'type':'integer','minimum':1,'maximum':50}}),
             tool('rdc_preview_open','Show or reopen the live RDC preview inside a compatible AI app. '
-                 'Attaches to an existing browser or configured mobile session; closing the view leaves work running.',
+                 'Pass the session_id for the browser or configured device this task is using. The view shows only that source; closing it leaves work running.',
                  {'session_id':PREVIEW_SESSION_ID}),
+            tool('rdc_preview_activity','Read actual current and recent worker operations, visual focus and bounded job state. '
+                 'An explicitly selected job_id includes at most 8 KiB of its real retained output. Never executes or repeats work.',
+                 {'job_id':JOB_ID}),
             tool('rdc_preview_frame','Read one live frame for the embedded RDC view. '
                  'Does not create, close, pause, or mutate a browser or mobile session.',
                  {'session_id':PREVIEW_SESSION_ID},['session_id']),
+            tool('rdc_preview_resize','Resize only the exact native window explicitly bound with resize_to_view enabled. Never changes focus or source. Recover pending operations instead of repeating uncertain mutations.',
+                 {'session_id':PREVIEW_SESSION_ID,'width':{'type':'integer','minimum':240,'maximum':2560},
+                  'height':{'type':'integer','minimum':180,'maximum':1600},
+                  '_rdc_request_id':{'type':'string','minLength':1,'maxLength':200}},['session_id','width','height'],True),
             tool('rdc_file_list','List a directory within the granted roots.', {'path':STRING,'limit':{'type':'integer','minimum':1,'maximum':1000}}),
             tool('rdc_file_read','Read UTF-8 text with deterministic byte offsets and a SHA-256 version.',
                  {'file_path':STRING,'offset':{'type':'integer','minimum':0},'limit':LIMIT},['file_path']),
@@ -115,8 +124,8 @@ class Engine:
                 item['_meta'] = {'ui':{'resourceUri':UI_URI, 'visibility':['model','app']},
                                  'openai/outputTemplate':UI_URI,
                                  'openai/widgetAccessible':True,
-                                 'openai/ui':{'entrypoints':[{'type':'thread'},{'type':'global'}]}}
-            elif item['name'] == 'rdc_preview_frame':
+                                 'openai/ui':{'entrypoints':[{'type':'thread'}]}}
+            elif item['name'] in ('rdc_preview_frame','rdc_preview_activity','rdc_preview_resize'):
                 # Visibility is only a routing hint. This operation remains
                 # read-only even if called directly by a model or raw client.
                 item['_meta'] = {'ui':{'visibility':['app']}, 'openai/widgetAccessible':True}
@@ -150,8 +159,19 @@ class Engine:
             if not owner and mutating and not stopping:
                 if self.store.get('paused') == 'true':
                     raise RDCError('paused','Agent actions are paused by the owner. Read-only observation remains available.')
-                if self.settings.approval_mode == 'review' and name != 'rdc_credentials_request':
+                # PyAutoGUI uses this OS login's real cursor and keyboard. A
+                # configuration label cannot verify isolation. Require an
+                # owner decision for each native input, even in trusted mode.
+                if name in ('rdc_desktop_pointer','rdc_desktop_keys','rdc_desktop_type') and self.settings.desktop_mode != 'disabled':
                     return self._queue(name,arguments)
+                if self.settings.approval_mode == 'review' and name != 'rdc_credentials_request':
+                    if name=='rdc_preview_resize' and self.adapters:
+                        # window_open is itself owner-reviewed. Its explicit
+                        # binding-scoped grant covers continuous pane resizing;
+                        # request arguments cannot create or expand that grant.
+                        self.adapters.windows.require_resize_authorization(arguments['session_id'])
+                    else:
+                        return self._queue(name,arguments)
         # The lock is an admission gate, not a global tool execution lock.
         # Slow reads and browser navigation must not block pause or job cancel.
         return {'ok':True,**self._invoke(name,arguments)}
@@ -185,6 +205,55 @@ class Engine:
         return self._guarded(lambda:self._execute(name,arguments if arguments is not None else {},owner=True),name)
 
     def _invoke(self,name,args):
+        # Only admitted invocations reach this point. Validation failures and
+        # pending owner approval are never presented as work being executed.
+        token = self.activity.begin(name,args)
+        try:
+            result = self._invoke_inner(name,args)
+        except Exception:
+            self.activity.finish(token,success=False)
+            raise
+        self.activity.finish(token,result,success=not isinstance(result,dict) or result.get('ok',True))
+        return result
+
+    def _preview_sessions(self):
+        if self.adapters:
+            snapshot = getattr(self.adapters,'activity_status',self.adapters.status)()
+        else:
+            snapshot = {}
+        allowed = ('session_id','backend','browser','url','title','width','height','observation_id','cursor',
+                   'profile','platform','automation','input_notice','privacy_sensitive','setup_status','resize_to_view','bundle_id')
+        sessions = []
+        for category in ('browser','mobile','window'):
+            for session in snapshot.get(category,{}).get('sessions',[]):
+                row = {key:session[key] for key in allowed if key in session}
+                row.update(kind=category,viewport={'width':row.get('width'),'height':row.get('height')})
+                sessions.append(row)
+        # Listing configured native targets performs no capture or native I/O.
+        # They are never selected automatically by the preview.
+        if self.adapters and self.settings.desktop_mode != 'disabled':
+            sessions.append({'session_id':'desktop','kind':'desktop','title':'Configured desktop',
+                             'width':None,'height':None,'viewport':{'width':None,'height':None}})
+        if self.adapters and self.settings.adb_serial:
+            sessions.append({'session_id':'android-adb','kind':'adb','title':'Configured Android device',
+                             'width':None,'height':None,'viewport':{'width':None,'height':None}})
+        sources = [snapshot.get(category,{}) for category in ('browser','mobile')]
+        timestamps = [source['updated_at'] for source in sources if isinstance(source.get('updated_at'),(int,float))]
+        status = {'busy':any(source.get('busy',False) for source in sources),
+                  'status_stale':any(source.get('status_stale',False) for source in sources),
+                  'updated_at':min(timestamps) if timestamps else time.time()}
+        return sessions,status
+
+    def _preview_activity(self,job_id=None):
+        sessions,status = self._preview_sessions()
+        activity = self.activity.snapshot({row['session_id'] for row in sessions})
+        if any(row['tool'].startswith(('rdc_desktop_','rdc_android_')) for row in activity['current_operations']):
+            status.update(busy=True,status_stale=True)
+        return {'device_id':self.store.device_id,'observed_at':time.time(),
+                'paused':self.store.get('paused')=='true','sessions':sessions,'session_status':status,
+                **activity,**self.jobs.preview(job_id),'pending_approvals':len(self.store.approvals())}
+
+    def _invoke_inner(self,name,args):
         handlers = {'rdc_file_list':self.files.list,'rdc_file_read':self.files.read,'rdc_file_search':self.files.search,
                     'rdc_file_write':self.files.write,'rdc_file_edit':self.files.edit,'rdc_job_start':self.jobs.start,
                     'rdc_job_status':self.jobs.status,'rdc_job_output':self.jobs.output,'rdc_job_list':self.jobs.list,
@@ -206,30 +275,40 @@ class Engine:
             return self.credentials.request(**args)
         if name == 'rdc_credentials_status':
             return self.credentials.status(**args)
+        if name == 'rdc_preview_activity':
+            return self._preview_activity(**args)
         if name == 'rdc_preview_open':
-            adapters = self.adapters.status() if self.adapters else {}
-            sessions = ([dict(s,kind='browser') for s in adapters.get('browser',{}).get('sessions',[])] +
-                        [dict(s,kind='mobile') for s in adapters.get('mobile',{}).get('sessions',[])])
             selected = args.get('session_id')
-            if selected and selected not in {s['session_id'] for s in sessions}:
-                raise RDCError('session_not_found','Requested session is no longer active in this worker.')
-            if not selected and sessions:
-                selected = sessions[0]['session_id']
-            sessions = [{**s,'viewport':{'width':s['width'],'height':s['height']}} for s in sessions]
+            if selected == 'desktop':
+                raise RDCError('window_required','This preview requires the exact task window. Use rdc_window_list and rdc_window_open; full-display previews are disabled.')
+            sessions = []
+            if selected:
+                available, _ = self._preview_sessions()
+                sessions = [row for row in available if row['session_id'] == selected]
+                if not sessions:
+                    raise RDCError('session_not_found','Requested session is no longer active in this worker.')
             return {'device_id':self.store.device_id,'session_id':selected,'sessions':sessions,
                     'paused':self.store.get('paused')=='true',
-                    'active_jobs':sum(j['status'] in ('queued','running','cancelling') for j in self.jobs.list()['jobs']),
-                    'pending_approvals':len(self.store.approvals()),
-                    'viewer':{'close_keeps_working':True,'worker_required':True},
-                    'message':'Hide or close this preview without stopping the worker. Reopen with the same session ID.'
-                              if selected else 'No session is active. Start an authorized browser or configured mobile workflow, then reopen the preview.'}
+                    'viewer':{'bound_to_session':bool(selected),'close_keeps_working':True,'worker_required':True},
+                    'message':'This preview shows only the requested session. Closing it leaves work running.'
+                              if selected else 'Pass the session_id for the visual source this task is using.'}
         if name == 'rdc_preview_frame':
+            if args['session_id']=='desktop':
+                raise RDCError('window_required','Select the exact task window. Full-display previews are disabled.')
             if not self.adapters:
                 raise RDCError('capability_disabled','Device adapters are unavailable.')
             shot = self.adapters.snapshot(args['session_id'])
+            if args['session_id'] in ('desktop','android-adb'):
+                shot = {key:value for key,value in shot.items() if key!='serial'}
             return {**shot,'device_id':self.store.device_id,'captured_at':time.time(),
                     'viewport':{'width':shot['width'],'height':shot['height']},
                     'paused':self.store.get('paused')=='true'}
+        if name == 'rdc_preview_resize':
+            if not self.adapters or not args['session_id'].startswith('window-'):
+                raise RDCError('resize_not_enabled','Only explicitly resize-enabled native window bindings accept this request.')
+            with self.adapters._native_lock:
+                result=self.adapters.windows.resize(args['session_id'],args['width'],args['height'],request_id=args.get('_rdc_request_id'))
+            return {**result,'device_id':self.store.device_id}
         if name == 'rdc_file_read_many':
             paths = args['file_paths']
             def read(path):
@@ -269,7 +348,7 @@ class Engine:
             db.execute('INSERT INTO approvals(id,name,arguments,digest,status,created_at,expires_at,client_key) VALUES (?,?,?,?,?,?,?,?)',
                        (identifier,name,encoded,digest,'pending',now,now+900,key))
         return {'ok':True,'status':'pending_approval','request_id':identifier,'expires_at':now+900,
-                'message':'Review this exact operation in the RDC owner preview.'}
+                'message':'Review this exact operation in local RDC owner administration. Native desktop input can take over your mouse or keyboard; the live preview is observation only.'}
 
     def decide(self,request_id,approve):
         return self._guarded(lambda:self._decide(request_id,approve))

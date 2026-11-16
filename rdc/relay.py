@@ -41,6 +41,9 @@ MAX_REQUEST_BYTES = 12 * 1024 * 1024
 RETAINED_RESULT_BYTES = 64 * 1024 * 1024
 IDENTIFIER = re.compile(r'^[A-Za-z0-9_.-]{1,128}$')
 TOOL_NAME = re.compile(r'^rdc_[A-Za-z0-9_]{1,100}$')
+OBSERVATION_TOOL = 'rdc_preview_activity'
+OBSERVER_POLL_SECONDS = 1.0
+OBSERVER_TIMEOUT_SECONDS = 5.0
 LOGGER = logging.getLogger(__name__)
 
 
@@ -336,8 +339,11 @@ class Journal:
                 'Relay stopped before dispatch. This operation was not automatically executed on restart.', row['operation_id'])
             self.complete(row['operation_id'], _encoded(result, MAX_RESULT_BYTES))
 
-    def pending(self):
-        rows = self.db.execute("SELECT * FROM operations WHERE state='ready' ORDER BY created LIMIT 32").fetchall()
+    def pending(self, operation_id=None):
+        if operation_id is None:
+            rows = self.db.execute("SELECT * FROM operations WHERE state='ready' ORDER BY created LIMIT 32").fetchall()
+        else:
+            rows = self.db.execute("SELECT * FROM operations WHERE state='ready' AND operation_id=?", (operation_id,)).fetchall()
         for row in rows:
             yield Operation(row['operation_id'], row['claim_id'], row['request_json'] or '', row['request_sha256'], row['expires_at_ms'], 0), row['result_json']
 
@@ -382,6 +388,7 @@ class Journal:
 class Gateway:
     def __init__(self, config, client):
         self.config = config; self.client = client
+        self.supports_activity_observer = False
 
     async def _post(self, path, value):
         payload = _encoded(value).encode('utf-8')
@@ -433,11 +440,22 @@ class Gateway:
         except (httpx2.HTTPError, TimeoutError, ConnectionError, OSError):
             raise RelayTransientError('Relay gateway connection was interrupted; only queued result uploads may be retried.') from None
 
-    async def poll(self, claim=True):
+    async def poll(self, claim=True, observation_only=False):
+        if type(observation_only) is not bool or observation_only and not claim:
+            raise RelayPermanentError('An observer poll must explicitly claim only activity observations.')
+        if observation_only and not self.supports_activity_observer:
+            raise RelayPermanentError('The gateway has not advertised the activity observer lane.')
         poll_started = time.monotonic()
-        data = await self._post('/device/poll', {'device_id': self.config.device_id, 'claim': bool(claim)})
+        payload = {'device_id': self.config.device_id, 'claim': bool(claim)}
+        if observation_only:
+            payload['observation_only'] = True
+        data = await self._post('/device/poll', payload)
         if data.get('ok') is not True or data.get('device_id') != self.config.device_id or type(data.get('server_time_ms')) is not int:
             raise RelayPermanentError('Relay gateway poll did not confirm the paired device identity.')
+        supported = data.get('observation_tools') == [OBSERVATION_TOOL]
+        if observation_only and (not supported or data.get('observation_only') is not True):
+            raise RelayPermanentError('The gateway did not confirm the activity-only observation claim.')
+        self.supports_activity_observer = supported
         operation = data.get('operation')
         if not claim and operation is not None:
             raise RelayPermanentError('Relay gateway returned work to a heartbeat-only request.')
@@ -467,39 +485,51 @@ class RelayPump:
         self.session = session; self.catalog = catalog
         self.diagnostics = diagnostics
         self.worker_lost = False; self.gateway_error = None
+        self._observer_active = False
+        self._pending_observation_id = None
 
     async def _heartbeat(self):
+        observe = getattr(self.gateway, 'supports_activity_observer', False) and OBSERVATION_TOOL in self.catalog and (
+            self.config.allowed_tools is None or OBSERVATION_TOOL in self.config.allowed_tools)
         while True:
-            await anyio.sleep(5)
+            await anyio.sleep(OBSERVER_POLL_SECONDS if observe else 5)
             try:
-                await self.gateway.poll(claim=False)
+                if observe:
+                    if self._pending_observation_id:
+                        await self.flush(operation_id=self._pending_observation_id)
+                        self._pending_observation_id = None
+                    operation, _ = await self.gateway.poll(observation_only=True)
+                    if operation is not None:
+                        # One bounded observer runs without another heartbeat.
+                        await self.observe(operation)
+                else:
+                    await self.gateway.poll(claim=False)
             except RelayPermanentError as exc:
                 safe_record(self.diagnostics, 'relay', 'permanent_failure')
                 self.gateway_error = exc
                 return
             except RelayTransientError:
-                # Preserve the already dispatched result before reporting a
-                # disconnected gateway. Heartbeats never claim more work.
+                # Retain the original result; uploads never replay worker work.
                 safe_record(self.diagnostics, 'relay', 'connection_interrupted')
 
-    async def handle(self, operation):
+    def _prepare(self, operation):
         row = self.journal.remember(operation)
         if row['state'] == 'undeliverable':
             # A retired cloud ID remains a local execution tombstone even if it
             # reappears after restart or after its original payload was pruned.
-            return
+            return False
         if row['state'] in ('ready', 'delivered'):
             if row['result_json'] is None:
                 self.journal.complete(operation.operation_id, _encoded(error_result('result_expired',
                     'This operation was already completed and its full result was retired. It will not be executed again.', operation.operation_id), MAX_RESULT_BYTES))
             elif row['state'] == 'delivered':
                 self.journal.complete(operation.operation_id, row['result_json'])
-            return
+            return False
         if row['state'] == 'executing':
             safe_record(self.diagnostics, 'relay', 'outcome_unknown')
             self.journal.complete(operation.operation_id, _encoded(error_result('outcome_unknown',
                 'This operation was already dispatched. Inspect the worker before any new attempt.', operation.operation_id), MAX_RESULT_BYTES))
-            return
+            return False
         request = operation.request
         name, arguments = request['name'], request['arguments']
         reason = None
@@ -515,43 +545,79 @@ class RelayPump:
         if reason:
             safe_record(self.diagnostics, 'relay', 'worker_rejected', name)
             self.journal.complete(operation.operation_id, _encoded(error_result(*reason, operation.operation_id), MAX_RESULT_BYTES))
-            return
+            return False
         self.journal.mark_executing(operation.operation_id)
+        return True
+
+    async def _execute_once(self, operation, observation_only=False):
+        name, arguments = operation.request['name'], operation.request['arguments']
+        timeout = min(self.config.tool_timeout, OBSERVER_TIMEOUT_SECONDS) if observation_only else self.config.tool_timeout
+        try:
+            with anyio.fail_after(timeout):
+                result = await self.session.call_tool(name, arguments, read_timeout_seconds=timeout)
+            result = result.model_dump(by_alias=True, exclude_none=True) if hasattr(result, 'model_dump') else result
+            if isinstance(result, dict) and result.get('isError') is True:
+                safe_record(self.diagnostics, 'relay', 'worker_rejected', name)
+            try:
+                encoded = _encoded(result, MAX_RESULT_BYTES)
+            except RelayPermanentError:
+                encoded = _encoded(error_result('result_too_large',
+                    'The action returned a result exceeding the relay byte limit. It was not repeated; inspect the worker for its outcome.', operation.operation_id), MAX_RESULT_BYTES)
+        except anyio.get_cancelled_exc_class():
+            if observation_only:
+                # Primary completion cancels its heartbeat. Retain a terminal
+                # read outcome so the main flush can deliver it without replay.
+                encoded = _encoded(error_result('observation_interrupted',
+                    'The activity observation was interrupted. Its original operation was not repeated. Request a fresh observation explicitly if needed.', operation.operation_id), MAX_RESULT_BYTES)
+                self.journal.complete(operation.operation_id,
+                                      _deliverable_result(self.config.device_id, operation, encoded))
+            raise
+        except MCPError as exc:
+            unknown = exc.code in (types.REQUEST_TIMEOUT, types.CONNECTION_CLOSED)
+            if not observation_only:
+                self.worker_lost = unknown
+            safe_record(self.diagnostics, 'relay', 'outcome_unknown' if unknown else 'worker_rejected', name)
+            encoded = _encoded(error_result('outcome_unknown' if unknown else 'worker_rejected',
+                'Worker response was lost. The action may have completed; inspect the worker before any new attempt.' if unknown else
+                'The local MCP worker rejected this request. The relay will not repeat it.', operation.operation_id), MAX_RESULT_BYTES)
+        except Exception:
+            if not observation_only:
+                self.worker_lost = True
+            safe_record(self.diagnostics, 'relay', 'outcome_unknown', name)
+            encoded = _encoded(error_result('outcome_unknown',
+                'Worker connection failed or timed out during dispatch. The action may have completed. Inspect the worker before any new attempt.', operation.operation_id), MAX_RESULT_BYTES)
+        # Primary cancellation keeps its existing unknown-outcome semantics.
+        self.journal.complete(operation.operation_id,
+                              _deliverable_result(self.config.device_id, operation, encoded))
+
+    async def observe(self, operation):
+        # Reject a different tool before touching any existing journal identity.
+        if operation.request['name'] != OBSERVATION_TOOL:
+            raise RelayPermanentError('The observer lane returned a non-activity operation. Nothing was dispatched.')
+        if self._observer_active:
+            raise RelayPermanentError('An activity observation is already in flight.')
+        self._observer_active = True
+        try:
+            self._pending_observation_id = operation.operation_id
+            if self._prepare(operation):
+                await self._execute_once(operation, observation_only=True)
+            await self.flush(operation_id=operation.operation_id)
+            self._pending_observation_id = None
+        finally:
+            self._observer_active = False
+
+    async def handle(self, operation):
+        if not self._prepare(operation):
+            return
         async with anyio.create_task_group() as tasks:
             tasks.start_soon(self._heartbeat)
-            try:
-                with anyio.fail_after(self.config.tool_timeout):
-                    result = await self.session.call_tool(name, arguments, read_timeout_seconds=self.config.tool_timeout)
-                result = result.model_dump(by_alias=True, exclude_none=True) if hasattr(result, 'model_dump') else result
-                if isinstance(result, dict) and result.get('isError') is True:
-                    safe_record(self.diagnostics, 'relay', 'worker_rejected', name)
-                try:
-                    encoded = _encoded(result, MAX_RESULT_BYTES)
-                except RelayPermanentError:
-                    encoded = _encoded(error_result('result_too_large',
-                        'The action returned a result exceeding the relay byte limit. It was not repeated; inspect the worker for its outcome.', operation.operation_id), MAX_RESULT_BYTES)
-            except MCPError as exc:
-                unknown = exc.code in (types.REQUEST_TIMEOUT, types.CONNECTION_CLOSED)
-                self.worker_lost = unknown
-                safe_record(self.diagnostics, 'relay', 'outcome_unknown' if unknown else 'worker_rejected', name)
-                encoded = _encoded(error_result('outcome_unknown' if unknown else 'worker_rejected',
-                    'Worker response was lost. The action may have completed; inspect the worker before any new attempt.' if unknown else
-                    'The local MCP worker rejected this request. The relay will not repeat it.', operation.operation_id), MAX_RESULT_BYTES)
-            except Exception:
-                safe_record(self.diagnostics, 'relay', 'outcome_unknown', name)
-                self.worker_lost = True
-                encoded = _encoded(error_result('outcome_unknown',
-                    'Worker connection failed or timed out during dispatch. The action may have completed. Inspect the worker before any new attempt.', operation.operation_id), MAX_RESULT_BYTES)
-            # Cancellation or process termination leaves 'executing' durable;
-            # recovery reports uncertainty instead of replaying the action.
-            self.journal.complete(operation.operation_id,
-                                  _deliverable_result(self.config.device_id, operation, encoded))
+            await self._execute_once(operation)
             tasks.cancel_scope.cancel()
         if self.gateway_error:
             raise self.gateway_error
 
-    async def flush(self):
-        for operation, result_json in self.journal.pending():
+    async def flush(self, operation_id=None):
+        for operation, result_json in self.journal.pending(operation_id):
             # Older versions could persist a valid result whose escaped upload
             # envelope exceeded the wire limit. Retire that unsendable response
             # durably before retrying transport, without repeating device work.

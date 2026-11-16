@@ -5,6 +5,7 @@ WebDriver profile/desktop isolation depends on the owner-configured driver.
 """
 from __future__ import annotations
 import base64
+import copy
 import io
 import json
 import math
@@ -13,6 +14,7 @@ import queue
 import re
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -109,6 +111,9 @@ def _tools():
       ('browser_screenshot','Capture the viewport. Returns bounded base64 image data.',False,SESSION,('session_id',)),
       ('browser_close','Close and discard one browser session.',True,SESSION,('session_id',)),
       ('desktop_status','Report explicit desktop mode and whether input is shared.',False,{},()),
+      ('window_list','List native app windows with short-lived opaque targets. Use the exact task window, never a desktop fallback.',False,{},()),
+      ('window_open','Bind a live preview to one previously listed native window. resize_to_view authorizes resizing that exact app window to the preview pane. Does not activate it.',True,{'target_id':S,'resize_to_view':{'type':'boolean'}},('target_id',)),
+      ('window_close','Forget one native preview binding. Does not close the app or its window.',True,SESSION,('session_id',)),
       ('desktop_screenshot','Capture the explicitly enabled host desktop.',False,{},()),
       ('desktop_pointer','Control the explicitly enabled host desktop cursor in logical input coordinates. Scale screenshot positions by input_scale_x/y from a fresh desktop_screenshot. Shared mode uses the owner cursor.',True,POINTER,('x','y')),
       ('desktop_keys','Press a key or chord on the explicitly enabled desktop.',True,{'keys':S},('keys',)),
@@ -140,7 +145,7 @@ def _validate(schema,args):
         if name not in args: raise RDCError('invalid_arguments',f'Missing argument: {name}')
     for name,value in args.items():
         p=schema['properties'][name]; t=p['type']
-        good = isinstance(value,str) if t=='string' else type(value) is int if t=='integer' else type(value) in (int,float) and math.isfinite(value)
+        good = isinstance(value,str) if t=='string' else type(value) is bool if t=='boolean' else type(value) is int if t=='integer' else type(value) in (int,float) and math.isfinite(value)
         if not good: raise RDCError('invalid_arguments',f'Invalid {name} type')
         if isinstance(value,str) and len(value)>32000: raise RDCError('invalid_arguments',f'{name} exceeds 32000 characters')
         if 'enum' in p and value not in p['enum']: raise RDCError('invalid_arguments',f'Invalid {name}')
@@ -154,7 +159,11 @@ class Adapters:
         self.settings=settings
         self._queue=queue.Queue(); self._thread=None; self._start_lock=threading.Lock()
         self._native_lock=threading.RLock(); self._closed=False
+        self._browser_status_lock=threading.Lock()
+        self._browser_status={**_Browsers(settings).status(),'busy':False,'status_stale':False,'updated_at':time.time()}
         self.mobile=Mobile(settings); self._adb_sensitive=False
+        from .windows import Windows
+        self.windows=Windows(settings)
         self._catalog={t['name']:t for t in [*_tools(),*self.mobile.catalog()]}
     def catalog(self): return list(self._catalog.values())
     def _browser(self,method,*args):
@@ -168,15 +177,37 @@ class Adapters:
         worker=_Browsers(self.settings)
         while True:
             future,method,args=self._queue.get()
-            try: future.set_result(getattr(worker,method)(*args))
-            except RDCError as exc: future.set_exception(exc)
-            except Exception as exc: future.set_exception(_adapter_error(exc))
+            self._publish_browser_status(worker,busy=True)
+            try:
+                result=getattr(worker,method)(*args)
+            except RDCError as exc:
+                self._publish_browser_status(worker,busy=False)
+                future.set_exception(exc)
+            except Exception as exc:
+                self._publish_browser_status(worker,busy=False)
+                future.set_exception(_adapter_error(exc))
+            else:
+                self._publish_browser_status(worker,busy=False)
+                future.set_result(result)
             if method=='close': return
+    def _publish_browser_status(self,worker,busy):
+        with self._browser_status_lock:
+            self._browser_status=copy.deepcopy({**worker.status(),'busy':busy,'status_stale':busy,'updated_at':time.time()})
+    def activity_status(self):
+        # Never join the browser command queue to describe ongoing work.
+        with self._browser_status_lock:
+            browser=copy.deepcopy(self._browser_status)
+        return {'browser':browser,'mobile':self.mobile.status(),'window':self.windows.status(),
+                'desktop':self._desktop_status(),'android':{'configured':bool(self.settings.adb_serial)}}
     def call(self,name,args):
         descriptor=self._catalog.get(name)
         if descriptor is None: raise RDCError('unknown_tool',f'Unknown adapter tool: {name}')
         _validate(descriptor['inputSchema'],args)
         if name.startswith('rdc_browser_'): return self._browser('call',name.removeprefix('rdc_browser_'),args)
+        if name.startswith('rdc_window_'):
+            with self._native_lock:
+                if self._closed: raise RDCError('closed','Adapters are closed')
+                return getattr(self.windows,name.removeprefix('rdc_window_'))(**args)
         if name == 'rdc_mobile_list':
             if self._closed: raise RDCError('closed','Adapters are closed')
             return self.mobile.call(name,args)
@@ -192,6 +223,13 @@ class Adapters:
         browser=self._browser('status')
         return {'browser':browser,'desktop':self._desktop_status(),'android':{'configured':bool(self.settings.adb_serial),'serial':self.settings.adb_serial},'mobile':self.mobile.status()}
     def snapshot(self,session_id=None):
+        if isinstance(session_id,str) and session_id.startswith('window-'):
+            with self._native_lock:
+                if self._closed: raise RDCError('closed','Adapters are closed')
+                return self.windows.snapshot(session_id)
+        if session_id in ('desktop','android-adb'):
+            name='rdc_desktop_screenshot' if session_id=='desktop' else 'rdc_android_screenshot'
+            return {**self.call(name,{}),'session_id':session_id}
         if isinstance(session_id,str) and session_id.startswith('mobile-'):
             with self._native_lock:
                 if self._closed: raise RDCError('closed','Adapters are closed')
@@ -213,8 +251,9 @@ class Adapters:
             future.result();self._thread.join(timeout=5)
     def _desktop_status(self):
         mode=self.settings.desktop_mode
-        return {'mode':mode,'available':mode!='disabled','independent_input':mode=='isolated',
-                'isolation':'Owner must provision a separate desktop/display or VM.' if mode=='isolated' else 'Uses the owner OS cursor.' if mode=='shared' else 'Disabled by owner configuration.'}
+        return {'mode':mode,'available':mode!='disabled','independent_input':False,
+                'owner_input_approval_required':mode!='disabled',
+                'isolation':'Isolation is not verified by RDC. Each native input requires owner approval.' if mode=='isolated' else 'Uses the owner OS cursor; each native input requires owner approval.' if mode=='shared' else 'Disabled by owner configuration.'}
     def _desktop(self,action,args):
         if action=='status': return self._desktop_status()
         if self.settings.desktop_mode=='disabled': raise RDCError('adapter_disabled','Native desktop control is disabled. Owner must explicitly configure shared or isolated desktop mode.')
@@ -349,7 +388,7 @@ def _key_parts(keys,desktop=False):
 class _Browsers:
     def __init__(self,settings): self.settings=settings;self.sessions={};self.playwright=None
     def status(self):
-        return {'backend':self.settings.browser_backend,'available':self.settings.browser_backend=='playwright' or bool(self.settings.webdriver_url),
+        return {'backend':self.settings.browser_backend,'available':self.settings.browser_backend=='playwright' or bool(getattr(self.settings,'webdriver_url',None)),
                 'sessions':[self.info(s) for s in self.sessions.values()],
                 'independent_input':self.settings.browser_backend=='playwright','isolation_notice':'Dedicated headless context' if self.settings.browser_backend=='playwright' else 'Driver-controlled browser windows may share or interfere with the owner desktop; provision a VM for isolation.','profile_isolation': 'fresh contexts' if self.settings.browser_backend=='playwright' else 'depends on configured driver',
                 'persistence':'Browser sessions end when the daemon exits.'}

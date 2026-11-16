@@ -62,9 +62,12 @@ def read_secret(path):
 def parser():
     command = argparse.ArgumentParser(prog='rdc', description='Independent local agent workspaces (alpha).')
     sub = command.add_subparsers(dest='command', required=True)
-    for name in ('init', 'stdio', 'connect', 'relay', 'serve', 'doctor', 'owner-token', 'diagnostics'):
+    for name in ('init', 'stdio', 'connect', 'relay', 'serve', 'doctor', 'owner-token', 'diagnostics', 'setup-macos'):
         action = sub.add_parser(name)
         action.add_argument('--state-dir', type=Path, default=default_state_dir())
+        if name == 'setup-macos':
+            action.add_argument('--request', choices=['accessibility','screen-recording'], help='Owner-initiated OS permission prompt; never grants permission automatically')
+            action.add_argument('--json', action='store_true', help='Report observed permission state as JSON')
         if name == 'diagnostics':
             action.add_argument('--limit', type=int, choices=range(1,51), default=50)
         if name == 'init':
@@ -115,6 +118,8 @@ def main(argv=None):
             settings.save(state / 'config.json')
             print(f'Initialized RDC at {state}. Shell: {settings.allow_exec}; approvals: {settings.approval_mode}; desktop: {settings.desktop_mode}.')
             print('Run rdc serve, connect your AI client, and ask it to open the RDC preview. Owner administration is available locally.')
+            if sys.platform == 'darwin' and settings.desktop_mode != 'disabled':
+                print('Native window setup is required: run rdc setup-macos with the same --state-dir before opening native previews. It prepares RDC Window Preview and walks you through Screen Recording and Accessibility. Headless browsers need neither permission.')
             return 0
         if args.command == 'owner-token':
             print(read_secret(state / 'owner-token'))
@@ -133,6 +138,14 @@ def main(argv=None):
         settings = Settings.load(state / 'config.json')
         if settings.state_dir != state:
             raise ValueError('config state_dir differs from selected state directory')
+        if args.command == 'setup-macos':
+            from .macos_setup import setup_status, print_walkthrough
+            report = setup_status(state, args.request)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            else:
+                print_walkthrough(report)
+            return 0
         if args.command == 'doctor':
             modules = ('mcp', 'uvicorn', 'playwright', 'selenium', 'pyautogui')
             report = {'python': sys.version.split()[0], 'platform': sys.platform,
@@ -145,6 +158,13 @@ def main(argv=None):
                 report['mcp_sdk_version'] = importlib.metadata.version('mcp')
             except importlib.metadata.PackageNotFoundError:
                 report['mcp_sdk_version'] = None
+            if sys.platform == 'darwin' and settings.desktop_mode != 'disabled':
+                from .macos_setup import setup_status
+                try:
+                    report['native_window_permissions'] = setup_status(state)
+                except Exception:
+                    report['native_window_permissions'] = {'ready':False, 'setup_required':True,
+                        'next_step':'Run rdc setup-macos with the same --state-dir. No permission was requested.'}
             print(json.dumps(report, indent=2))
             return 0
         from .engine import Engine

@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import stat
 import sys
 import time
 import uuid
@@ -107,6 +108,51 @@ class Jobs:
                 'next_offset':offset+len(data), 'text':data.decode('utf-8', errors='replace'),
                 'encoding':'utf-8', 'offset_unit':'bytes', 'status':job['status'],
                 'complete':job['status'] not in ACTIVE, 'truncated':job['truncated'], 'bytes_available':size}
+
+    def preview(self, job_id=None):
+        """Allowlisted persisted state and an explicitly selected bounded tail."""
+        self.reconcile()
+        fields = 'id,status,created_at,started_at,finished_at,exit_code,bytes_written,truncated'
+        with self.store.connection() as db:
+            rows = db.execute(f"SELECT {fields} FROM jobs ORDER BY "
+                              "CASE WHEN status IN ('queued','running','cancelling') THEN 0 ELSE 1 END,created_at DESC LIMIT 11").fetchall()
+            active = db.execute("SELECT COUNT(*) FROM jobs WHERE status IN ('queued','running','cancelling')").fetchone()[0]
+            selected = db.execute(f'SELECT {fields} FROM jobs WHERE id=?', (job_id,)).fetchone() if job_id else None
+        jobs = [{**{key:row[key] for key in row.keys() if key!='id'},
+                 'job_id':row['id'],'truncated':bool(row['truncated'])} for row in rows[:10]]
+        result = {'jobs':jobs,'jobs_truncated':len(rows)>10,'active_jobs':active}
+        if job_id:
+            if selected is None:
+                raise RDCError('job_not_found','No job with that ID belongs to this worker.')
+            result['job_output'] = self._preview_tail(job_id, selected)
+        return result
+
+    def _preview_tail(self, job_id, job):
+        # Fail closed on redirected/nonregular logs. The selected byte slice is
+        # actual stdout/stderr, never a command reconstruction or synthetic feed.
+        path = self.directory/f'{job_id}.output'
+        size = offset = 0
+        data = b''
+        try:
+            if not hasattr(os, 'O_NOFOLLOW') and path.is_symlink():
+                raise OSError('Redirected output')
+            descriptor = os.open(path, os.O_RDONLY | getattr(os,'O_NOFOLLOW',0) | getattr(os,'O_NONBLOCK',0))
+            with os.fdopen(descriptor, 'rb') as source:
+                info = os.fstat(source.fileno())
+                if not stat.S_ISREG(info.st_mode):
+                    raise OSError('Nonregular output')
+                size = info.st_size
+                offset = max(0, size-min(8192,self.settings.max_read_bytes))
+                source.seek(offset)
+                data = source.read(min(8192,self.settings.max_read_bytes))
+        except FileNotFoundError:
+            pass
+        except OSError:
+            raise RDCError('output_unavailable','The selected job output is unavailable.') from None
+        return {'job_id':job_id,'offset':offset,'next_offset':offset+len(data),
+                'text':data.decode('utf-8',errors='replace'),'bytes_available':size,
+                'complete':job['status'] not in ACTIVE,'truncated':bool(job['truncated']) or offset>0,
+                'encoding':'utf-8','offset_unit':'bytes'}
 
     def cancel(self, job_id):
         job = self.store.job(job_id)

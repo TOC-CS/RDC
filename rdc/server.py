@@ -29,6 +29,7 @@ MAX_BODY_BYTES = 1_048_576
 
 def create_mcp_server(engine) -> Server:
     """Expose only the engine's agent catalog; owner decisions stay off MCP."""
+    from . import __version__
     from .preview import UI_EXTENSION, list_resources, read_resource
     async def list_tools(context, params):
         descriptors = await anyio.to_thread.run_sync(engine.catalog)
@@ -54,8 +55,8 @@ def create_mcp_server(engine) -> Server:
     def input_schema(name):
         return next((item['inputSchema'] for item in engine.catalog() if item['name'] == name), None)
 
-    server = Server('rdc', version='0.1.0a2', title='RDC',
-                  instructions='RDC agent tools operate within owner grants. Use rdc_preview_open for an embedded live view in compatible AI hosts. Closing the view leaves the worker running. Pending approvals are resolved in owner administration.',
+    server = Server('rdc', version=__version__, title='RDC',
+                  instructions='RDC agent tools operate within owner grants. Pass the current task session_id to rdc_preview_open for a live view of that source in compatible AI hosts. Closing the view leaves the worker running. Pending approvals are resolved in owner administration.',
                   on_list_tools=list_tools, on_call_tool=call_tool,
                   get_tool_input_schema=input_schema,
                   on_list_resources=list_resources, on_read_resource=read_resource)
