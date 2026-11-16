@@ -66,7 +66,7 @@ function ownerFixture(captureError=null){
   context.ui.state.token='synthetic-owner-token';context.ui.renderStatus(ownerStatus);context.ui.selectSession(mobileId);
   return {...context.ui,nodes,calls,context};
 }
-function embeddedFixture(captureError='screenshot_redaction_required'){
+function embeddedFixture(captureError='screenshot_redaction_required', setup=null){
   const base=path.join(root,'rdc/embedded/src'),{nodes,globals}=environment(fs.readFileSync(path.join(base,'index.html'),'utf8'));
   const calls=[];
   globals.App=class {getHostCapabilities(){return {};} getHostContext(){return {};} async callServerTool(request){calls.push(request);return {isError:true,structuredContent:{ok:false,error:{code:captureError,message:'Synthetic capture refusal'}},content:[]};}};
@@ -75,7 +75,7 @@ function embeddedFixture(captureError='screenshot_redaction_required'){
   const source=fs.readFileSync(path.join(base,'app.js'),'utf8').replace(/^import .*?;\r?\n/,'').replace(/\nconnect\(\);\s*$/,'\n');
   vm.runInContext(source+'\nglobalThis.ui={state,acceptOpen,refreshFrame};',context);
   Object.assign(context.ui.state,{connected:true,bridgeReady:true});
-  context.ui.acceptOpen({device_id:'fixture-worker',session_id:mobileId,sessions:[browser,mobile],active_jobs:1,pending_approvals:0});
+  context.ui.acceptOpen({device_id:'fixture-worker',session_id:mobileId,sessions:[{...mobile,setup_status:setup}],viewer:{bound_to_session:true}});
   return {...context.ui,nodes,calls};
 }
 
@@ -202,18 +202,15 @@ if(which==='owner-credential-busy'){
   assert.equal(ui.nodes.get('mobile-profile').disabled,true);
 }else if(which==='embedded-mobile'){
   const ui=embeddedFixture();
-  assert.match(ui.nodes.get('session').textContent,/Android.*fixture-phone/);
-  assert.match(ui.nodes.get('page-address').textContent,/Android.*fixture-phone/);
-  assert.match(ui.nodes.get('work-state').textContent,/shared/i);
   assert.equal(ui.state.sessionId,mobileId);
-  ui.acceptOpen({device_id:'fixture-worker',session_id:browser.session_id,sessions:[browser,mobile]},true);
+  assert.equal(ui.state.haveOpenResult,true);
+  assert.throws(()=>ui.acceptOpen({device_id:'fixture-worker',session_id:browser.session_id,sessions:[browser,mobile]}),/different session/);
   assert.equal(ui.state.sessionId,mobileId);
 }else if(which==='embedded-privacy'){
   const ui=embeddedFixture();await ui.refreshFrame(true);
   assert.match(ui.nodes.get('connection-text').textContent,/privacy/i);
   assert.equal(ui.nodes.get('frame').hidden,true);
   assert.equal(ui.state.sessionId,mobileId);
-  assert.equal(ui.state.activeJobs,1);
   assert.deepEqual(ui.calls.map(call=>call.name),['rdc_preview_frame']);
 }else if(which==='embedded-capture-failed'){
   const ui=embeddedFixture('screenshot_failed');ui.nodes.get('frame').hidden=false;ui.nodes.get('frame').src='synthetic-old-image';await ui.refreshFrame(true);
@@ -224,29 +221,19 @@ if(which==='owner-credential-busy'){
   await ui.refreshFrame(true);
   assert.equal(ui.calls.length,2,'A recoverable capture failure still permits an explicit read-only retry');
 }else if(which==='embedded-uncertain-creation'){
-  const ui=embeddedFixture('mobile_cleanup_required');
-  ui.acceptOpen({device_id:'fixture-worker',session_id:browser.session_id,
-    sessions:[browser,{...mobile,setup_status:'creation_unknown'}]});
-  assert.equal(ui.state.sessionId,browser.session_id,'Begin with the normal session selected');
-  ui.nodes.get('frame').hidden=false;ui.nodes.get('frame').src='synthetic-old-image';
-  const selector=ui.nodes.get('session');selector.value=mobileId;await trigger(selector,'change');
-  const selectionGuidance=ui.nodes.get('empty-copy').textContent;
-  await ui.refreshFrame(false);
-  await trigger(ui.nodes.get('refresh'),'click');
-  assert.equal(ui.calls.length,0,'Neither selecting an uncertain session nor Refresh may dispatch a frame');
-  assert.match(selectionGuidance,/inspect Appium/i,'Selection must immediately explain the uncertain creation state');
-  assert.match(ui.nodes.get('empty-copy').textContent,/inspect Appium/i,'Refresh must retain the inspection guidance');
-  assert.equal(ui.state.sessionId,mobileId,'Retain the exact uncertain record for owner recovery');
-  assert.equal(ui.nodes.get('frame').hidden,true);
-  assert.equal(ui.nodes.get('frame').src,undefined);
-  ui.acceptOpen({device_id:'fixture-worker',session_id:mobileId,
-    sessions:[browser,{...mobile,setup_status:'cleanup_required'}]});
-  await ui.refreshFrame(true);
-  assert.equal(ui.calls.length,0,'Current cleanup metadata also prohibits frame dispatch');
-  assert.match(ui.nodes.get('empty-copy').textContent,/close this exact session/i,'Current metadata takes precedence over an older blocked-frame label');
+  for(const setup of ['creation_unknown','cleanup_required']){
+    const ui=embeddedFixture('mobile_cleanup_required',setup);
+    assert.equal(ui.state.sessionId,mobileId);
+    assert.equal(ui.state.setupProblem,'mobile_'+setup);
+    await ui.refreshFrame(false);
+    await ui.refreshFrame(true);
+    assert.equal(ui.calls.length,0,'Unverified setup must never request a frame');
+    assert.equal(ui.nodes.get('frame').hidden,true);
+    assert.match(ui.nodes.get('empty-title').textContent,/unavailable/i);
+  }
 }else if(which==='embedded-ended'){
   const ui=embeddedFixture('mobile_session_gone');await ui.refreshFrame(true);await ui.refreshFrame(false);
-  assert.match(ui.nodes.get('empty-copy').textContent,/owner panel/i);
+  assert.match(ui.nodes.get('empty-copy').textContent,/same session/i);
   assert.equal(ui.nodes.get('frame').hidden,true);
   assert.equal(ui.state.sessionId,mobileId,'Retain the exact record identity for owner cleanup');
   assert.equal(ui.calls.length,1,'An ended native driver must not be polled again automatically');
