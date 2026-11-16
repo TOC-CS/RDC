@@ -89,17 +89,22 @@ class Jobs:
             job = started['job']
             return {'job':job, 'reused':started['reused'],
                     'complete':job['status'] not in ACTIVE, 'output':None}
-        deadline = time.monotonic() + wait_ms / 1000
+        wait_started = time.monotonic()
+        deadline = wait_started + wait_ms / 1000
         try:
             while True:
                 job = self.store.job(identifier)
                 if job['status'] not in ACTIVE:
                     break
-                remaining = deadline - time.monotonic()
+                now = time.monotonic()
+                remaining = deadline - now
                 if remaining <= 0:
                     return {'job':job, 'reused':started['reused'],
                             'complete':False, 'output':None}
-                time.sleep(min(0.04, remaining))
+                # Observe short completions promptly, then bound SQLite polling
+                # for commands that need the durable background lifecycle.
+                interval = 0.01 if now - wait_started < 0.2 else 0.04
+                time.sleep(min(interval, remaining))
             # Read one terminal snapshot. Do not give job and output
             # different status or completion metadata.
             output = self.output(
