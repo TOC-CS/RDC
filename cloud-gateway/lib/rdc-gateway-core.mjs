@@ -1,7 +1,8 @@
 /* Authenticated outbound relay. The device remains the authority for grants.
  * Queued operations are claimed once; uncertainty never causes redispatch.
  */
-const UI_URI='ui://rdc/preview-v7.html';
+const UI_URI='ui://rdc/preview-v8.html';
+const UI_V7_URI='ui://rdc/preview-v7.html';
 const UI_V6_URI='ui://rdc/preview-v6.html';
 const UI_V5_URI='ui://rdc/preview-v5.html';
 const UI_V4_URI='ui://rdc/preview-v4.html';
@@ -293,7 +294,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         case 'resources/list':response={resources:[{uri:UI_URI,name:'rdc-preview',title:'RDC Live Preview',mimeType:UI_MIME}]};break;
         case 'resources/templates/list':response={resourceTemplates:[]};break;
         case 'resources/read':
-          if(![UI_URI,UI_V6_URI,UI_V5_URI,UI_V4_URI,UI_PREVIOUS_URI,UI_V2_URI,UI_LEGACY_URI].includes(params.uri))fail(404,'resource_not_found','RDC preview resource not found.');
+          if(![UI_URI,UI_V7_URI,UI_V6_URI,UI_V5_URI,UI_V4_URI,UI_PREVIOUS_URI,UI_V2_URI,UI_LEGACY_URI].includes(params.uri))fail(404,'resource_not_found','RDC preview resource not found.');
           response={contents:[{uri:params.uri,mimeType:UI_MIME,text:resourceHtml,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},
             'openai/ui':{availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'inline'},'openai/widgetDescription':'Live view of the selected RDC session. Hiding the view leaves work running.'}}]};break;
         case 'tools/call':{

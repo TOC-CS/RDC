@@ -4,7 +4,7 @@
 
 **Goal:** Independent live previews across Windows, macOS, Linux, Android, iPhone and iPad, available to different AI agents, without dashboards or foreground takeover.
 
-**Architecture:** Separate source adapters, authenticated session transport, viewing-device renderer, and AI-host adapters. A viewer belongs to the device where the owner watches, which may differ from the execution worker. A native Mac companion alone does not meet this requirement. Keep the existing worker pairing, App identity and private audience.
+**Architecture:** Floating views belong INSIDE the AI workflow window; external OS windows are not an acceptable substitute. No separate Electron installation for end users. Separate source adapters, authenticated session transport, viewing-device renderer, and AI-host adapters. A viewer belongs to the device where the owner watches, which may differ from the execution worker. A native Mac companion alone does not meet this requirement. Keep the existing worker pairing, App identity and private audience.
 
 **Spec:** [Portable acceptance queue](../../PREVIEW-REPAIR-QUEUE.md), including the owner's multiple-floating-window reference and background-operation requirements.
 
@@ -36,3 +36,7 @@
 The current public ChatGPT MCP extension contract exposes inline/fullscreen and explicitly does not support PiP. Codex computer-use floating surfaces are host-owned; the computer-use REPL refused inspection of the Codex app itself. Do not bypass that block or claim access to its implementation. An RDC-owned surface can mirror behavior where the OS allows it, but cannot force every AI host to offer identical in-chat windows.
 
 The v7 helper grant is enabled on the test Mac, yet the current worker launch is attributed to the parent AI host. A hidden LaunchServices probe failed with -10810 in this environment. No privacy database changes or broader host grants were made. This remains an explicit setup blocker, not a reason to repeat the same user action.
+
+## Current implementation boundary
+
+The external viewer experiment was removed from this release after the owner clarified the in-workflow requirement. The current candidate tests the documented optional host bridge and retains standard MCP host negotiation. No external fallback is shipped. Source and viewing devices remain independent; unsupported host modes are reported honestly.

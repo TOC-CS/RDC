@@ -118,8 +118,8 @@ window.addEventListener('message', event => {
       let data = structuredClone(window.openResult), content;
       if (name === 'rdc_preview_frame') {
         data = {ok:true,device_id:'fixture-device',session_id:window.wrongSession?'wrong-session':args.session_id,
-          width:900,height:560,viewport:{width:900,height:560},cursor:{x:280,y:200,visible:true},
-          paused:false,mime_type:'image/png',image_in_content:true,captured_at:new Date().toISOString()};
+          width:900,height:560,viewport:{width:900,height:560},cursor:structuredClone(window.cursorPoint || {x:280,y:200,visible:true}),
+          cursor_in_image:window.cursorInImage===true,paused:false,mime_type:'image/png',image_in_content:true,captured_at:new Date().toISOString()};
         if(window.nativeWidth) Object.assign(data,{window_width:window.nativeWidth,window_height:window.nativeHeight});
         content = [{type:'image',mimeType:'image/png',data:PNG}];
         if(window.frameErrorCode) {data={ok:false,error:{code:window.frameErrorCode,message:'Synthetic capture refusal'}};content=[];}
@@ -600,6 +600,141 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.view.get_by_text('The app kept its current display mode.', exact=True).wait_for()
         self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'), 'inline')
         self.assert_pinned()
+        self.assert_read_only()
+
+    def test_late_optional_host_confirmation_updates_actual_mode(self):
+        self.page.add_init_script("""if(window.parent!==window) {
+          const wait=window.setTimeout;
+          window.setTimeout=(fn,ms,...args)=>wait(fn,ms===10000?20:ms,...args);
+          window.openai={displayMode:'inline',requestDisplayMode:()=>new Promise(()=>{
+            wait(()=>{window.openai.displayMode='pip';window.dispatchEvent(new CustomEvent('openai:set_globals',{detail:{globals:{displayMode:'pip'}}}));},150);
+          })};
+        }""")
+        self.page.goto(self.base+'?modes=inline,fullscreen')
+        self.view=self.page.frame_locator('#app-frame');self.live()
+        self.view.get_by_role('button',name='Float',exact=True).click()
+        self.view.locator('#canvas[data-mode="pip"]').wait_for(timeout=1500)
+        self.assertTrue(self.view.get_by_role('button',name='Inline',exact=True).is_visible())
+        self.assert_read_only()
+
+    def test_cursor_tracks_actual_pixels_when_native_window_is_scrolled(self):
+        self.page.goto(self.base + '?session=window-' + SESSION + '&resize=1')
+        self.view = self.page.frame_locator('#app-frame')
+        self.live()
+        self.page.evaluate('window.nativeWidth=1410;window.nativeHeight=950')
+        self.view.locator('#frame[style*="1410px"]').wait_for(timeout=6000)
+        screen = self.view.locator('#screen')
+        screen.evaluate('(node)=>node.scrollTo({left:140,top:85})')
+        self.page.wait_for_timeout(110)
+        measurements = screen.evaluate("""screen => {
+          const img=screen.querySelector('#frame');
+          const marker=screen.querySelector('#cursor');
+          const i=img.getBoundingClientRect(), m=marker.getBoundingClientRect();
+          return {left:m.left,top:m.top,
+             expectedLeft:i.left+280/900*i.width-3,
+             expectedTop:i.top+200/560*i.height-2,
+             scrollLeft:screen.scrollLeft,scrollTop:screen.scrollTop,visible:!marker.hidden};
+        }""")
+        self.assertTrue(measurements['visible'],measurements)
+        self.assertGreater(measurements['scrollLeft'],0,measurements)
+        self.assertGreater(measurements['scrollTop'],0,measurements)
+        self.assertAlmostEqual(measurements['left'],measurements['expectedLeft'],delta=1.1,msg=str(measurements))
+        self.assertAlmostEqual(measurements['top'],measurements['expectedTop'],delta=1.1,msg=str(measurements))
+        self.assert_pinned('window-' + SESSION)
+        self.assertTrue(all(c['name'] in ('rdc_preview_open','rdc_preview_frame','rdc_operation_status','rdc_preview_resize') for c in self.page.evaluate('window.toolCalls')))
+        self.assertEqual(self.errors, [])
+
+    def test_cursor_placeholder_never_draws_before_a_confirmed_pointer_action(self):
+        self.live()
+        marker=self.view.locator('#cursor')
+        self.assertTrue(marker.is_visible())
+        calls=self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:0,y:0}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        marker.wait_for(state='hidden', timeout=1500)
+        calls=self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:0,y:0,visible:true}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        marker.wait_for(state='visible', timeout=1500)
+        calls=self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:250,y:100,visible:false}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        marker.wait_for(state='hidden', timeout=1500)
+        self.assert_pinned()
+        self.assert_read_only()
+
+    def test_cursor_hides_when_outside_bound_source_and_recovers(self):
+        self.live()
+        marker = self.view.locator('#cursor')
+        self.assertTrue(marker.is_visible())
+        calls = self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:-10,y:5,visible:true}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        marker.wait_for(state='hidden',timeout=1500)
+        calls = self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:280,y:200,visible:true}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        marker.wait_for(state='visible',timeout=1500)
+        self.assert_pinned()
+        self.assert_read_only()
+
+    def test_cursor_uses_letterboxed_image_pixels_and_clips_to_its_edges(self):
+        self.live()
+        screen=self.view.locator('#screen')
+        data=screen.evaluate("""screen=>{
+            const img=screen.querySelector('#frame'),marker=screen.querySelector('#cursor');
+            const box=img.getBoundingClientRect(),m=marker.getBoundingClientRect();
+            const scale=Math.min(box.width/img.naturalWidth,box.height/img.naturalHeight);
+            const width=img.naturalWidth*scale,height=img.naturalHeight*scale;
+            const left=box.left+(box.width-width)/2;
+            return {actualX:m.left,actualY:m.top,
+                    expectedX:left+280/900*width-3,
+                    expectedY:box.top+200/560*height-2,
+                    imageWidth:width,boxWidth:box.width};
+        }""")
+        self.assertAlmostEqual(data['actualX'],data['expectedX'],delta=1.1,msg=str(data))
+        self.assertAlmostEqual(data['actualY'],data['expectedY'],delta=1.1,msg=str(data))
+        calls=self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:899,y:559,visible:true}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        from re import findall
+        clip=self.view.locator('#cursor').evaluate('(node)=>node.style.clipPath')
+        pixels=[float(value) for value in findall(r'([0-9.]+)px',clip)]
+        self.assertEqual(len(pixels),4,clip)
+        self.assertGreater(pixels[1],10,clip)
+        self.assertGreater(pixels[2],10,clip)
+        self.assert_pinned()
+        self.assert_read_only()
+
+    def test_cursor_is_not_duplicated_when_baked_into_the_source_image(self):
+        self.live()
+        self.assertTrue(self.view.locator('#cursor').is_visible())
+        calls=self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorInImage=true')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        self.view.locator('#cursor').wait_for(state='hidden',timeout=1500)
+        self.assert_pinned();self.assert_read_only()
+
+    def test_optional_host_floating_extension_requires_confirmed_mode(self):
+        self.page.add_init_script("""if(window.parent!==window) {
+          window.openai={displayMode:'inline',requestDisplayMode:async({mode})=>{
+            window.openai.displayMode=mode;return {mode};}};
+        }""")
+        self.page.goto(self.base+'?modes=inline,fullscreen')
+        self.view=self.page.frame_locator('#app-frame');self.live()
+        self.view.get_by_role('button',name='Float',exact=True).click()
+        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'pip')
+        self.assert_pinned();self.assert_read_only()
+
+    def test_unconfirmed_host_floating_does_not_claim_success(self):
+        self.page.add_init_script("""if(window.parent!==window) {
+          window.openai={displayMode:'inline',requestDisplayMode:async()=>({})};
+        }""")
+        self.page.goto(self.base+'?modes=inline,fullscreen')
+        self.view=self.page.frame_locator('#app-frame');self.live()
+        self.view.get_by_role('button',name='Float',exact=True).click()
+        self.view.get_by_text('This host did not confirm a floating view.',exact=True).wait_for()
+        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'inline')
         self.assert_read_only()
 
     def test_small_screen_and_missing_display_modes(self):

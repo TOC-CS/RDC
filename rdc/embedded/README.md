@@ -21,7 +21,7 @@ source distributions. The project logo must exist at `../assets/rdc-logo.png`.
 
 `rdc_preview_open` takes the exact visual session ID for this task. The server advertises `ui://rdc/preview-v5.html`; the earlier resource aliases still resolve. The host delivers the original tool invocation and result. An unbound result leaves the view empty, even if an older server returns a last-used session. The viewer does not discover a replacement source.
 
-The resource contains a live image, the agent cursor when supplied, and small viewer controls. The parent-bound MCP Apps SDK mediates reads of `rdc_preview_open`, `rdc_preview_frame`, and `rdc_operation_status`. The resource has no account credential and makes no direct network requests. It displays no worker dashboard or command output.
+The resource contains a live image, a source-bound agent cursor only after confirmed pointer movement, and small viewer controls. The parent-bound MCP Apps SDK mediates reads of `rdc_preview_open`, `rdc_preview_frame`, and `rdc_operation_status`. The resource has no account credential and makes no direct network requests. It displays no worker dashboard or command output.
 
 The AI host owns panel placement, size, and dismissal. Expand, Inline, and Float appear only when advertised and use the mode the host returns. Hide, document visibility changes and teardown suspend or clear observation without changing the worker. Reopen resumes the same source. If the host supports `updateModelContext`, dismissing shares the exact binding and any retained operation ID with the agent.
 
