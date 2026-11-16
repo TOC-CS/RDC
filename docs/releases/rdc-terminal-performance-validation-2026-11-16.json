@@ -1,0 +1,63 @@
+{
+  "recorded_utc": "2026-11-16T20:32:42.801513+00:00",
+  "base_commit": "3461af510723f3c6efd81cc22afe3153f938737a",
+  "source_sha256": {
+    "rdc/jobs.py": "4b958c39520f056912254147864c2685a83d028efea31137b5a0c6819f8ab2f9",
+    "rdc/worker.py": "02e3cd457bee48db52c66110b4f2b45995dbb61f4eb7ff2bdb13c0b5b66c3294",
+    "rdc/relay.py": "079f5186dd73b4500d40a425b7a69ceefca25918c503360e3c8572ac34b16cd6",
+    "rdc/engine.py": "f8a272e098c2129612d8b7435a276dffc0971a2c54577c8af174fd26d1154998",
+    "rdc/server.py": "5a1046e64f5962ba7c8e119415939011e43d6fda67c1bebf019c8862e10bbda2",
+    "tests/test_terminal_performance.py": "947d9599dd80247ef58d28025d4af40e0a2ddd9d45b250ed35a9ecdd3609ccf2",
+    "benchmarks/terminal_fast_path.py": "9ddeef160003f15c88ad1bc0ab92499b53d260965efe0f25a7a4a642a44db5c4",
+    "benchmarks/terminal_performance_compare.py": "5c36d2e2beb3442cd6730ff4c50abf23206e3d9afa51c0716de1ad12b9833b28",
+    "cloud-gateway/lib/rdc-gateway-core.mjs": "99bb8e5cb94462dc8d5469f1cffcf89ffd41d59126a2630447babe2d9ff4f88e",
+    "cloud-gateway/tests/gateway.test.mjs": "8810684ac00648b12faa52ac6392d2775ae0be5c7fd5059362b5a1af3718c2d9"
+  },
+  "test_results": {
+    "worker_suite": {
+      "command": "python -m unittest discover -s tests -v",
+      "tests": 360,
+      "failures": 0,
+      "elapsed_seconds": 122.706
+    },
+    "gateway_suite": {
+      "command": "node --test cloud-gateway/tests/gateway.test.mjs",
+      "tests": 28,
+      "failures": 0
+    },
+    "regression_red": "40 ms initial completion collection exceeded the 20 ms test budget",
+    "antispin_mutation_red": "Naive completion-event wait caused 703 heartbeat updates during a 0.30-second command after output EOF; limit 25",
+    "regression_green": {
+      "tests": 4,
+      "failures": 0
+    }
+  },
+  "logs_sha256": {
+    "rdc-performance-red.log": "8a8fca0ab72e4627473e00b45476750d90be174ff1d457346c2923db9c982d2e",
+    "rdc-performance-antispin-red.log": "e5f3c56edd003747961e7d4d00a1c0f9f5fd8dc554ab4c8365952826354d195d",
+    "rdc-performance-green.log": "ab2840a505d466653dafe9e4d6f467a4ce83c0dd3b67780cd8ea500ff2ab940c",
+    "rdc-performance-full-worker.log": "0d52b3d1665ee767396b9473a4372565d367cf28cbd79bc1e948230af14c8ea5",
+    "rdc-performance-gateway.log": "690bf1b5d2eb06445b4cc26ab166f0bf5ae14e5246d284ad2b9b77af5535b5ce"
+  },
+  "local_concurrency": {
+    "probe": "direct-local concurrent Engine calls with disposable profile, no GUI/BandMates interaction",
+    "status_completed_during_inline_wait": true,
+    "status_call_ms": 2.548,
+    "short_job_completed_during_inline_wait": true,
+    "short_call_ms": 58.326,
+    "long_job_after_cancel": "cancelled",
+    "long_output_preserved": true,
+    "elapsed_ms": 344.217
+  },
+  "relay_head_of_line": {
+    "probe": "actual relay loop with isolated fake gateway/worker; no live connections",
+    "first_inline_wait_ms": 1500,
+    "following_status_dispatch_delay_ms": 1502.532,
+    "deliveries": [
+      "head-wait",
+      "queued-status"
+    ],
+    "replays": false
+  },
+  "scope": "No active worker modifications, BandMates restart, desktop pointer/focus action, deployment, commit, or publication. Existing test_terminal_fastpath.py is parent-owned and may be edited independently after full-suite import."
+}

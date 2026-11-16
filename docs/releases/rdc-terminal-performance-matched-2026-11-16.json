@@ -1,0 +1,2845 @@
+{
+  "recorded_utc": "2026-11-16T20:31:47.271008+00:00",
+  "baseline_ref": "3461af5",
+  "candidate_commit": "3461af510723f3c6efd81cc22afe3153f938737a",
+  "comparison_scope": "Only jobs.py and worker.py differ; no deployed worker, network/provider, GUI, or BandMates interaction",
+  "rounds": 4,
+  "trials_per_method_per_variant": 40,
+  "warmups_per_method_per_variant": 12,
+  "summary": {
+    "baseline": {
+      "legacy": {
+        "runs": 40,
+        "correct": 40,
+        "failures": 0,
+        "first_call_completed": 0,
+        "p50_ms": 88.614,
+        "p95_ms": 91.268,
+        "p99_ms": 92.161,
+        "stddev_ms": 6.278,
+        "phase_p50_ms": {
+          "admission": 1.289,
+          "detached_start": 26.42,
+          "worker_lifetime": 47.467,
+          "result_collection": 13.37
+        },
+        "min_ms": 73.593,
+        "max_ms": 92.616
+      },
+      "fast_path": {
+        "runs": 40,
+        "correct": 40,
+        "failures": 0,
+        "first_call_completed": 40,
+        "p50_ms": 96.707,
+        "p95_ms": 99.214,
+        "p99_ms": 102.003,
+        "stddev_ms": 1.935,
+        "phase_p50_ms": {
+          "admission": 1.326,
+          "detached_start": 26.291,
+          "worker_lifetime": 48.166,
+          "result_collection": 21.383
+        },
+        "min_ms": 92.913,
+        "max_ms": 103.607
+      }
+    },
+    "candidate": {
+      "legacy": {
+        "runs": 40,
+        "correct": 40,
+        "failures": 0,
+        "first_call_completed": 0,
+        "p50_ms": 63.581,
+        "p95_ms": 75.638,
+        "p99_ms": 81.352,
+        "stddev_ms": 4.84,
+        "phase_p50_ms": {
+          "admission": 1.327,
+          "detached_start": 27.651,
+          "worker_lifetime": 22.881,
+          "result_collection": 12.253
+        },
+        "min_ms": 57.984,
+        "max_ms": 83.206
+      },
+      "fast_path": {
+        "runs": 40,
+        "correct": 40,
+        "failures": 0,
+        "first_call_completed": 40,
+        "p50_ms": 59.806,
+        "p95_ms": 65.111,
+        "p99_ms": 76.733,
+        "stddev_ms": 4.4,
+        "phase_p50_ms": {
+          "admission": 1.328,
+          "detached_start": 26.895,
+          "worker_lifetime": 22.758,
+          "result_collection": 8.369
+        },
+        "min_ms": 49.707,
+        "max_ms": 79.176
+      }
+    }
+  },
+  "source_sha256": {
+    "baseline": {
+      "benchmarks/terminal_fast_path.py": "9ddeef160003f15c88ad1bc0ab92499b53d260965efe0f25a7a4a642a44db5c4",
+      "rdc/__init__.py": "0c7ad88cf3a3327dce40325f900247e80cc6054d7f2ef1c2b6ee49fc2ca5ad9b",
+      "rdc/__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
+      "rdc/_keychain_helper.py": "4400cffa0c0a33b09c864128b3818618aa0664bcb865a9f784210fcacf894d99",
+      "rdc/activity.py": "78cf0231e831deb8debe758c3b33da876423213b1a5462c1566a70e5febc7dd2",
+      "rdc/adapters.py": "3d6a59a855cf55a14ac43a4b2bef81e450a5c91e186a5126cffb84f916bc197e",
+      "rdc/cli.py": "f6c45cbe863323136f0cb1f7e1cbffa20e03c4dc6d97278b7afee716fc7ee83c",
+      "rdc/config.py": "54432e3ed9aba607d517c8abbfbcdc2042c18fbb4f4af75626444ac4f6f1fec9",
+      "rdc/credentials.py": "bf14e1ba5a860de55efdb13e7e723b7b51110cf0c96ed688b47afa84c18758d9",
+      "rdc/diagnostics.py": "69958f5248cfcc1bb46dfeae22db612f6adf8ec7a062c9ca8e8a4de8af37819f",
+      "rdc/engine.py": "f8a272e098c2129612d8b7435a276dffc0971a2c54577c8af174fd26d1154998",
+      "rdc/errors.py": "ff3f583fd71202e9f62f9c6e8c9f1a415913ff84fcbf2245677b2c8931431f68",
+      "rdc/files.py": "2a384cd3ad83e12748ed1d69095db6d0dc3ea81f6fcd0a13e117e588b9e19a4c",
+      "rdc/jobs.py": "8c8923ae74b685359855cf3602a6d7fbe557dbfb4b3f3d97e18aa9de53095ff0",
+      "rdc/macos_setup.py": "2d77b136940a1ba60e9775a0d31a148f0a229a0c744d69a759c7603fd5d34668",
+      "rdc/mobile.py": "d0d7d8de837ebf4937277531f8f25e5e34c2c2e71827fdb39ddb1bd360e23117",
+      "rdc/preview.py": "1501eeda3d93cfd6e7edf5b1d07c4d024f220801d42f88bd6d863b4b773d2c84",
+      "rdc/proxy.py": "9c2a44c44e23343c06ed54d4351c8aa2c94318321951d35308edf5fb1c5e19dc",
+      "rdc/relay.py": "079f5186dd73b4500d40a425b7a69ceefca25918c503360e3c8572ac34b16cd6",
+      "rdc/server.py": "5a1046e64f5962ba7c8e119415939011e43d6fda67c1bebf019c8862e10bbda2",
+      "rdc/store.py": "832f026a8777b1f6bda2eb319216f3981b29cba2435849ce3f9102707f0b0466",
+      "rdc/windows.py": "53d497bc4b110a76368ec32c5fbe01c192edd2bc0d39d0c42223a8bfe3e73333",
+      "rdc/worker.py": "e584036db24c7413b625e31c63c3ccda3c15815dac2d077439a992d37ce436f8"
+    },
+    "candidate": {
+      "benchmarks/terminal_fast_path.py": "9ddeef160003f15c88ad1bc0ab92499b53d260965efe0f25a7a4a642a44db5c4",
+      "rdc/__init__.py": "0c7ad88cf3a3327dce40325f900247e80cc6054d7f2ef1c2b6ee49fc2ca5ad9b",
+      "rdc/__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
+      "rdc/_keychain_helper.py": "4400cffa0c0a33b09c864128b3818618aa0664bcb865a9f784210fcacf894d99",
+      "rdc/activity.py": "78cf0231e831deb8debe758c3b33da876423213b1a5462c1566a70e5febc7dd2",
+      "rdc/adapters.py": "3d6a59a855cf55a14ac43a4b2bef81e450a5c91e186a5126cffb84f916bc197e",
+      "rdc/cli.py": "f6c45cbe863323136f0cb1f7e1cbffa20e03c4dc6d97278b7afee716fc7ee83c",
+      "rdc/config.py": "54432e3ed9aba607d517c8abbfbcdc2042c18fbb4f4af75626444ac4f6f1fec9",
+      "rdc/credentials.py": "bf14e1ba5a860de55efdb13e7e723b7b51110cf0c96ed688b47afa84c18758d9",
+      "rdc/diagnostics.py": "69958f5248cfcc1bb46dfeae22db612f6adf8ec7a062c9ca8e8a4de8af37819f",
+      "rdc/engine.py": "f8a272e098c2129612d8b7435a276dffc0971a2c54577c8af174fd26d1154998",
+      "rdc/errors.py": "ff3f583fd71202e9f62f9c6e8c9f1a415913ff84fcbf2245677b2c8931431f68",
+      "rdc/files.py": "2a384cd3ad83e12748ed1d69095db6d0dc3ea81f6fcd0a13e117e588b9e19a4c",
+      "rdc/jobs.py": "4b958c39520f056912254147864c2685a83d028efea31137b5a0c6819f8ab2f9",
+      "rdc/macos_setup.py": "2d77b136940a1ba60e9775a0d31a148f0a229a0c744d69a759c7603fd5d34668",
+      "rdc/mobile.py": "d0d7d8de837ebf4937277531f8f25e5e34c2c2e71827fdb39ddb1bd360e23117",
+      "rdc/preview.py": "1501eeda3d93cfd6e7edf5b1d07c4d024f220801d42f88bd6d863b4b773d2c84",
+      "rdc/proxy.py": "9c2a44c44e23343c06ed54d4351c8aa2c94318321951d35308edf5fb1c5e19dc",
+      "rdc/relay.py": "079f5186dd73b4500d40a425b7a69ceefca25918c503360e3c8572ac34b16cd6",
+      "rdc/server.py": "5a1046e64f5962ba7c8e119415939011e43d6fda67c1bebf019c8862e10bbda2",
+      "rdc/store.py": "832f026a8777b1f6bda2eb319216f3981b29cba2435849ce3f9102707f0b0466",
+      "rdc/windows.py": "53d497bc4b110a76368ec32c5fbe01c192edd2bc0d39d0c42223a8bfe3e73333",
+      "rdc/worker.py": "02e3cd457bee48db52c66110b4f2b45995dbb61f4eb7ff2bdb13c0b5b66c3294"
+    }
+  },
+  "round_reports": [
+    {
+      "round": 1,
+      "variant": "baseline",
+      "report": {
+        "method": "same Mac/direct-local Engine; 30+ runs recommended",
+        "isolated_browser": true,
+        "physical_keyboard_mouse_used": false,
+        "trials_per_method": 10,
+        "warmups_per_method": 3,
+        "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+        "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+        "phase_clock": "worker wall timestamps; end-to-end elapsed uses monotonic perf_counter",
+        "summary": {
+          "legacy": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 0,
+            "p50_ms": 78.001,
+            "p95_ms": 89.164,
+            "p99_ms": 89.448,
+            "stddev_ms": 6.042,
+            "phase_p50_ms": {
+              "admission": 1.251,
+              "detached_start": 25.732,
+              "worker_lifetime": 47.101,
+              "result_collection": 4.231
+            },
+            "min_ms": 73.593,
+            "max_ms": 89.519
+          },
+          "fast_path": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 10,
+            "p50_ms": 96.853,
+            "p95_ms": 98.9,
+            "p99_ms": 99.139,
+            "stddev_ms": 1.634,
+            "phase_p50_ms": {
+              "admission": 1.321,
+              "detached_start": 25.293,
+              "worker_lifetime": 48.008,
+              "result_collection": 21.196
+            },
+            "min_ms": 94.304,
+            "max_ms": 99.199
+          }
+        },
+        "samples": {
+          "legacy": [
+            {
+              "elapsed_ms": 76.458,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.065,
+              "phases_ms": {
+                "admission": 1.471,
+                "detached_start": 26.255,
+                "worker_lifetime": 44.301,
+                "result_collection": 4.43
+              }
+            },
+            {
+              "elapsed_ms": 76.767,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.63,
+              "phases_ms": {
+                "admission": 1.167,
+                "detached_start": 24.601,
+                "worker_lifetime": 47.699,
+                "result_collection": 3.3
+              }
+            },
+            {
+              "elapsed_ms": 87.293,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.794,
+              "phases_ms": {
+                "admission": 1.238,
+                "detached_start": 24.843,
+                "worker_lifetime": 45.444,
+                "result_collection": 15.767
+              }
+            },
+            {
+              "elapsed_ms": 88.497,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.813,
+              "phases_ms": {
+                "admission": 1.332,
+                "detached_start": 24.598,
+                "worker_lifetime": 48.417,
+                "result_collection": 14.15
+              }
+            },
+            {
+              "elapsed_ms": 78.105,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.037,
+              "phases_ms": {
+                "admission": 1.336,
+                "detached_start": 26.166,
+                "worker_lifetime": 47.373,
+                "result_collection": 3.23
+              }
+            },
+            {
+              "elapsed_ms": 73.593,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.816,
+              "phases_ms": {
+                "admission": 1.286,
+                "detached_start": 25.014,
+                "worker_lifetime": 43.744,
+                "result_collection": 3.549
+              }
+            },
+            {
+              "elapsed_ms": 77.898,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.693,
+              "phases_ms": {
+                "admission": 1.229,
+                "detached_start": 25.808,
+                "worker_lifetime": 46.829,
+                "result_collection": 4.032
+              }
+            },
+            {
+              "elapsed_ms": 89.519,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.781,
+              "phases_ms": {
+                "admission": 1.249,
+                "detached_start": 26.306,
+                "worker_lifetime": 48.094,
+                "result_collection": 13.87
+              }
+            },
+            {
+              "elapsed_ms": 88.731,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.903,
+              "phases_ms": {
+                "admission": 1.21,
+                "detached_start": 25.987,
+                "worker_lifetime": 47.701,
+                "result_collection": 13.834
+              }
+            },
+            {
+              "elapsed_ms": 75.875,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.735,
+              "phases_ms": {
+                "admission": 1.253,
+                "detached_start": 25.655,
+                "worker_lifetime": 45.735,
+                "result_collection": 3.232
+              }
+            }
+          ],
+          "fast_path": [
+            {
+              "elapsed_ms": 94.304,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 94.302,
+              "phases_ms": {
+                "admission": 1.282,
+                "detached_start": 25.16,
+                "worker_lifetime": 47.614,
+                "result_collection": 20.247
+              }
+            },
+            {
+              "elapsed_ms": 98.534,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 98.532,
+              "phases_ms": {
+                "admission": 1.427,
+                "detached_start": 24.71,
+                "worker_lifetime": 45.473,
+                "result_collection": 26.924
+              }
+            },
+            {
+              "elapsed_ms": 97.904,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 97.902,
+              "phases_ms": {
+                "admission": 1.315,
+                "detached_start": 25.277,
+                "worker_lifetime": 47.743,
+                "result_collection": 23.568
+              }
+            },
+            {
+              "elapsed_ms": 96.079,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 96.076,
+              "phases_ms": {
+                "admission": 1.382,
+                "detached_start": 25.14,
+                "worker_lifetime": 48.126,
+                "result_collection": 21.43
+              }
+            },
+            {
+              "elapsed_ms": 95.355,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 95.352,
+              "phases_ms": {
+                "admission": 1.254,
+                "detached_start": 24.999,
+                "worker_lifetime": 47.135,
+                "result_collection": 21.967
+              }
+            },
+            {
+              "elapsed_ms": 97.627,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 97.626,
+              "phases_ms": {
+                "admission": 1.326,
+                "detached_start": 26.292,
+                "worker_lifetime": 49.046,
+                "result_collection": 20.962
+              }
+            },
+            {
+              "elapsed_ms": 97.834,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 97.831,
+              "phases_ms": {
+                "admission": 1.19,
+                "detached_start": 26.149,
+                "worker_lifetime": 48.065,
+                "result_collection": 22.429
+              }
+            },
+            {
+              "elapsed_ms": 99.199,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 99.196,
+              "phases_ms": {
+                "admission": 1.316,
+                "detached_start": 31.209,
+                "worker_lifetime": 48.652,
+                "result_collection": 18.022
+              }
+            },
+            {
+              "elapsed_ms": 95.476,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 95.473,
+              "phases_ms": {
+                "admission": 1.394,
+                "detached_start": 25.745,
+                "worker_lifetime": 47.951,
+                "result_collection": 20.385
+              }
+            },
+            {
+              "elapsed_ms": 94.684,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 94.681,
+              "phases_ms": {
+                "admission": 1.355,
+                "detached_start": 25.309,
+                "worker_lifetime": 48.083,
+                "result_collection": 19.937
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 1,
+      "variant": "candidate",
+      "report": {
+        "method": "same Mac/direct-local Engine; 30+ runs recommended",
+        "isolated_browser": true,
+        "physical_keyboard_mouse_used": false,
+        "trials_per_method": 10,
+        "warmups_per_method": 3,
+        "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+        "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+        "phase_clock": "worker wall timestamps; end-to-end elapsed uses monotonic perf_counter",
+        "summary": {
+          "legacy": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 0,
+            "p50_ms": 61.773,
+            "p95_ms": 63.754,
+            "p99_ms": 64.166,
+            "stddev_ms": 1.731,
+            "phase_p50_ms": {
+              "admission": 1.278,
+              "detached_start": 25.261,
+              "worker_lifetime": 20.765,
+              "result_collection": 13.598
+            },
+            "min_ms": 57.984,
+            "max_ms": 64.269
+          },
+          "fast_path": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 10,
+            "p50_ms": 58.526,
+            "p95_ms": 59.909,
+            "p99_ms": 60.425,
+            "stddev_ms": 2.866,
+            "phase_p50_ms": {
+              "admission": 1.246,
+              "detached_start": 25.59,
+              "worker_lifetime": 20.52,
+              "result_collection": 10.548
+            },
+            "min_ms": 49.707,
+            "max_ms": 60.554
+          }
+        },
+        "samples": {
+          "legacy": [
+            {
+              "elapsed_ms": 63.124,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.958,
+              "phases_ms": {
+                "admission": 1.358,
+                "detached_start": 26.552,
+                "worker_lifetime": 21.714,
+                "result_collection": 13.5
+              }
+            },
+            {
+              "elapsed_ms": 61.031,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.684,
+              "phases_ms": {
+                "admission": 1.223,
+                "detached_start": 25.804,
+                "worker_lifetime": 20.657,
+                "result_collection": 13.346
+              }
+            },
+            {
+              "elapsed_ms": 59.739,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.579,
+              "phases_ms": {
+                "admission": 1.203,
+                "detached_start": 25.218,
+                "worker_lifetime": 20.631,
+                "result_collection": 12.687
+              }
+            },
+            {
+              "elapsed_ms": 57.984,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.778,
+              "phases_ms": {
+                "admission": 1.251,
+                "detached_start": 25.304,
+                "worker_lifetime": 20.79,
+                "result_collection": 10.639
+              }
+            },
+            {
+              "elapsed_ms": 61.177,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.831,
+              "phases_ms": {
+                "admission": 1.238,
+                "detached_start": 25.162,
+                "worker_lifetime": 20.627,
+                "result_collection": 14.15
+              }
+            },
+            {
+              "elapsed_ms": 64.269,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.947,
+              "phases_ms": {
+                "admission": 1.354,
+                "detached_start": 24.985,
+                "worker_lifetime": 21.899,
+                "result_collection": 16.031
+              }
+            },
+            {
+              "elapsed_ms": 62.37,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.286,
+              "phases_ms": {
+                "admission": 1.114,
+                "detached_start": 25.912,
+                "worker_lifetime": 22.365,
+                "result_collection": 12.979
+              }
+            },
+            {
+              "elapsed_ms": 62.385,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.943,
+              "phases_ms": {
+                "admission": 1.326,
+                "detached_start": 25.618,
+                "worker_lifetime": 20.74,
+                "result_collection": 14.7
+              }
+            },
+            {
+              "elapsed_ms": 61.001,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.992,
+              "phases_ms": {
+                "admission": 1.388,
+                "detached_start": 25.194,
+                "worker_lifetime": 20.722,
+                "result_collection": 13.696
+              }
+            },
+            {
+              "elapsed_ms": 62.984,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.883,
+              "phases_ms": {
+                "admission": 1.305,
+                "detached_start": 24.85,
+                "worker_lifetime": 21.337,
+                "result_collection": 15.492
+              }
+            }
+          ],
+          "fast_path": [
+            {
+              "elapsed_ms": 58.741,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 58.739,
+              "phases_ms": {
+                "admission": 1.272,
+                "detached_start": 24.846,
+                "worker_lifetime": 20.125,
+                "result_collection": 12.498
+              }
+            },
+            {
+              "elapsed_ms": 58.31,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 58.308,
+              "phases_ms": {
+                "admission": 1.365,
+                "detached_start": 25.724,
+                "worker_lifetime": 20.444,
+                "result_collection": 10.777
+              }
+            },
+            {
+              "elapsed_ms": 58.822,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 58.82,
+              "phases_ms": {
+                "admission": 1.259,
+                "detached_start": 25.245,
+                "worker_lifetime": 20.534,
+                "result_collection": 11.784
+              }
+            },
+            {
+              "elapsed_ms": 59.12,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 59.116,
+              "phases_ms": {
+                "admission": 1.212,
+                "detached_start": 25.58,
+                "worker_lifetime": 20.073,
+                "result_collection": 12.255
+              }
+            },
+            {
+              "elapsed_ms": 60.554,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 60.552,
+              "phases_ms": {
+                "admission": 1.625,
+                "detached_start": 28.826,
+                "worker_lifetime": 22.877,
+                "result_collection": 7.225
+              }
+            },
+            {
+              "elapsed_ms": 49.707,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 49.704,
+              "phases_ms": {
+                "admission": 1.149,
+                "detached_start": 25.601,
+                "worker_lifetime": 20.471,
+                "result_collection": 2.486
+              }
+            },
+            {
+              "elapsed_ms": 57.493,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 57.49,
+              "phases_ms": {
+                "admission": 1.211,
+                "detached_start": 25.256,
+                "worker_lifetime": 20.707,
+                "result_collection": 10.319
+              }
+            },
+            {
+              "elapsed_ms": 58.758,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 58.754,
+              "phases_ms": {
+                "admission": 1.24,
+                "detached_start": 24.681,
+                "worker_lifetime": 20.507,
+                "result_collection": 12.329
+              }
+            },
+            {
+              "elapsed_ms": 56.983,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 56.98,
+              "phases_ms": {
+                "admission": 1.252,
+                "detached_start": 29.467,
+                "worker_lifetime": 21.977,
+                "result_collection": 4.287
+              }
+            },
+            {
+              "elapsed_ms": 55.561,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 55.559,
+              "phases_ms": {
+                "admission": 1.231,
+                "detached_start": 26.634,
+                "worker_lifetime": 23.117,
+                "result_collection": 4.579
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 2,
+      "variant": "candidate",
+      "report": {
+        "method": "same Mac/direct-local Engine; 30+ runs recommended",
+        "isolated_browser": true,
+        "physical_keyboard_mouse_used": false,
+        "trials_per_method": 10,
+        "warmups_per_method": 3,
+        "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+        "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+        "phase_clock": "worker wall timestamps; end-to-end elapsed uses monotonic perf_counter",
+        "summary": {
+          "legacy": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 0,
+            "p50_ms": 62.682,
+            "p95_ms": 72.296,
+            "p99_ms": 77.221,
+            "stddev_ms": 5.065,
+            "phase_p50_ms": {
+              "admission": 1.328,
+              "detached_start": 27.244,
+              "worker_lifetime": 23.097,
+              "result_collection": 9.822
+            },
+            "min_ms": 59.824,
+            "max_ms": 78.452
+          },
+          "fast_path": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 10,
+            "p50_ms": 59.686,
+            "p95_ms": 67.316,
+            "p99_ms": 71.794,
+            "stddev_ms": 4.055,
+            "phase_p50_ms": {
+              "admission": 1.252,
+              "detached_start": 26.651,
+              "worker_lifetime": 23.099,
+              "result_collection": 7.405
+            },
+            "min_ms": 58.757,
+            "max_ms": 72.913
+          }
+        },
+        "samples": {
+          "legacy": [
+            {
+              "elapsed_ms": 78.452,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.087,
+              "phases_ms": {
+                "admission": 1.345,
+                "detached_start": 27.821,
+                "worker_lifetime": 37.124,
+                "result_collection": 12.162
+              }
+            },
+            {
+              "elapsed_ms": 63.754,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.934,
+              "phases_ms": {
+                "admission": 2.372,
+                "detached_start": 28.34,
+                "worker_lifetime": 23.914,
+                "result_collection": 9.128
+              }
+            },
+            {
+              "elapsed_ms": 62.766,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.886,
+              "phases_ms": {
+                "admission": 1.32,
+                "detached_start": 26.35,
+                "worker_lifetime": 22.925,
+                "result_collection": 12.171
+              }
+            },
+            {
+              "elapsed_ms": 61.289,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.864,
+              "phases_ms": {
+                "admission": 1.335,
+                "detached_start": 27.153,
+                "worker_lifetime": 22.206,
+                "result_collection": 10.596
+              }
+            },
+            {
+              "elapsed_ms": 61.944,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.597,
+              "phases_ms": {
+                "admission": 1.233,
+                "detached_start": 27.336,
+                "worker_lifetime": 22.858,
+                "result_collection": 10.516
+              }
+            },
+            {
+              "elapsed_ms": 59.824,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.796,
+              "phases_ms": {
+                "admission": 1.298,
+                "detached_start": 26.764,
+                "worker_lifetime": 23.006,
+                "result_collection": 8.756
+              }
+            },
+            {
+              "elapsed_ms": 60.271,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.68,
+              "phases_ms": {
+                "admission": 1.345,
+                "detached_start": 26.614,
+                "worker_lifetime": 23.188,
+                "result_collection": 9.124
+              }
+            },
+            {
+              "elapsed_ms": 62.599,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.194,
+              "phases_ms": {
+                "admission": 1.224,
+                "detached_start": 28.371,
+                "worker_lifetime": 24.598,
+                "result_collection": 8.405
+              }
+            },
+            {
+              "elapsed_ms": 64.773,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.618,
+              "phases_ms": {
+                "admission": 1.274,
+                "detached_start": 27.869,
+                "worker_lifetime": 27.084,
+                "result_collection": 8.545
+              }
+            },
+            {
+              "elapsed_ms": 63.12,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.639,
+              "phases_ms": {
+                "admission": 1.389,
+                "detached_start": 26.879,
+                "worker_lifetime": 22.462,
+                "result_collection": 12.39
+              }
+            }
+          ],
+          "fast_path": [
+            {
+              "elapsed_ms": 59.552,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 59.549,
+              "phases_ms": {
+                "admission": 1.349,
+                "detached_start": 28.24,
+                "worker_lifetime": 22.727,
+                "result_collection": 7.236
+              }
+            },
+            {
+              "elapsed_ms": 58.758,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 58.756,
+              "phases_ms": {
+                "admission": 1.378,
+                "detached_start": 26.382,
+                "worker_lifetime": 24.965,
+                "result_collection": 6.033
+              }
+            },
+            {
+              "elapsed_ms": 59.473,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 59.47,
+              "phases_ms": {
+                "admission": 1.186,
+                "detached_start": 28.031,
+                "worker_lifetime": 22.789,
+                "result_collection": 7.466
+              }
+            },
+            {
+              "elapsed_ms": 59.82,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 59.814,
+              "phases_ms": {
+                "admission": 1.207,
+                "detached_start": 26.16,
+                "worker_lifetime": 22.829,
+                "result_collection": 9.623
+              }
+            },
+            {
+              "elapsed_ms": 60.009,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 60.006,
+              "phases_ms": {
+                "admission": 1.44,
+                "detached_start": 26.41,
+                "worker_lifetime": 21.872,
+                "result_collection": 10.286
+              }
+            },
+            {
+              "elapsed_ms": 58.821,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 58.819,
+              "phases_ms": {
+                "admission": 1.234,
+                "detached_start": 26.977,
+                "worker_lifetime": 23.267,
+                "result_collection": 7.343
+              }
+            },
+            {
+              "elapsed_ms": 60.09,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 60.085,
+              "phases_ms": {
+                "admission": 1.191,
+                "detached_start": 26.362,
+                "worker_lifetime": 22.93,
+                "result_collection": 9.607
+              }
+            },
+            {
+              "elapsed_ms": 60.475,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 60.47,
+              "phases_ms": {
+                "admission": 1.271,
+                "detached_start": 26.742,
+                "worker_lifetime": 25.683,
+                "result_collection": 6.779
+              }
+            },
+            {
+              "elapsed_ms": 72.913,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 72.908,
+              "phases_ms": {
+                "admission": 1.148,
+                "detached_start": 29.785,
+                "worker_lifetime": 27.592,
+                "result_collection": 14.387
+              }
+            },
+            {
+              "elapsed_ms": 58.757,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 58.754,
+              "phases_ms": {
+                "admission": 1.354,
+                "detached_start": 26.561,
+                "worker_lifetime": 28.519,
+                "result_collection": 2.322
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 2,
+      "variant": "baseline",
+      "report": {
+        "method": "same Mac/direct-local Engine; 30+ runs recommended",
+        "isolated_browser": true,
+        "physical_keyboard_mouse_used": false,
+        "trials_per_method": 10,
+        "warmups_per_method": 3,
+        "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+        "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+        "phase_clock": "worker wall timestamps; end-to-end elapsed uses monotonic perf_counter",
+        "summary": {
+          "legacy": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 0,
+            "p50_ms": 89.717,
+            "p95_ms": 91.043,
+            "p99_ms": 91.215,
+            "stddev_ms": 4.966,
+            "phase_p50_ms": {
+              "admission": 1.313,
+              "detached_start": 26.367,
+              "worker_lifetime": 47.835,
+              "result_collection": 14.61
+            },
+            "min_ms": 76.776,
+            "max_ms": 91.258
+          },
+          "fast_path": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 10,
+            "p50_ms": 97.698,
+            "p95_ms": 98.54,
+            "p99_ms": 98.756,
+            "stddev_ms": 0.954,
+            "phase_p50_ms": {
+              "admission": 1.32,
+              "detached_start": 26.213,
+              "worker_lifetime": 48.166,
+              "result_collection": 21.931
+            },
+            "min_ms": 96.068,
+            "max_ms": 98.81
+          }
+        },
+        "samples": {
+          "legacy": [
+            {
+              "elapsed_ms": 76.776,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.893,
+              "phases_ms": {
+                "admission": 1.436,
+                "detached_start": 26.373,
+                "worker_lifetime": 46.372,
+                "result_collection": 2.595
+              }
+            },
+            {
+              "elapsed_ms": 78.66,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.332,
+              "phases_ms": {
+                "admission": 1.31,
+                "detached_start": 26.227,
+                "worker_lifetime": 47.561,
+                "result_collection": 3.562
+              }
+            },
+            {
+              "elapsed_ms": 90.781,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.068,
+              "phases_ms": {
+                "admission": 1.319,
+                "detached_start": 26.42,
+                "worker_lifetime": 48.514,
+                "result_collection": 14.528
+              }
+            },
+            {
+              "elapsed_ms": 89.445,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.826,
+              "phases_ms": {
+                "admission": 1.253,
+                "detached_start": 26.259,
+                "worker_lifetime": 46.488,
+                "result_collection": 15.444
+              }
+            },
+            {
+              "elapsed_ms": 88.085,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.948,
+              "phases_ms": {
+                "admission": 1.239,
+                "detached_start": 26.624,
+                "worker_lifetime": 48.296,
+                "result_collection": 11.926
+              }
+            },
+            {
+              "elapsed_ms": 90.472,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.811,
+              "phases_ms": {
+                "admission": 1.428,
+                "detached_start": 26.244,
+                "worker_lifetime": 48.109,
+                "result_collection": 14.692
+              }
+            },
+            {
+              "elapsed_ms": 89.989,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.623,
+              "phases_ms": {
+                "admission": 1.169,
+                "detached_start": 26.283,
+                "worker_lifetime": 48.46,
+                "result_collection": 14.076
+              }
+            },
+            {
+              "elapsed_ms": 89.015,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.036,
+              "phases_ms": {
+                "admission": 1.316,
+                "detached_start": 26.375,
+                "worker_lifetime": 45.028,
+                "result_collection": 16.296
+              }
+            },
+            {
+              "elapsed_ms": 91.258,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.905,
+              "phases_ms": {
+                "admission": 1.333,
+                "detached_start": 26.361,
+                "worker_lifetime": 48.195,
+                "result_collection": 15.37
+              }
+            },
+            {
+              "elapsed_ms": 90.174,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.86,
+              "phases_ms": {
+                "admission": 1.262,
+                "detached_start": 26.386,
+                "worker_lifetime": 46.602,
+                "result_collection": 15.924
+              }
+            }
+          ],
+          "fast_path": [
+            {
+              "elapsed_ms": 98.81,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 98.808,
+              "phases_ms": {
+                "admission": 1.314,
+                "detached_start": 26.784,
+                "worker_lifetime": 48.44,
+                "result_collection": 22.271
+              }
+            },
+            {
+              "elapsed_ms": 98.21,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 98.206,
+              "phases_ms": {
+                "admission": 1.345,
+                "detached_start": 25.98,
+                "worker_lifetime": 48.106,
+                "result_collection": 22.778
+              }
+            },
+            {
+              "elapsed_ms": 97.926,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 97.924,
+              "phases_ms": {
+                "admission": 1.396,
+                "detached_start": 26.216,
+                "worker_lifetime": 48.195,
+                "result_collection": 22.118
+              }
+            },
+            {
+              "elapsed_ms": 97.83,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 97.825,
+              "phases_ms": {
+                "admission": 1.159,
+                "detached_start": 25.821,
+                "worker_lifetime": 48.137,
+                "result_collection": 22.713
+              }
+            },
+            {
+              "elapsed_ms": 96.182,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 96.179,
+              "phases_ms": {
+                "admission": 1.361,
+                "detached_start": 26.21,
+                "worker_lifetime": 48.383,
+                "result_collection": 20.227
+              }
+            },
+            {
+              "elapsed_ms": 97.667,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 97.664,
+              "phases_ms": {
+                "admission": 1.134,
+                "detached_start": 26.233,
+                "worker_lifetime": 48.06,
+                "result_collection": 22.239
+              }
+            },
+            {
+              "elapsed_ms": 97.73,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 97.727,
+              "phases_ms": {
+                "admission": 1.326,
+                "detached_start": 26.154,
+                "worker_lifetime": 48.505,
+                "result_collection": 21.745
+              }
+            },
+            {
+              "elapsed_ms": 96.402,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 96.392,
+              "phases_ms": {
+                "admission": 1.205,
+                "detached_start": 25.96,
+                "worker_lifetime": 47.601,
+                "result_collection": 21.635
+              }
+            },
+            {
+              "elapsed_ms": 96.068,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 96.059,
+              "phases_ms": {
+                "admission": 1.276,
+                "detached_start": 27.075,
+                "worker_lifetime": 48.635,
+                "result_collection": 19.081
+              }
+            },
+            {
+              "elapsed_ms": 96.106,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 96.104,
+              "phases_ms": {
+                "admission": 1.369,
+                "detached_start": 26.995,
+                "worker_lifetime": 48.118,
+                "result_collection": 19.624
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 3,
+      "variant": "baseline",
+      "report": {
+        "method": "same Mac/direct-local Engine; 30+ runs recommended",
+        "isolated_browser": true,
+        "physical_keyboard_mouse_used": false,
+        "trials_per_method": 10,
+        "warmups_per_method": 3,
+        "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+        "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+        "phase_clock": "worker wall timestamps; end-to-end elapsed uses monotonic perf_counter",
+        "summary": {
+          "legacy": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 0,
+            "p50_ms": 90.258,
+            "p95_ms": 92.091,
+            "p99_ms": 92.511,
+            "stddev_ms": 5.017,
+            "phase_p50_ms": {
+              "admission": 1.332,
+              "detached_start": 26.773,
+              "worker_lifetime": 48.239,
+              "result_collection": 14.404
+            },
+            "min_ms": 77.214,
+            "max_ms": 92.616
+          },
+          "fast_path": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 10,
+            "p50_ms": 96.525,
+            "p95_ms": 98.472,
+            "p99_ms": 98.63,
+            "stddev_ms": 1.358,
+            "phase_p50_ms": {
+              "admission": 1.361,
+              "detached_start": 26.321,
+              "worker_lifetime": 48.435,
+              "result_collection": 21.022
+            },
+            "min_ms": 94.281,
+            "max_ms": 98.669
+          }
+        },
+        "samples": {
+          "legacy": [
+            {
+              "elapsed_ms": 90.794,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.026,
+              "phases_ms": {
+                "admission": 1.404,
+                "detached_start": 26.518,
+                "worker_lifetime": 48.348,
+                "result_collection": 14.524
+              }
+            },
+            {
+              "elapsed_ms": 90.356,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.668,
+              "phases_ms": {
+                "admission": 1.22,
+                "detached_start": 26.42,
+                "worker_lifetime": 48.261,
+                "result_collection": 14.455
+              }
+            },
+            {
+              "elapsed_ms": 90.16,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.046,
+              "phases_ms": {
+                "admission": 1.39,
+                "detached_start": 26.85,
+                "worker_lifetime": 46.118,
+                "result_collection": 15.801
+              }
+            },
+            {
+              "elapsed_ms": 79.686,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 6.429,
+              "phases_ms": {
+                "admission": 1.444,
+                "detached_start": 27.857,
+                "worker_lifetime": 47.047,
+                "result_collection": 3.338
+              }
+            },
+            {
+              "elapsed_ms": 85.35,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.754,
+              "phases_ms": {
+                "admission": 1.282,
+                "detached_start": 26.501,
+                "worker_lifetime": 48.454,
+                "result_collection": 9.113
+              }
+            },
+            {
+              "elapsed_ms": 77.214,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.082,
+              "phases_ms": {
+                "admission": 1.382,
+                "detached_start": 26.747,
+                "worker_lifetime": 46.124,
+                "result_collection": 2.962
+              }
+            },
+            {
+              "elapsed_ms": 88.825,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.186,
+              "phases_ms": {
+                "admission": 1.437,
+                "detached_start": 30.784,
+                "worker_lifetime": 48.23,
+                "result_collection": 8.374
+              }
+            },
+            {
+              "elapsed_ms": 92.616,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 6.077,
+              "phases_ms": {
+                "admission": 1.186,
+                "detached_start": 30.516,
+                "worker_lifetime": 46.377,
+                "result_collection": 14.536
+              }
+            },
+            {
+              "elapsed_ms": 90.839,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.894,
+              "phases_ms": {
+                "admission": 1.24,
+                "detached_start": 26.799,
+                "worker_lifetime": 48.446,
+                "result_collection": 14.353
+              }
+            },
+            {
+              "elapsed_ms": 91.45,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.892,
+              "phases_ms": {
+                "admission": 1.27,
+                "detached_start": 26.709,
+                "worker_lifetime": 48.249,
+                "result_collection": 15.222
+              }
+            }
+          ],
+          "fast_path": [
+            {
+              "elapsed_ms": 96.012,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 96.011,
+              "phases_ms": {
+                "admission": 1.439,
+                "detached_start": 26.407,
+                "worker_lifetime": 49.12,
+                "result_collection": 19.045
+              }
+            },
+            {
+              "elapsed_ms": 96.021,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 96.018,
+              "phases_ms": {
+                "admission": 1.354,
+                "detached_start": 26.316,
+                "worker_lifetime": 48.327,
+                "result_collection": 20.024
+              }
+            },
+            {
+              "elapsed_ms": 97.469,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 97.466,
+              "phases_ms": {
+                "admission": 1.163,
+                "detached_start": 26.29,
+                "worker_lifetime": 43.307,
+                "result_collection": 26.709
+              }
+            },
+            {
+              "elapsed_ms": 94.518,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 94.514,
+              "phases_ms": {
+                "admission": 1.392,
+                "detached_start": 26.189,
+                "worker_lifetime": 48.775,
+                "result_collection": 18.162
+              }
+            },
+            {
+              "elapsed_ms": 96.235,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 96.232,
+              "phases_ms": {
+                "admission": 1.362,
+                "detached_start": 26.275,
+                "worker_lifetime": 45.092,
+                "result_collection": 23.505
+              }
+            },
+            {
+              "elapsed_ms": 98.669,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 98.667,
+              "phases_ms": {
+                "admission": 1.361,
+                "detached_start": 26.722,
+                "worker_lifetime": 48.604,
+                "result_collection": 21.981
+              }
+            },
+            {
+              "elapsed_ms": 94.281,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 94.277,
+              "phases_ms": {
+                "admission": 1.387,
+                "detached_start": 26.339,
+                "worker_lifetime": 48.545,
+                "result_collection": 18.01
+              }
+            },
+            {
+              "elapsed_ms": 96.816,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 96.813,
+              "phases_ms": {
+                "admission": 1.204,
+                "detached_start": 26.38,
+                "worker_lifetime": 48.069,
+                "result_collection": 21.163
+              }
+            },
+            {
+              "elapsed_ms": 98.232,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 98.228,
+              "phases_ms": {
+                "admission": 1.284,
+                "detached_start": 26.265,
+                "worker_lifetime": 48.419,
+                "result_collection": 22.263
+              }
+            },
+            {
+              "elapsed_ms": 97.064,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 97.061,
+              "phases_ms": {
+                "admission": 1.405,
+                "detached_start": 26.326,
+                "worker_lifetime": 48.452,
+                "result_collection": 20.881
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 3,
+      "variant": "candidate",
+      "report": {
+        "method": "same Mac/direct-local Engine; 30+ runs recommended",
+        "isolated_browser": true,
+        "physical_keyboard_mouse_used": false,
+        "trials_per_method": 10,
+        "warmups_per_method": 3,
+        "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+        "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+        "phase_clock": "worker wall timestamps; end-to-end elapsed uses monotonic perf_counter",
+        "summary": {
+          "legacy": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 0,
+            "p50_ms": 65.4,
+            "p95_ms": 69.174,
+            "p99_ms": 70.64,
+            "stddev_ms": 1.937,
+            "phase_p50_ms": {
+              "admission": 1.401,
+              "detached_start": 28.546,
+              "worker_lifetime": 23.051,
+              "result_collection": 11.168
+            },
+            "min_ms": 63.407,
+            "max_ms": 71.007
+          },
+          "fast_path": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 10,
+            "p50_ms": 61.285,
+            "p95_ms": 63.053,
+            "p99_ms": 63.289,
+            "stddev_ms": 1.239,
+            "phase_p50_ms": {
+              "admission": 1.412,
+              "detached_start": 28.123,
+              "worker_lifetime": 23.312,
+              "result_collection": 7.537
+            },
+            "min_ms": 59.673,
+            "max_ms": 63.348
+          }
+        },
+        "samples": {
+          "legacy": [
+            {
+              "elapsed_ms": 66.934,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 6.946,
+              "phases_ms": {
+                "admission": 1.559,
+                "detached_start": 29.145,
+                "worker_lifetime": 22.964,
+                "result_collection": 13.266
+              }
+            },
+            {
+              "elapsed_ms": 65.949,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 6.029,
+              "phases_ms": {
+                "admission": 1.327,
+                "detached_start": 28.096,
+                "worker_lifetime": 23.139,
+                "result_collection": 13.387
+              }
+            },
+            {
+              "elapsed_ms": 71.007,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 10.439,
+              "phases_ms": {
+                "admission": 4.488,
+                "detached_start": 36.173,
+                "worker_lifetime": 23.696,
+                "result_collection": 6.651
+              }
+            },
+            {
+              "elapsed_ms": 65.087,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.882,
+              "phases_ms": {
+                "admission": 1.325,
+                "detached_start": 28.151,
+                "worker_lifetime": 22.899,
+                "result_collection": 12.712
+              }
+            },
+            {
+              "elapsed_ms": 64.606,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 6.291,
+              "phases_ms": {
+                "admission": 1.485,
+                "detached_start": 28.147,
+                "worker_lifetime": 22.09,
+                "result_collection": 12.884
+              }
+            },
+            {
+              "elapsed_ms": 63.407,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 6.497,
+              "phases_ms": {
+                "admission": 1.426,
+                "detached_start": 27.482,
+                "worker_lifetime": 24.807,
+                "result_collection": 9.693
+              }
+            },
+            {
+              "elapsed_ms": 65.694,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.677,
+              "phases_ms": {
+                "admission": 1.312,
+                "detached_start": 28.94,
+                "worker_lifetime": 26.942,
+                "result_collection": 8.501
+              }
+            },
+            {
+              "elapsed_ms": 65.722,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.17,
+              "phases_ms": {
+                "admission": 1.216,
+                "detached_start": 32.209,
+                "worker_lifetime": 22.626,
+                "result_collection": 9.671
+              }
+            },
+            {
+              "elapsed_ms": 65.107,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.739,
+              "phases_ms": {
+                "admission": 1.477,
+                "detached_start": 29.113,
+                "worker_lifetime": 25.229,
+                "result_collection": 9.289
+              }
+            },
+            {
+              "elapsed_ms": 64.833,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 6.298,
+              "phases_ms": {
+                "admission": 1.377,
+                "detached_start": 27.998,
+                "worker_lifetime": 22.813,
+                "result_collection": 12.644
+              }
+            }
+          ],
+          "fast_path": [
+            {
+              "elapsed_ms": 59.977,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 59.975,
+              "phases_ms": {
+                "admission": 1.281,
+                "detached_start": 26.78,
+                "worker_lifetime": 24.894,
+                "result_collection": 7.022
+              }
+            },
+            {
+              "elapsed_ms": 60.412,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 60.41,
+              "phases_ms": {
+                "admission": 1.472,
+                "detached_start": 28.455,
+                "worker_lifetime": 22.691,
+                "result_collection": 7.794
+              }
+            },
+            {
+              "elapsed_ms": 63.348,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 63.345,
+              "phases_ms": {
+                "admission": 1.455,
+                "detached_start": 28.096,
+                "worker_lifetime": 27.957,
+                "result_collection": 5.839
+              }
+            },
+            {
+              "elapsed_ms": 59.673,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 59.669,
+              "phases_ms": {
+                "admission": 1.326,
+                "detached_start": 27.989,
+                "worker_lifetime": 23.079,
+                "result_collection": 7.279
+              }
+            },
+            {
+              "elapsed_ms": 61.322,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 61.32,
+              "phases_ms": {
+                "admission": 1.505,
+                "detached_start": 26.835,
+                "worker_lifetime": 22.919,
+                "result_collection": 10.063
+              }
+            },
+            {
+              "elapsed_ms": 61.617,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 61.614,
+              "phases_ms": {
+                "admission": 1.368,
+                "detached_start": 28.15,
+                "worker_lifetime": 22.654,
+                "result_collection": 9.444
+              }
+            },
+            {
+              "elapsed_ms": 62.693,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 62.689,
+              "phases_ms": {
+                "admission": 1.49,
+                "detached_start": 29.027,
+                "worker_lifetime": 23.546,
+                "result_collection": 8.629
+              }
+            },
+            {
+              "elapsed_ms": 59.792,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 59.788,
+              "phases_ms": {
+                "admission": 1.507,
+                "detached_start": 27.811,
+                "worker_lifetime": 23.875,
+                "result_collection": 6.599
+              }
+            },
+            {
+              "elapsed_ms": 62.588,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 62.584,
+              "phases_ms": {
+                "admission": 1.33,
+                "detached_start": 28.397,
+                "worker_lifetime": 22.374,
+                "result_collection": 10.486
+              }
+            },
+            {
+              "elapsed_ms": 61.247,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 61.245,
+              "phases_ms": {
+                "admission": 1.331,
+                "detached_start": 28.85,
+                "worker_lifetime": 26.256,
+                "result_collection": 4.81
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 4,
+      "variant": "candidate",
+      "report": {
+        "method": "same Mac/direct-local Engine; 30+ runs recommended",
+        "isolated_browser": true,
+        "physical_keyboard_mouse_used": false,
+        "trials_per_method": 10,
+        "warmups_per_method": 3,
+        "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+        "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+        "phase_clock": "worker wall timestamps; end-to-end elapsed uses monotonic perf_counter",
+        "summary": {
+          "legacy": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 0,
+            "p50_ms": 64.996,
+            "p95_ms": 79.734,
+            "p99_ms": 82.512,
+            "stddev_ms": 6.35,
+            "phase_p50_ms": {
+              "admission": 1.337,
+              "detached_start": 29.295,
+              "worker_lifetime": 24.05,
+              "result_collection": 11.582
+            },
+            "min_ms": 62.524,
+            "max_ms": 83.206
+          },
+          "fast_path": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 10,
+            "p50_ms": 60.28,
+            "p95_ms": 72.662,
+            "p99_ms": 77.873,
+            "stddev_ms": 6.157,
+            "phase_p50_ms": {
+              "admission": 1.34,
+              "detached_start": 27.279,
+              "worker_lifetime": 22.41,
+              "result_collection": 9.253
+            },
+            "min_ms": 56.196,
+            "max_ms": 79.176
+          }
+        },
+        "samples": {
+          "legacy": [
+            {
+              "elapsed_ms": 64.568,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.956,
+              "phases_ms": {
+                "admission": 1.35,
+                "detached_start": 27.071,
+                "worker_lifetime": 22.733,
+                "result_collection": 13.415
+              }
+            },
+            {
+              "elapsed_ms": 67.555,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 6.347,
+              "phases_ms": {
+                "admission": 1.314,
+                "detached_start": 28.953,
+                "worker_lifetime": 24.178,
+                "result_collection": 13.11
+              }
+            },
+            {
+              "elapsed_ms": 64.315,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.168,
+              "phases_ms": {
+                "admission": 1.42,
+                "detached_start": 26.649,
+                "worker_lifetime": 22.114,
+                "result_collection": 14.132
+              }
+            },
+            {
+              "elapsed_ms": 62.649,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.102,
+              "phases_ms": {
+                "admission": 1.273,
+                "detached_start": 27.154,
+                "worker_lifetime": 21.888,
+                "result_collection": 12.335
+              }
+            },
+            {
+              "elapsed_ms": 62.524,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.738,
+              "phases_ms": {
+                "admission": 1.166,
+                "detached_start": 29.637,
+                "worker_lifetime": 22.863,
+                "result_collection": 8.858
+              }
+            },
+            {
+              "elapsed_ms": 75.49,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.796,
+              "phases_ms": {
+                "admission": 1.89,
+                "detached_start": 35.648,
+                "worker_lifetime": 27.124,
+                "result_collection": 10.828
+              }
+            },
+            {
+              "elapsed_ms": 69.004,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 6.482,
+              "phases_ms": {
+                "admission": 1.318,
+                "detached_start": 30.182,
+                "worker_lifetime": 29.684,
+                "result_collection": 7.821
+              }
+            },
+            {
+              "elapsed_ms": 65.425,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 6.797,
+              "phases_ms": {
+                "admission": 1.324,
+                "detached_start": 31.621,
+                "worker_lifetime": 25.692,
+                "result_collection": 6.789
+              }
+            },
+            {
+              "elapsed_ms": 83.206,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.811,
+              "phases_ms": {
+                "admission": 1.353,
+                "detached_start": 36.529,
+                "worker_lifetime": 28.975,
+                "result_collection": 16.35
+              }
+            },
+            {
+              "elapsed_ms": 63.042,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.039,
+              "phases_ms": {
+                "admission": 1.389,
+                "detached_start": 28.401,
+                "worker_lifetime": 23.922,
+                "result_collection": 9.33
+              }
+            }
+          ],
+          "fast_path": [
+            {
+              "elapsed_ms": 60.277,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 60.274,
+              "phases_ms": {
+                "admission": 1.364,
+                "detached_start": 26.273,
+                "worker_lifetime": 22.067,
+                "result_collection": 10.572
+              }
+            },
+            {
+              "elapsed_ms": 59.539,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 59.536,
+              "phases_ms": {
+                "admission": 1.241,
+                "detached_start": 26.954,
+                "worker_lifetime": 21.54,
+                "result_collection": 9.804
+              }
+            },
+            {
+              "elapsed_ms": 64.7,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 64.698,
+              "phases_ms": {
+                "admission": 1.337,
+                "detached_start": 29.134,
+                "worker_lifetime": 22.381,
+                "result_collection": 11.847
+              }
+            },
+            {
+              "elapsed_ms": 57.298,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 57.294,
+              "phases_ms": {
+                "admission": 1.252,
+                "detached_start": 26.528,
+                "worker_lifetime": 22.093,
+                "result_collection": 7.424
+              }
+            },
+            {
+              "elapsed_ms": 59.747,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 59.745,
+              "phases_ms": {
+                "admission": 1.343,
+                "detached_start": 25.863,
+                "worker_lifetime": 21.658,
+                "result_collection": 10.883
+              }
+            },
+            {
+              "elapsed_ms": 56.196,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 56.193,
+              "phases_ms": {
+                "admission": 1.169,
+                "detached_start": 26.214,
+                "worker_lifetime": 22.438,
+                "result_collection": 6.374
+              }
+            },
+            {
+              "elapsed_ms": 64.01,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 64.006,
+              "phases_ms": {
+                "admission": 1.464,
+                "detached_start": 28.394,
+                "worker_lifetime": 26.043,
+                "result_collection": 8.109
+              }
+            },
+            {
+              "elapsed_ms": 79.176,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 79.172,
+              "phases_ms": {
+                "admission": 2.793,
+                "detached_start": 42.423,
+                "worker_lifetime": 25.16,
+                "result_collection": 8.799
+              }
+            },
+            {
+              "elapsed_ms": 60.283,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 60.277,
+              "phases_ms": {
+                "admission": 1.191,
+                "detached_start": 29.514,
+                "worker_lifetime": 26.539,
+                "result_collection": 3.038
+              }
+            },
+            {
+              "elapsed_ms": 61.251,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 61.248,
+              "phases_ms": {
+                "admission": 1.444,
+                "detached_start": 27.603,
+                "worker_lifetime": 22.496,
+                "result_collection": 9.708
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 4,
+      "variant": "baseline",
+      "report": {
+        "method": "same Mac/direct-local Engine; 30+ runs recommended",
+        "isolated_browser": true,
+        "physical_keyboard_mouse_used": false,
+        "trials_per_method": 10,
+        "warmups_per_method": 3,
+        "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+        "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+        "phase_clock": "worker wall timestamps; end-to-end elapsed uses monotonic perf_counter",
+        "summary": {
+          "legacy": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 0,
+            "p50_ms": 84.278,
+            "p95_ms": 90.322,
+            "p99_ms": 90.334,
+            "stddev_ms": 6.413,
+            "phase_p50_ms": {
+              "admission": 1.295,
+              "detached_start": 27.08,
+              "worker_lifetime": 45.865,
+              "result_collection": 6.17
+            },
+            "min_ms": 74.764,
+            "max_ms": 90.337
+          },
+          "fast_path": {
+            "runs": 10,
+            "correct": 10,
+            "failures": 0,
+            "first_call_completed": 10,
+            "p50_ms": 96.359,
+            "p95_ms": 101.756,
+            "p99_ms": 103.237,
+            "stddev_ms": 3.037,
+            "phase_p50_ms": {
+              "admission": 1.3,
+              "detached_start": 26.579,
+              "worker_lifetime": 48.389,
+              "result_collection": 20.826
+            },
+            "min_ms": 92.913,
+            "max_ms": 103.607
+          }
+        },
+        "samples": {
+          "legacy": [
+            {
+              "elapsed_ms": 90.337,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.106,
+              "phases_ms": {
+                "admission": 1.389,
+                "detached_start": 26.867,
+                "worker_lifetime": 49.062,
+                "result_collection": 13.019
+              }
+            },
+            {
+              "elapsed_ms": 76.157,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.811,
+              "phases_ms": {
+                "admission": 1.287,
+                "detached_start": 26.6,
+                "worker_lifetime": 43.294,
+                "result_collection": 4.977
+              }
+            },
+            {
+              "elapsed_ms": 86.655,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.536,
+              "phases_ms": {
+                "admission": 1.713,
+                "detached_start": 28.425,
+                "worker_lifetime": 49.264,
+                "result_collection": 7.253
+              }
+            },
+            {
+              "elapsed_ms": 81.901,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.381,
+              "phases_ms": {
+                "admission": 1.381,
+                "detached_start": 27.81,
+                "worker_lifetime": 47.933,
+                "result_collection": 4.777
+              }
+            },
+            {
+              "elapsed_ms": 76.557,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.685,
+              "phases_ms": {
+                "admission": 1.239,
+                "detached_start": 26.822,
+                "worker_lifetime": 46.086,
+                "result_collection": 2.41
+              }
+            },
+            {
+              "elapsed_ms": 90.304,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.776,
+              "phases_ms": {
+                "admission": 1.299,
+                "detached_start": 27.02,
+                "worker_lifetime": 48.266,
+                "result_collection": 13.72
+              }
+            },
+            {
+              "elapsed_ms": 90.226,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.851,
+              "phases_ms": {
+                "admission": 1.228,
+                "detached_start": 28.108,
+                "worker_lifetime": 45.076,
+                "result_collection": 15.814
+              }
+            },
+            {
+              "elapsed_ms": 89.633,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.859,
+              "phases_ms": {
+                "admission": 1.268,
+                "detached_start": 27.14,
+                "worker_lifetime": 45.644,
+                "result_collection": 15.581
+              }
+            },
+            {
+              "elapsed_ms": 74.764,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 5.1,
+              "phases_ms": {
+                "admission": 1.388,
+                "detached_start": 27.481,
+                "worker_lifetime": 43.464,
+                "result_collection": 2.431
+              }
+            },
+            {
+              "elapsed_ms": 76.811,
+              "correct": true,
+              "first_call_completed": false,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 4.846,
+              "phases_ms": {
+                "admission": 1.291,
+                "detached_start": 26.378,
+                "worker_lifetime": 44.054,
+                "result_collection": 5.087
+              }
+            }
+          ],
+          "fast_path": [
+            {
+              "elapsed_ms": 99.493,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 99.491,
+              "phases_ms": {
+                "admission": 1.483,
+                "detached_start": 26.222,
+                "worker_lifetime": 49.28,
+                "result_collection": 22.507
+              }
+            },
+            {
+              "elapsed_ms": 98.306,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 98.303,
+              "phases_ms": {
+                "admission": 1.499,
+                "detached_start": 26.586,
+                "worker_lifetime": 45.5,
+                "result_collection": 24.721
+              }
+            },
+            {
+              "elapsed_ms": 93.62,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 93.617,
+              "phases_ms": {
+                "admission": 1.378,
+                "detached_start": 27.098,
+                "worker_lifetime": 48.22,
+                "result_collection": 16.923
+              }
+            },
+            {
+              "elapsed_ms": 92.913,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 92.909,
+              "phases_ms": {
+                "admission": 1.223,
+                "detached_start": 27.324,
+                "worker_lifetime": 49.967,
+                "result_collection": 14.398
+              }
+            },
+            {
+              "elapsed_ms": 94.462,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 94.46,
+              "phases_ms": {
+                "admission": 1.294,
+                "detached_start": 27.647,
+                "worker_lifetime": 44.012,
+                "result_collection": 21.508
+              }
+            },
+            {
+              "elapsed_ms": 96.121,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 96.118,
+              "phases_ms": {
+                "admission": 1.252,
+                "detached_start": 26.459,
+                "worker_lifetime": 48.613,
+                "result_collection": 19.796
+              }
+            },
+            {
+              "elapsed_ms": 97.849,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 97.845,
+              "phases_ms": {
+                "admission": 1.121,
+                "detached_start": 26.572,
+                "worker_lifetime": 45.644,
+                "result_collection": 24.511
+              }
+            },
+            {
+              "elapsed_ms": 94.776,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 94.773,
+              "phases_ms": {
+                "admission": 1.259,
+                "detached_start": 26.45,
+                "worker_lifetime": 48.558,
+                "result_collection": 18.509
+              }
+            },
+            {
+              "elapsed_ms": 96.597,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 96.594,
+              "phases_ms": {
+                "admission": 1.306,
+                "detached_start": 26.406,
+                "worker_lifetime": 48.567,
+                "result_collection": 20.317
+              }
+            },
+            {
+              "elapsed_ms": 103.607,
+              "correct": true,
+              "first_call_completed": true,
+              "bytes": 13,
+              "state": "completed",
+              "first_call_ms": 103.604,
+              "phases_ms": {
+                "admission": 1.54,
+                "detached_start": 33.022,
+                "worker_lifetime": 47.71,
+                "result_collection": 21.335
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
