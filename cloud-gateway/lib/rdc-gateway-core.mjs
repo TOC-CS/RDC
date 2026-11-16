@@ -264,8 +264,15 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     // operation-status polling recovers this same observation without replay.
     if(name==='rdc_preview_open'||name==='rdc_preview_activity')return operationResult(op,env);
     const stop=clock()+Math.min(L.callWaitMs,name.startsWith('rdc_preview_')?L.previewWaitMs:L.callWaitMs);
+    let claimedFastProbes=0;
     while(op.state!=='completed'&&op.state!=='expired'&&op.state!=='unknown'&&clock()<stop){
-      await sleep(Math.min(L.pollStepMs,stop-clock()));
+      // Once the relay claims this operation, make at most three brief checks
+      // for a fast result upload. Do not accelerate queued/idle work, and fall
+      // back to the normal interval for longer-running commands.
+      const fastClaim=op.state==='claimed'&&claimedFastProbes<3;
+      const interval=fastClaim?Math.min(100,L.pollStepMs):L.pollStepMs;
+      if(fastClaim)claimedFastProbes++;
+      await sleep(Math.min(interval,stop-clock()));
       op=await getOperation(op.id,principal,env);
     }
     return operationResult(op,env);
