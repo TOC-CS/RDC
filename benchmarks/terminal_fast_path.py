@@ -6,6 +6,8 @@ deliberately excluded. Results are NOT a substitute for matched DC benchmarks.
 """
 import argparse
 import json
+import os
+import platform
 from pathlib import Path
 import random
 import statistics
@@ -19,7 +21,7 @@ from rdc.config import Settings
 from rdc.engine import Engine
 
 
-EXPECTED = "RDC-BENCH-OK\n"
+EXPECTED = "RDC-BENCH-OK" + os.linesep
 COMMAND = [sys.executable, "-c", "print('RDC-BENCH-OK')"]
 TERMINAL = {"completed", "failed", "timed_out", "cancelled", "interrupted"}
 
@@ -39,16 +41,22 @@ def summarize(rows):
     return {
         "runs": len(rows),
         "correct": sum(row["correct"] for row in rows),
+        "failures": sum(not row["correct"] for row in rows),
         "first_call_completed": sum(row["first_call_completed"] for row in rows),
         "p50_ms": round(statistics.median(times), 3),
         "p95_ms": round(percentile(times, 0.95), 3),
         "p99_ms": round(percentile(times, 0.99), 3),
+        "stddev_ms": round(statistics.pstdev(times), 3),
+        "phase_p50_ms": {
+            phase: round(statistics.median(row["phases_ms"][phase] for row in rows), 3)
+            for phase in rows[0]["phases_ms"]
+        },
         "min_ms": round(min(times), 3),
         "max_ms": round(max(times), 3),
     }
 
 
-def run_local(trials):
+def run_local(trials, warmups=3):
     with tempfile.TemporaryDirectory(prefix="rdc-bench-") as temp:
         root = Path(temp)
         engine = Engine(Settings(
@@ -67,18 +75,25 @@ def run_local(trials):
             raise RuntimeError("Benchmark job exceeded deadline")
 
         try:
-            methods = ["legacy", "fast_path"] * trials
-            random.Random(42).shuffle(methods)
+            rng = random.Random(42)
+            warmup_methods = ["legacy", "fast_path"] * warmups
+            measured_methods = ["legacy", "fast_path"] * trials
+            rng.shuffle(warmup_methods)
+            rng.shuffle(measured_methods)
+            schedule = [(method, True) for method in warmup_methods]
+            schedule += [(method, False) for method in measured_methods]
             counts = {"legacy": 0, "fast_path": 0}
-            for method in methods:
+            for method, warmup in schedule:
                 counts[method] += 1
                 arguments = {
                     "argv": COMMAND, "cwd": str(root),
                     "idempotency_key": method + "-" + str(counts[method]),
                 }
+                wall_start = time.time()
                 start = time.perf_counter()
                 if method == "legacy":
                     queued = engine.call("rdc_job_start", arguments)
+                    first_call_ms = (time.perf_counter() - start) * 1000
                     assert queued["ok"], queued
                     first_call_completed = False
                     job = finish(queued["job"]["id"], time.monotonic() + 12)
@@ -87,6 +102,7 @@ def run_local(trials):
                     response = engine.call("rdc_job_run", {
                         **arguments, "wait_ms": 3000, "output_limit": 16384,
                     })
+                    first_call_ms = (time.perf_counter() - start) * 1000
                     assert response["ok"], response
                     first_call_completed = response["complete"]
                     job = response["job"]
@@ -95,16 +111,29 @@ def run_local(trials):
                         job = finish(job["id"], time.monotonic() + 12)
                         output = engine.call("rdc_job_output", {"job_id": job["id"]})
                 elapsed = (time.perf_counter() - start) * 1000
+                wall_collected = time.time()
                 assert output.get("ok", True), output
                 text = output["text"]
                 correct = job["status"] == "completed" and job["exit_code"] == 0 and text == EXPECTED
-                rows[method].append({
+                row = {
                     "elapsed_ms": round(elapsed, 3),
                     "correct": correct,
                     "first_call_completed": first_call_completed,
                     "bytes": output["bytes_available"],
                     "state": job["status"],
-                })
+                    "first_call_ms": round(first_call_ms, 3),
+                    # Wall-clock phase samples can be affected by clock adjustment.
+                    # worker_lifetime includes spawn, capture, and supervision; it
+                    # is deliberately not labelled shell computation time.
+                    "phases_ms": {
+                        "admission": round((job["created_at"] - wall_start) * 1000, 3),
+                        "detached_start": round((job["started_at"] - job["created_at"]) * 1000, 3),
+                        "worker_lifetime": round((job["finished_at"] - job["started_at"]) * 1000, 3),
+                        "result_collection": round((wall_collected - job["finished_at"]) * 1000, 3),
+                    },
+                }
+                if not warmup:
+                    rows[method].append(row)
                 if not correct:
                     raise RuntimeError("Incorrect benchmark output for " + method)
         finally:
@@ -114,6 +143,10 @@ def run_local(trials):
         "isolated_browser": True,
         "physical_keyboard_mouse_used": False,
         "trials_per_method": trials,
+        "warmups_per_method": warmups,
+        "python": sys.version,
+        "platform": platform.platform(),
+        "phase_clock": "worker wall timestamps; end-to-end elapsed uses monotonic perf_counter",
         "summary": {name: summarize(values) for name, values in rows.items()},
         "samples": rows,
     }
@@ -122,11 +155,14 @@ def run_local(trials):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--trials", type=int, default=30)
+    parser.add_argument("--warmups", type=int, default=3)
     parser.add_argument("--output", type=Path)
     opts = parser.parse_args()
     if opts.trials < 3 or opts.trials > 1000:
         parser.error("trials must be 3 to 1000")
-    report = run_local(opts.trials)
+    if opts.warmups < 0 or opts.warmups > 100:
+        parser.error("warmups must be 0 to 100")
+    report = run_local(opts.trials, opts.warmups)
     payload = json.dumps(report, indent=2) + "\n"
     if opts.output:
         opts.output.parent.mkdir(parents=True, exist_ok=True)
