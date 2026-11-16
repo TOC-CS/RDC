@@ -42,3 +42,49 @@ Recorded November 16, 2026. **Preliminary smoke-test measurements, not release q
 - Terminal command execution and output readback: **smoke tested, working without manual input**.
 - Head-to-head speed target: **not met in preliminary samples**.
 - Comprehensive benchmarking, improvements, interactive terminal coverage and BandMates live acceptance: **OPEN**.
+
+
+## November 16 candidate: direct-local one-call benchmark
+
+Benchmark harness: benchmarks/terminal_fast_path.py, run with the RDC virtual environment's Python 3.14. Re-run in a clean source checkout:
+
+    python benchmarks/terminal_fast_path.py --trials 30 --output docs/releases/rdc-fastpath-local-benchmark-2026-11-16.json
+
+Data: docs/releases/rdc-fastpath-local-benchmark-2026-11-16.json. Balanced, deterministically shuffled, 30 real detached commands per method, executed against the same local Engine process and ephemeral SQLite job state. Exact stdout was checked for every invocation. No keyboard, mouse, application windows, private data or user desktop were accessed.
+
+| Metric | Existing start + status/output | New rdc_job_run single call |
+|---|---:|---:|
+| Runs | 30 | 30 |
+| Correct outputs | 30 | 30 |
+| p50 local end-to-end | 88.483 ms | 99.011 ms |
+| p95 local end-to-end | 93.319 ms | 100.357 ms |
+| p99 local end-to-end | 98.352 ms | 144.462 ms |
+| Completed within first local Engine.call | 0 (not applicable) | 30 |
+
+**Interpretation:** The new route is approximately 12% slower in this direct-local sample at p50; the test does not isolate the contribution of polling. It completes the local command and output inside one Engine.call, but whether that eliminates separate ChatGPT tool round trips depends on the deployed gateway, relay scheduling and provider timing. This measures only the local worker, not cloud network latency, gateway polling, message generation or Desktop Commander. The 2x owner target remains OPEN and requires at least 30 matched cloud DC/RDC measurements after the corresponding worker and gateway versions are installed. A future implementation may reduce durable worker startup and/or gateway-hop overhead, subject to exact-once/recovery safeguards.
+
+**Node/REA environment check:** Homebrew Node.js 24.22.3 with npm 11.19.1 was installed on the iMac and selected for new Bash and Zsh login shells. The original root-owned Node.js 24.21.0 binary was retained, and BandMates was not restarted. REA v6.9.0 starts and recognizes Node 24.22.3. The broader REA doctor audit still reports optional analysis engines and client registrations missing/drifting; no invasive provider setup or active app restarts were attempted.
+
+
+## Independent code-review findings and safety work
+
+A Codex read-only multi-agent review identified post-launch result failures that could lose the durable job ID, potentially blocking safe recovery. This candidate now includes focused tests and fixes for durable ID retention on failed result collection, zero-wait pending responses without unnecessary output I/O, regular-file-only output reading, consistent job/output status from a single snapshot, and inclusion of the fast-path operation in RDC activity. A separate gateway regression covers delivery of a simulated completed worker result within the initial cloud call.
+
+Outstanding: the gateway primary relay processes operations serially, so using the maximum 3000-ms inline wait can delay unrelated queued operations. Interactive and longer commands should continue using the durable job-start path or set wait_ms=0. This architectural limit and end-to-end cloud performance require actual deployment and concurrent workload tests.
+
+
+## Reviewed candidate rerun
+
+After the independent multi-agent code-review fixes, the full 356-worker/28-gateway test suites passed. A fresh balanced local benchmark, with 30 real commands per path, yielded:
+
+| Metric | Existing job path | Reviewed fast path |
+|---|---:|---:|
+| Correct outputs | 30/30 | 30/30 |
+| p50 | 96.106 ms | 108.336 ms |
+| p95 | 110.463 ms | 137.845 ms |
+| p99 | 111.592 ms | 166.166 ms |
+| First local Engine call completed with output | Not applicable | 30/30 |
+
+Raw timing evidence: docs/releases/rdc-fastpath-local-benchmark-reviewed-2026-11-16.json. The two runs occurred at different times and under different system loads; do not attribute the differences between runs to one code change. In this second run the fast path remained slower locally, and its value is conditional reduction of cloud/model round trips, not lower raw subprocess execution time. Live cloud measurements, concurrent relay behavior and comparison against Desktop Commander remain OPEN.
+
+The reviewed implementation preserves the original durable job ID if result collection fails after command dispatch, avoids immediate output I/O for zero-wait or timed-out active jobs, reads only regular output files without following symlinks, bounds reads by captured file size, synchronizes job/output status and includes the new tool in activity reporting. The gateway tests also simulate returning an actual completed job-shaped response within the initial cloud call.

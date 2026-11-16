@@ -98,6 +98,15 @@ class Engine:
                  {'argv':{'type':'array','minItems':1,'maxItems':256,'items':{'type':'string','maxLength':262144}},
                   'cwd':STRING,'timeout':{'type':'number','exclusiveMinimum':0,'maximum':604800},
                   'idempotency_key':{'type':'string','minLength':1,'maxLength':200}},['argv','cwd'],True,open_world=True),
+            tool('rdc_job_run','Run a short authorized terminal command with a bounded inline wait. '
+                 'Returns bounded output and exact exit status in this call if finished; '
+                 'otherwise returns the original durable job ID for later status/output, '
+                 'stdin, cancellation and recovery. Same approvals and permissions as job_start.',
+                 {'argv':{'type':'array','minItems':1,'maxItems':256,'items':{'type':'string','maxLength':262144}},
+                  'cwd':STRING,'timeout':{'type':'number','exclusiveMinimum':0,'maximum':604800},
+                  'idempotency_key':{'type':'string','minLength':1,'maxLength':200},
+                  'wait_ms':{'type':'integer','minimum':0,'maximum':3000},
+                  'output_limit':LIMIT},['argv','cwd'],True,open_world=True),
             tool('rdc_job_status','Read persistent job state and exit status.', {'job_id':JOB_ID},['job_id']),
             tool('rdc_job_output','Read a retained stdout/stderr log. offset=0 always means the beginning; offsets are bytes.',
                  {'job_id':JOB_ID,'offset':{'type':'integer','minimum':0},'limit':LIMIT},['job_id']),
@@ -140,7 +149,7 @@ class Engine:
         errors = sorted(self._validators[name].iter_errors(arguments),key=lambda e:str(e.path))
         if errors:
             raise RDCError('invalid_arguments',errors[0].message)
-        if name == 'rdc_job_start':
+        if name in ('rdc_job_start', 'rdc_job_run'):
             if not self.settings.allow_exec:
                 raise RDCError('capability_disabled','Command execution is disabled in the owner configuration.')
             if not arguments['argv'][0] or any('\0' in part for part in arguments['argv']):
@@ -256,6 +265,7 @@ class Engine:
     def _invoke_inner(self,name,args):
         handlers = {'rdc_file_list':self.files.list,'rdc_file_read':self.files.read,'rdc_file_search':self.files.search,
                     'rdc_file_write':self.files.write,'rdc_file_edit':self.files.edit,'rdc_job_start':self.jobs.start,
+                    'rdc_job_run':self.jobs.run,
                     'rdc_job_status':self.jobs.status,'rdc_job_output':self.jobs.output,'rdc_job_list':self.jobs.list,
                     'rdc_job_cancel':self.jobs.cancel,'rdc_job_input':self.jobs.input}
         if name in handlers:

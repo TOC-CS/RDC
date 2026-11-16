@@ -35,10 +35,10 @@ class R2 {
   async get(key){const body=this.objects.get(key);return body===undefined?null:{size:Buffer.byteLength(body),text:async()=>body}}
   async delete(keys){for(const key of Array.isArray(keys)?keys:[keys])this.objects.delete(key)}
 }
-function setup(limits={}) {
+function setup(limits={},testCatalog=catalog,waitHook=async()=>{}) {
   let now=1700000000000;
   const env={DB:new D1(),BUCKET:new R2(),RDC_DEVICE_ID:DEVICE,RDC_DEVICE_SECRET:KEY,RDC_OWNER_BOOTSTRAP:'private-site'};
-  const gateway=createGateway({catalog,resourceHtml:'<!doctype html><html>Real embedded resource fixture</html>',iconDataUri:'data:image/png;base64,eA==',clock:()=>now,sleep:async ms=>{now+=ms},limits:{callWaitMs:0,pollWaitMs:0,...limits}});
+  const gateway=createGateway({catalog:testCatalog,resourceHtml:'<!doctype html><html>Real embedded resource fixture</html>',iconDataUri:'data:image/png;base64,eA==',clock:()=>now,sleep:async ms=>{now+=ms;await waitHook()},limits:{callWaitMs:0,pollWaitMs:0,...limits}});
   const request=(path,body,headers={})=>new Request('https://rdc.example'+path,{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body)});
   const mcp=async(name,args={},owner='owner-1')=>{
     const response=await gateway.mcp(request('/mcp',{jsonrpc:'2.0',id:'call',method:'tools/call',params:{name,arguments:args}}, owner?{'oai-authenticated-user-id':owner}:{}),env);
@@ -493,4 +493,74 @@ test('invalid preview arguments still fail before offline availability and do no
   assert.equal(response.status,400);
   assert.equal(response.body.error.data.code,'request_id_required');
   assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) AS n FROM gateway_operations').get().n,0);
+});
+
+
+test('synced terminal fast path stays durable across one cloud dispatch',async()=>{
+  const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
+  const command=assets.catalog.find(t=>t.name==='rdc_job_run');
+  assert.ok(command,'Regenerate synced RDC catalog so the terminal fast path is exposed');
+  assert.equal(command['x-rdc-mutating'],true);
+  assert.ok(command.inputSchema.required.includes('cwd'));
+  assert.ok(command.inputSchema.properties.wait_ms);
+  const s=setup({},assets.catalog);
+  const response=await s.gateway.mcp(
+    s.request('/mcp',{jsonrpc:'2.0',id:'list',method:'tools/list'}),s.env);
+  const publicCatalog=(await response.json()).result.tools;
+  const advertised=publicCatalog.find(t=>t.name==='rdc_job_run');
+  assert.ok(advertised);
+  assert.ok(advertised.inputSchema.required.includes('_rdc_request_id'));
+  await s.poll({claim:false});
+  const args={argv:['/bin/echo','RDC-FAST'],cwd:'/tmp',wait_ms:1500,output_limit:4096,
+    idempotency_key:'job-run-one',_rdc_request_id:'cloud-fast-one'};
+  const initial=await s.mcp('rdc_job_run',args);
+  assert.equal(initial.status,200);
+  const id=initial.body.result.structuredContent.operation_id;
+  assert.equal(initial.body.result.structuredContent.pending,true);
+  const repeat=await s.mcp('rdc_job_run',args);
+  assert.equal(repeat.body.result.structuredContent.operation_id,id);
+  assert.equal((await s.mcp('rdc_job_run',{...args,argv:['/bin/echo','OTHER']})).status,409);
+  const claimed=(await s.poll()).body.operation;
+  assert.equal(claimed.operation_id,id);
+  assert.deepEqual(JSON.parse(claimed.request_json),{
+    name:'rdc_job_run',arguments:{argv:args.argv,cwd:args.cwd,wait_ms:args.wait_ms,
+      output_limit:args.output_limit,idempotency_key:args.idempotency_key}});
+  assert.equal((await s.complete(claimed,result('RDC-FAST'))).status,200);
+  const received=await s.mcp('rdc_operation_status',{operation_id:id});
+  assert.equal(received.body.result.structuredContent.value,'RDC-FAST');
+  assert.equal((await s.poll()).body.operation,null);
+});
+
+
+test('fast terminal command result arrives inside first cloud tool call before deadline',async()=>{
+  const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
+  const s=setup({callWaitMs:2500,pollStepMs:100},assets.catalog,
+    ()=>new Promise(resolve=>setTimeout(resolve,5)));
+  await s.poll({claim:false});
+  const args={argv:['/bin/echo','RDC-READY'],cwd:'/tmp',wait_ms:300,
+    idempotency_key:'worker-one',output_limit:4096,_rdc_request_id:'cloud-one'};
+  const waiting=s.mcp('rdc_job_run',args);
+  let claimed;
+  for(let i=0;i<40;i++){
+    const response=await s.poll();
+    if(response.body.operation){claimed=response.body.operation;break}
+    await new Promise(resolve=>setTimeout(resolve,2));
+  }
+  assert.ok(claimed,'Operation was never claimed by the simulated worker');
+  const workerResult={ok:true,job:{id:'job-one',status:'completed',exit_code:0},
+    reused:false,complete:true,output:{job_id:'job-one',text:'RDC-READY\n',
+    status:'completed',complete:true,offset:0,next_offset:10,bytes_available:10}};
+  const upload=await s.complete(claimed,{
+    content:[{type:'text',text:JSON.stringify(workerResult)}],
+    structuredContent:workerResult,isError:false,
+  });
+  assert.equal(upload.status,200);
+  const first=await waiting;
+  assert.equal(first.status,200);
+  const body=first.body.result.structuredContent;
+  assert.equal(body.ok,true);
+  assert.equal(body.complete,true);
+  assert.equal(body.job.id,'job-one');
+  assert.equal(body.output.text,'RDC-READY\n');
+  assert.equal((await s.poll()).body.operation,null);
 });
