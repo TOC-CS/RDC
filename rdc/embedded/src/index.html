@@ -8,49 +8,36 @@
   <style>/* RDC_STYLES */</style>
 </head>
 <body>
-  <main id="canvas" data-mode="inline" aria-label="RDC embedded workspace preview">
+  <main id="canvas" data-mode="inline" aria-label="RDC live preview">
     <section id="closed-card" hidden aria-label="Hidden RDC preview">
-      <img data-rdc-logo class="brand-logo" alt="RDC">
-      <div class="closed-copy"><strong>Preview hidden</strong><span id="closed-note">The worker and its tasks keep running.</span></div>
-      <button id="reopen" class="primary">Reopen preview</button>
-      <button id="dismiss" class="quiet" title="Ask the AI app to dismiss this view. The worker keeps running.">Dismiss view</button>
-      <label id="closed-session-label" hidden>Reopen this session by ID <input id="closed-session-id" readonly aria-label="Session ID to reopen" spellcheck="false"></label>
+      <span id="closed-note">Preview hidden. Work keeps running.</span>
+      <button id="reopen">Reopen preview</button>
+      <button id="dismiss">Dismiss view</button>
     </section>
-    <section id="panel" aria-label="Live RDC workspace preview">
-      <header id="titlebar">
-        <div class="brand"><img data-rdc-logo class="brand-logo" alt="RDC"><div><strong>RDC</strong><span>LIVE WORKSPACE</span></div></div>
-        <span id="connection" class="status" role="status"><span class="dot"></span><span id="connection-text">Connecting</span></span>
-        <div class="window-controls" aria-label="Preview window controls">
-          <button id="move" class="icon-button" aria-label="Move preview within RDC canvas" title="Drag to move inside the expanded RDC canvas. Arrow keys also move." hidden>⠿</button>
-          <button id="inline" hidden>Inline</button>
-          <button id="expand" hidden>Expand</button>
-          <button id="float" hidden>Float</button>
-          <button id="hide" class="quiet" title="Hide the view while the worker keeps running">Hide preview</button>
+    <section id="panel" aria-label="Live RDC work preview">
+      <header>
+        <img class="brand" data-rdc-logo alt="" width="20" height="20">
+        <strong>RDC Preview</strong>
+        <span id="connection" class="status" role="status"><span id="connection-text">Connecting</span></span>
+        <button id="connection-retry" hidden>Retry connection</button>
+        <button id="resize-retry" aria-label="Retry window resizing" title="Retry window resizing after enabling Accessibility" hidden>↔</button>
+        <div class="controls" aria-label="Preview window controls">
+          <button id="inline" aria-label="Inline" title="Return inline" hidden>↙</button>
+          <button id="expand" aria-label="Expand" title="Expand preview" hidden>⛶</button>
+          <button id="float" aria-label="Float" title="Float preview" hidden>↗</button>
+          <button id="hide" aria-label="Hide preview" title="Hide preview">×</button>
         </div>
       </header>
-      <div class="workspace-bar">
-        <label class="sr-only" for="session">Workspace session</label>
-        <select id="session" disabled><option value="">Waiting for a session</option></select>
-        <span id="page-address" title="">Browser or configured mobile device</span>
-        <button id="sessions-refresh" class="quiet" title="Refresh the available sessions" disabled>Sessions</button>
-      </div>
-      <div id="notice" role="alert" hidden></div>
-      <div id="screen" tabindex="0" aria-label="Workspace preview image, read only">
-        <div id="empty"><span class="empty-mark" aria-hidden="true">◻</span><h1 id="empty-title">Your agent's view appears here</h1><p id="empty-copy">Connecting to the workspace through your AI app.</p></div>
+      <div id="screen" aria-label="Live work image, view only">
         <img id="frame" alt="Live RDC workspace" hidden draggable="false">
-        <svg id="cursor" viewBox="0 0 24 30" width="23" height="29" aria-label="Agent cursor" role="img" hidden><path d="M3 2L20 17L12 18L8 26Z" fill="#5ce5c0" stroke="#0b2b29" stroke-width="2" stroke-linejoin="round"/></svg>
-        <span id="view-label">VIEW ONLY</span>
-      </div>
-      <footer>
-        <div class="frame-details"><span id="frame-age">Waiting for the first frame</span><span id="work-state">The worker runs independently of this view.</span></div>
-        <div class="footer-controls">
-          <label id="size-label" for="view-size">Size <select id="view-size"><option value="280">Compact</option><option value="400" selected>Comfortable</option><option value="560">Large</option></select></label>
-          <button id="reset-layout" class="quiet" hidden>Fit canvas</button>
-          <button id="refresh" class="quiet" disabled>Refresh</button>
+        <span id="cursor" role="img" aria-label="Agent cursor" hidden><svg aria-hidden="true" viewBox="0 0 24 30" width="23" height="29"><path d="M3 2L20 17L12 18L8 26Z" fill="#5ce5c0" stroke="#0b2b29" stroke-width="2" stroke-linejoin="round"/></svg></span>
+        <div id="empty">
+          <h1 id="empty-title">Connecting to your work</h1>
+          <p id="empty-copy">The live view will appear here.</p>
+          <button id="preview-retry" hidden disabled>Retry preview</button>
         </div>
-      </footer>
-      <p id="movement-note" hidden>Move and resize within the expanded RDC canvas. Floating window placement is controlled by your AI app.</p>
-      <button id="resize" aria-label="Resize preview within RDC canvas" title="Drag to resize inside the expanded RDC canvas. Arrow keys also resize." hidden>⌟</button>
+      </div>
+      <span id="mode-note" class="sr-only" role="status"></span>
     </section>
   </main>
   <script>/* RDC_SCRIPT */</script>
