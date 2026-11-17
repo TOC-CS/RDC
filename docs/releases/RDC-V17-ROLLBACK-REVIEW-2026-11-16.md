@@ -44,6 +44,11 @@ Status: SOURCE REVIEW PASSED LOCALLY; LIVE ACTIVATION AND WHOLE RDC RELEASE ON H
 4. After all gates, any later live database migration and Site activation require explicit authorized release steps and independent readback. This review authorizes none.
 5. Whole RDC completion also requires outstanding native host/device, preview and integration acceptance; leave project open.
 
+## Publication and additional tool limitations
+- Source-only push attempted against the existing draft branch with interactive Git prompts disabled. Git reported that no password was available. No GitHub remote change occurred. At the check, draft PR #1 remote head remained 3bfd044b2c0aa5ea35709dbb83b20d1a623dc32d. The GitHub connector offers read access but no push permission. Local review commits are retained on the iMac; hosted CI for the latest local head remains outstanding.
+- REA 6.9.0 static analysis was attempted against the compiled rollback gateway chunk. Its parser could not finish because the macOS xcrun Swift process-ownership helper failed to compile with the installed macOS SDK. Partial REA evidence and doctor output were retained in the review checkpoint. Do not represent REA as a passing independent check. Direct source inspection and exact compiled-bundle checks independently confirmed the force-zero inline limit and unchanged D1/R2 bindings.
+- Do not change the host's global Xcode/Swift toolchain or existing REA registrations merely to clear this optional analysis failure while BandMates and other work are active.
+
 ## Reference implementation research
 - Cloudflare D1 migrations: https://developers.cloudflare.com/d1/reference/migrations/
 - Cloudflare R2 consistency: https://developers.cloudflare.com/r2/reference/consistency/
