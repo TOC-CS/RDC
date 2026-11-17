@@ -184,7 +184,10 @@ def real_worker_tool_result(engine, request):
 class EmbeddedResourceTests(unittest.TestCase):
     def test_bundled_resource_is_self_contained_and_bounded(self):
         html = (EMBEDDED / 'preview.html').read_text()
-        self.assertLess(len(html.encode()), 4 * 1024 * 1024)
+        self.assertLess(len(html.encode()), 800_000)
+        branded_thumbnail = (EMBEDDED.parent / 'assets' / 'rdc-icon-192.png').read_bytes()
+        self.assertLess(len(branded_thumbnail), 60_000)
+        self.assertIn('data:image/png;base64,' + base64.b64encode(branded_thumbnail).decode(), html)
         self.assertNotIn('RDC_LOGO_DATA', html)
         self.assertNotIn('/* RDC_SCRIPT */', html)
         self.assertNotRegex(html, r'<script[^>]+src=')

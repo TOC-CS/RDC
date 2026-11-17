@@ -93,6 +93,25 @@ test('shipped RDC server icon stays compact, branded, and recoverable in initial
   assert.ok(Buffer.byteLength(text)<80_000,'MCP initialization must remain small and fast');
 });
 
+test('embedded preview serves compact original-brand thumbnail without changing its independent local resource',async()=>{
+  const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
+  const preview=readFileSync(new URL('../../rdc/embedded/preview.html',import.meta.url),'utf8');
+  const small=readFileSync(new URL('../../rdc/assets/rdc-icon-192.png',import.meta.url));
+  const expected='data:image/png;base64,'+small.toString('base64');
+  assert.equal(assets.resourceHtml,preview,'Synced cloud resource must exactly match independently built RDC view');
+  assert.ok(Buffer.byteLength(preview)<800_000,'Tiny preview logo must not embed 1.3 MB of full-sized PNG');
+  assert.ok(preview.includes(expected),'Local preview must retain the original branded logo in the compact image');
+  assert.equal((preview.match(/data:image\/png;base64,/g)??[]).length,1,'Preview must embed exactly one branded PNG');
+  const gateway=createGateway(assets);
+  const response=await gateway.mcp(new Request('https://rdc.example/mcp',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({jsonrpc:'2.0',id:3,method:'resources/read',params:{uri:'ui://rdc/preview-v8.html'}})
+  }),{});
+  const envelope=await response.json();
+  assert.equal(response.status,200);
+  assert.equal(envelope.result.contents[0].text,preview);
+});
+
 test('only the pinned Sites principal can dispatch, and device credentials never become owner credentials',async()=>{
   const s=setup();
   assert.equal((await s.mcp('rdc_connection_status',{},null)).status,401);

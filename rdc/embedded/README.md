@@ -15,7 +15,7 @@ npm run build
 
 The pinned dependency graph is in `package-lock.json`. The build retains bundled
 upstream license texts in `THIRD_PARTY_NOTICES.txt`. Keep both generated files in
-source distributions. The project logo must exist at `../assets/rdc-logo.png`.
+source distributions. The original project logo remains at `../assets/rdc-logo.png`. The build embeds the checked-in 192x192 branded thumbnail at `../assets/rdc-icon-192.png` to keep the standalone MCP preview small. The full-size logo remains unchanged for native and listing artwork.
 
 ## Host contract
 
