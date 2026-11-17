@@ -1,0 +1,210 @@
+[
+  {
+    "id": "service-planning",
+    "title": "Service rundown, order and rehearsal",
+    "learningOutcome": "Build reusable dated service plans with worship, announcement, offering, prayer, sermon and closing blocks; track duration and operator cue; save owner-approved order.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "lyrics-arrangements",
+    "title": "Congregational song arrangements",
+    "learningOutcome": "Split user-authorized lyrics into readable 1-2 line screens, arrange verses, choruses and bridges, preserve repeated-section occurrence IDs and BandMates cue integrity.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "scripture-display",
+    "title": "NKJV Scripture references and licensed text",
+    "learningOutcome": "Use reference-only when NKJV verse body is unavailable; display authorized supplied text with citation and translation; never invent or scrape licensed Bible text.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "stage-confidence",
+    "title": "Musician and pastor confidence screens",
+    "learningOutcome": "Give stage operator current/next lyrics, optional supplied chords, song keys, private sermon notes and timer; independent authenticated stage output with no public metadata leakage.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "broadcast-overlays",
+    "title": "Livestream lyric and Scripture lower thirds",
+    "learningOutcome": "Use separate safe-area lower-third appearance for webcast, alpha transparency and title graphics, retaining public-only fields and consistent scene cue identity.",
+    "mode": "broadcast",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "obs-production",
+    "title": "OBS scenes, compositing and streaming workflow",
+    "learningOutcome": "Prepare per-service scene suggestions; verify OBS scene existence, browser overlay alpha and current Program scene readback before permissioned live control; start/stop stream with separate operator consent.",
+    "mode": "broadcast",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "operator-recovery",
+    "title": "Manual override, safe hold and crash recovery",
+    "learningOutcome": "Hold last verified cue on uncertain signals, retain owner manual next/previous/goto/clear; idempotent commands and crash restores preview only, never auto-project or restart streaming.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "audience-screens",
+    "title": "Congregation display layouts",
+    "learningOutcome": "Large center lyrics, sermons, Scripture, welcome and announcements with visibility contrast, legible fonts and 16:9/4:3 output-specific profiles.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "output-looks",
+    "title": "Independent output looks and layers",
+    "learningOutcome": "Separate full-screen auditorium lyrics from stream lower thirds, stage notes and lobby announcements; do not infer all outputs can be driven by one video feed.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "timers",
+    "title": "Pre-service and pastor timers",
+    "learningOutcome": "Prepare countdowns, item clocks, service-overrun indicators and stage-only elapsed time; clock source, real time, render latency and stage/broadcast exposure require validation.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "announcements",
+    "title": "Lobby and pre-show announcements",
+    "learningOutcome": "Schedule pre-service welcome, event slides, giving instructions and blank/clear actions per audience, foyer and broadcast destination with owner review.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "service-script",
+    "title": "Sermon manuscript and visual cues",
+    "learningOutcome": "Identify main points, NKJV Scripture references, illustration cues, audience-safe text and private next speaking notes without putting confidential text on broadcast.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "media",
+    "title": "Licensed videos and background media",
+    "learningOutcome": "Cue user-owned media clips and background stills with volume/output mapping. Report missing media, aspect issues and file permissions; do not embed external paid assets.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "scene-macros",
+    "title": "Service transitions and rehearsal macros",
+    "learningOutcome": "Describe multi-action cues such as countdown -> camera -> lyrics; split safe preview from live execution and require atomic/rollback contract and confirmation.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "choir",
+    "title": "Choir, responsive readings and congregation",
+    "learningOutcome": "Use leader-response display order, stanza counts, repeated refrains, harmony cues and optional stage notes while keeping public text clear.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "bandmates-cue",
+    "title": "BandMates and AI musician cues",
+    "learningOutcome": "Receive confirmed song, section and occurrence metadata outside MIDI/audio callback, reconcile lyrics with actually sung phrases, and hold on contradictory evidence.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "voice-following",
+    "title": "Pastor/singer speech following",
+    "learningOutcome": "Use final, timestamped high-confidence speech observations to match lyrics or reference; wake phrase for operator controls, disambiguate actual sermon phrases.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "vision-following",
+    "title": "Stage and camera observations",
+    "learningOutcome": "Use verified stage or speaker camera observations, stable repeated identification and correct roles; never feed presentation-output screen into matching loop.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "livestream-audio",
+    "title": "House FOH versus broadcast audio",
+    "learningOutcome": "Keep webcast mix/monitor independent of FOH and stage IEM; avoid microphone routing loops, record program mix tests and watch audio-video sync and dropped frames.",
+    "mode": "broadcast",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "stream-setup",
+    "title": "Live video setup, preflight and handoff",
+    "learningOutcome": "Check camera input, capture card, scene collection, overlays, 1080p canvas, frame rates, stream destination and credentials via host setup; never place keys in service JSON.",
+    "mode": "broadcast",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "stream-monitor",
+    "title": "Live stream quality and status monitoring",
+    "learningOutcome": "Track OBS stream/record status, dropped frames, encoder warnings, audio meters, audience-facing output view and safe failure/stop procedures with actual readback.",
+    "mode": "broadcast",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "livestream-comments",
+    "title": "Authorized live chat and comment handling",
+    "learningOutcome": "Read comments only through connected approved platform, draft moderated responses, separate posting permission; do not treat audience comments as presentation commands.",
+    "mode": "broadcast",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "cross-platform",
+    "title": "Optional ProPresenter and other adapters",
+    "learningOutcome": "Prefer independent native deck; use ProPresenter official REST only when installed and verified. Keep Keynote, PowerPoint, OBS and mobile software adapters separately qualified.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "assets-rights",
+    "title": "Copyright and permission provenance",
+    "learningOutcome": "Track lyrics SongSelect/CCLI/owner authorization, NKJV licensed or reference-only Scripture, video licensing, fonts and media; protect tokens and secrets from output files.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "stage-livestream-privacy",
+    "title": "Private versus public output isolation",
+    "learningOutcome": "Keep chord charts, pastor notes, countdown cues, host tokens and Talkback on stage/owner outputs only; verify mirrored displays and OBS scene captures don't leak them.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  },
+  {
+    "id": "volunteer-ops",
+    "title": "Volunteer operator checks",
+    "learningOutcome": "Offer readable service sheet with startup, test next slide, confidence display, emergency hold, clear output and restart/recovery instructions.",
+    "mode": "church-service",
+    "evidence": "research/PROPRESENTER_OBS_RESEARCH.md",
+    "acceptance": "Demonstrate in offline rehearsal, and separately confirm any live app/hardware capability before claim."
+  }
+]

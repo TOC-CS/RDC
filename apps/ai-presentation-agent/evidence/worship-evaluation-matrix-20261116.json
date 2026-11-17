@@ -1,0 +1,207 @@
+{
+  "schema": "toc.worship-training-evaluation/v1",
+  "researchModules": 26,
+  "evaluationScenarios": 18,
+  "currentSoftwareSuite": {
+    "tests": 299,
+    "failures": 0,
+    "log": "evidence/worship-extended-regression-20261116.log"
+  },
+  "softwareEvidenceMapped": 18,
+  "physicalAndStreamingAccepted": 0,
+  "productionReady": false,
+  "caveat": "A test file and a zero-failure software suite establish evidence for individual software paths, not end-to-end live worship acceptance.",
+  "records": [
+    {
+      "scenario": "repeat-chorus",
+      "softwareEvidence": [
+        "tests/repeated-cues.test.mjs",
+        "tests/bandmates-native-songform.integration.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Native verified performed section and physical lyric confirmation"
+    },
+    {
+      "scenario": "unplanned-scripture",
+      "softwareEvidence": [
+        "tests/worship-service.test.mjs",
+        "tests/worship-mcp-privacy.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Authorized NKJV full-text entitlement and live pastor recognition"
+    },
+    {
+      "scenario": "preliminary-transcript",
+      "softwareEvidence": [
+        "tests/host-voice.test.mjs",
+        "tests/voice-punctuation.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Actual microphone, acoustics and vocal transcription qualification"
+    },
+    {
+      "scenario": "stage-leak",
+      "softwareEvidence": [
+        "tests/worship-stage-security.test.mjs",
+        "tests/worship-stream-privacy.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Independent stage monitor, projector and live camera capture inspection"
+    },
+    {
+      "scenario": "wrong-program-scene",
+      "softwareEvidence": [
+        "tests/obs-wire.integration.test.mjs",
+        "tests/obs-monitor-wire.integration.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Actual OBS Program scene switching, preview and broadcast readback"
+    },
+    {
+      "scenario": "preview-not-program",
+      "softwareEvidence": [
+        "tests/obs-monitor-wire.integration.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Actual OBS Studio Mode Preview and Program qualification"
+    },
+    {
+      "scenario": "stream-network-loss",
+      "softwareEvidence": [
+        "tests/obs-monitor-failure.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Actual streaming provider outage and authenticated stream status observation"
+    },
+    {
+      "scenario": "audio-disconnect",
+      "softwareEvidence": [
+        "tests/microphone.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Physical audio device dropout and house/stream bus isolation"
+    },
+    {
+      "scenario": "wrongly-licensed-lyrics",
+      "softwareEvidence": [
+        "tests/worship-service.test.mjs",
+        "tests/worship-library.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Owner and publisher rights review for the target venue and platform"
+    },
+    {
+      "scenario": "private-talkback",
+      "softwareEvidence": [
+        "tests/private-talkback.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Actual private stage output routing and speaker/stream isolation"
+    },
+    {
+      "scenario": "loopback-screen",
+      "softwareEvidence": [
+        "tests/watch.test.mjs",
+        "tests/offline-vision-pipeline.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Independent physical stage camera lens/field-of-view validation"
+    },
+    {
+      "scenario": "service-order-change",
+      "softwareEvidence": [
+        "tests/director.test.mjs",
+        "tests/worship-library.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Actual volunteer rehearsal of unplanned service edits"
+    },
+    {
+      "scenario": "camera-safety",
+      "softwareEvidence": [
+        "tests/watch.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Real operator-approved camera permissions and dropout/misrecognition"
+    },
+    {
+      "scenario": "slide-hold",
+      "softwareEvidence": [
+        "tests/director.test.mjs",
+        "tests/external-fault-latch.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Physical projector confirmation with operator hold and recovery"
+    },
+    {
+      "scenario": "stream-stop",
+      "softwareEvidence": [
+        "tests/obs-monitor.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Real separately approved StopStreaming/StopRecord authority and provider readback"
+    },
+    {
+      "scenario": "crash-recovery",
+      "softwareEvidence": [
+        "tests/managed-crash-recovery.test.mjs",
+        "tests/managed-unload-failure.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Actual projector and broadcast recovery with full physical reauthorization"
+    },
+    {
+      "scenario": "ndisdi-availability",
+      "softwareEvidence": [
+        "tests/venue-output-readiness.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Actual NDI/SDI compatible hardware and installed drivers"
+    },
+    {
+      "scenario": "live-comments",
+      "softwareEvidence": [
+        "tests/live-comments.test.mjs",
+        "tests/live-comments-mcp.test.mjs"
+      ],
+      "softwareEvidenceAvailable": true,
+      "softwareQualifiedByTests": true,
+      "actualVenueAccepted": false,
+      "remainingGate": "Real authorized social account APIs and moderation; item 9 remains queued"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "title": "TOC Original Service Rehearsal",
+  "theme": "dark",
+  "items": [
+    {
+      "id": "pre-service",
+      "sourceType": "segment",
+      "sourceId": "countdown",
+      "revision": "2026-11-16.1",
+      "sha256": "ca212d513dffe3dec72166a0b8475fdd42a3233019a004228194d30e4261ae6d"
+    },
+    {
+      "id": "welcome-slot",
+      "sourceType": "segment",
+      "sourceId": "welcome",
+      "revision": "2026-11-16.1",
+      "sha256": "06c66d33a6e3fb331794dd52ef18be8d225739bc80a7c83c45f21ffc6581a60a"
+    },
+    {
+      "id": "opening-worship",
+      "sourceType": "song",
+      "sourceId": "morning-song",
+      "arrangementId": "main-service",
+      "revision": "2026-11-16.1",
+      "sha256": "db4d5df70df8c67a5c06b32dd5e5d773b8ae553c265e1ee9c8f98f92e218557e"
+    },
+    {
+      "id": "reading",
+      "sourceType": "scripture",
+      "sourceId": "scripture-psalm-100",
+      "revision": "2026-11-16.1",
+      "sha256": "5e9ea663b02400edf75aed1794ab1e6c730a312419111fd27b3ad4768a06b761"
+    },
+    {
+      "id": "sermon",
+      "sourceType": "segment",
+      "sourceId": "sermon-title",
+      "revision": "2026-11-16.1",
+      "sha256": "9d137609b4debc04c6a418cea161ff0391eddd5795ab8d34f447fc48a3937d2c"
+    },
+    {
+      "id": "reprise",
+      "sourceType": "song",
+      "sourceId": "morning-song",
+      "arrangementId": "short-reprise",
+      "revision": "2026-11-16.1",
+      "sha256": "db4d5df70df8c67a5c06b32dd5e5d773b8ae553c265e1ee9c8f98f92e218557e"
+    },
+    {
+      "id": "closing-slot",
+      "sourceType": "segment",
+      "sourceId": "closing",
+      "revision": "2026-11-16.1",
+      "sha256": "26dfc3c4704994a0604c69fb7be14e4643f7fde3eb63cefa0ac38088acd7b511"
+    }
+  ]
+}
