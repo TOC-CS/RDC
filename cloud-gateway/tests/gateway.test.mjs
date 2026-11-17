@@ -70,6 +70,29 @@ test('MCP metadata exposes the actual HTML and resource link without device secr
   assert.deepEqual(content._meta.ui.csp.connectDomains,[]);
 });
 
+test('shipped RDC server icon stays compact, branded, and recoverable in initialize metadata',async()=>{
+  const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
+  assert.match(assets.iconDataUri,/^data:image\/png;base64,/);
+  const png=Buffer.from(assets.iconDataUri.split(',')[1],'base64');
+  const compact=readFileSync(new URL('../public/rdc-mcp-icon.png',import.meta.url));
+  assert.deepEqual(png,compact,'The embedded icon must exactly match the shipped branded thumbnail');
+  assert.equal(png.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+  assert.equal(png.readUInt32BE(16),192);
+  assert.equal(png.readUInt32BE(20),192);
+  assert.ok(png.byteLength<60_000,'Branded icon metadata must not carry the 1 MB full-size logo');
+  const gw=createGateway(assets);
+  const response=await gw.mcp(new Request('https://rdc.example/mcp',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({jsonrpc:'2.0',id:2,method:'initialize',params:{protocolVersion:'2025-11-25'}})
+  }),{});
+  const text=await response.text();
+  const obj=JSON.parse(text);
+  assert.equal(response.status,200);
+  assert.equal(obj.result.serverInfo.icons[0].src,assets.iconDataUri);
+  assert.deepEqual(obj.result.serverInfo.icons[0].sizes,['192x192']);
+  assert.ok(Buffer.byteLength(text)<80_000,'MCP initialization must remain small and fast');
+});
+
 test('only the pinned Sites principal can dispatch, and device credentials never become owner credentials',async()=>{
   const s=setup();
   assert.equal((await s.mcp('rdc_connection_status',{},null)).status,401);
