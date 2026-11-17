@@ -28,6 +28,7 @@ export const gatewayOperations = sqliteTable("gateway_operations", {
   claimedMs: integer("claimed_ms"),
   completedMs: integer("completed_ms"),
   resultKey: text("result_key"),
+  resultInlineJson: text("result_inline_json"),
   resultSha256: text("result_sha256"),
   resultSize: integer("result_size").notNull().default(0),
   resultExpiresMs: integer("result_expires_ms"),
