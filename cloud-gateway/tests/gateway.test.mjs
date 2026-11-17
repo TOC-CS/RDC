@@ -1387,3 +1387,39 @@ test('Independent Atlas routing cannot be enabled by model arguments or an unava
   assert.equal(ready.result.structuredContent.receipt.state,'QUEUED');
   assert.equal(requested.length,2);
 });
+
+test('saturated retained read-only journal recovers at admission without erasing mutation identity',async()=>{
+  const s=setup({maxOperations:2,resultTtlMs:1000,frameOperationTtlMs:5000});
+  await s.poll({claim:false});
+  const mutation=await s.mcp('rdc_file_write',{value:'preserve',_rdc_request_id:'capacity-mutation'});
+  const first=(await s.poll()).body.operation;
+  await s.complete(first,result('write completed'));
+  const observation=await s.mcp('rdc_system_status',{_rdc_request_id:'capacity-observation'});
+  const read=(await s.poll()).body.operation;
+  await s.complete(read,result('read completed'));
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,2);
+  s.advance(1001);
+  const next=await s.mcp('rdc_system_status',{_rdc_request_id:'capacity-new-read'});
+  assert.equal(next.status,200);
+  assert.equal(next.body.result.structuredContent.pending,true);
+  assert.ok((await s.poll()).body.operation);
+  const original=await s.mcp('rdc_file_write',{value:'preserve',_rdc_request_id:'capacity-mutation'});
+  assert.equal(original.body.result.structuredContent.error.code,'result_expired');
+  assert.equal(original.body.result.structuredContent.operation_id,first.operation_id);
+  assert.equal(s.env.DB.sqlite.prepare("SELECT COUNT(*) n FROM gateway_operations WHERE mutating=1").get().n,1);
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,2);
+  assert.equal(observation.status,200);
+  assert.equal(mutation.status,200);
+});
+
+test('capacity recovery preserves unexpired read-only results and unknown mutations',async()=>{
+  const s=setup({maxOperations:1,resultTtlMs:60000});
+  await s.poll({claim:false});
+  const first=await s.mcp('rdc_system_status',{_rdc_request_id:'fresh-read'});
+  const op=(await s.poll()).body.operation;
+  await s.complete(op,result('retain recent read'));
+  const busy=await s.mcp('rdc_system_status',{_rdc_request_id:'blocked-read'});
+  assert.equal(busy.body.result.structuredContent.error.code,'gateway_busy');
+  assert.equal((await s.mcp('rdc_operation_status',{operation_id:op.operation_id})).body.result.structuredContent.value,'retain recent read');
+  assert.equal(first.status,200);
+});
