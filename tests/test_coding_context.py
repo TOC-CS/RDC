@@ -3,9 +3,11 @@
 All paths and output are synthetic; no real repositories or cloud calls.
 """
 import hashlib
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from rdc.config import Settings
 from rdc.engine import Engine
@@ -90,6 +92,81 @@ class CodingContextTests(unittest.TestCase):
         self.assertEqual(response["reads"][1]["error"]["code"], "not_found")
         self.assertIsNone(response["search"])
         self.assertEqual(response["listing"]["path"], str(self.project.resolve()))
+
+    def test_symlink_swap_after_admission_cannot_escape_selected_project(self):
+        # Live full-host access permits symlinks; the new tool must still
+        # confine each requested file to its explicitly selected project.
+        self.engine.close()
+        self.engine = Engine(Settings(
+            state_dir=self.home / "private-worker-state",
+            roots=[self.root],
+            access_mode="full-host",
+            browser_backend="disabled",
+            approval_mode="review",
+            allow_exec=False,
+        ))
+        # An in-project alias changes before the actual read phase.
+        other_project = self.root / "other-project"
+        other_project.mkdir()
+        private = other_project / "secret.txt"
+        private.write_text("SYNTHETIC-OTHER-PROJECT-PRIVATE", encoding="utf-8")
+        alias = self.project / "alias.txt"
+        try:
+            alias.symlink_to(self.a)
+        except (OSError, NotImplementedError):
+            self.skipTest("File symlinks require platform permission")
+        original_list = self.engine.files.list
+
+        def swap_after_validation(*args, **kwargs):
+            result = original_list(*args, **kwargs)
+            alias.unlink()
+            alias.symlink_to(private)
+            return result
+
+        with mock.patch.object(self.engine.files, "list", side_effect=swap_after_validation):
+            response = self.context(file_paths=[str(alias)])
+        self.assertTrue(response["ok"], response)
+        self.assertEqual(len(response["reads"]), 1)
+        self.assertFalse(response["reads"][0]["ok"], response)
+        self.assertEqual(response["reads"][0]["error"]["code"], "path_denied")
+        self.assertNotIn("SYNTHETIC-OTHER-PROJECT-PRIVATE", str(response))
+
+    def test_search_stays_in_project_if_subdirectory_becomes_symlink(self):
+        # A directory can be replaced after os.walk enumerates its filenames.
+        # A full-host worker must still not return content from the new target.
+        self.engine.close()
+        self.engine = Engine(Settings(
+            state_dir=self.home / "private-worker-state",
+            roots=[self.root], access_mode="full-host",
+            browser_backend="disabled", approval_mode="review", allow_exec=False,
+        ))
+        nested = self.project / "nested"
+        nested.mkdir()
+        (nested / "SOURCE.txt").write_text("original project content", encoding="utf-8")
+        other = self.root / "other-project"
+        other.mkdir()
+        (other / "SOURCE.txt").write_text("SYNTHETIC-EXTERNAL-SCOPE-MATCH", encoding="utf-8")
+        probe = self.project / "symlink-capability-probe"
+        try:
+            probe.symlink_to(other, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("Directory symlinks require platform permission")
+        else:
+            probe.unlink()
+        original_walk = os.walk
+
+        def swap_after_scan(path, *args, **kwargs):
+            for parent, directories, names in original_walk(path, *args, **kwargs):
+                if Path(parent).resolve() == nested.resolve():
+                    nested.rename(self.project / "nested-original")
+                    nested.symlink_to(other, target_is_directory=True)
+                yield parent, directories, names
+
+        with mock.patch("rdc.files.os.walk", side_effect=swap_after_scan):
+            response = self.context(query="SYNTHETIC-EXTERNAL-SCOPE-MATCH")
+        self.assertTrue(response["ok"], response)
+        self.assertEqual(response["search"]["matches"], [])
+        self.assertNotIn("SYNTHETIC-EXTERNAL-SCOPE-MATCH", str(response))
 
     def test_schema_limits_and_readonly_admission(self):
         info = next(t for t in self.engine.catalog() if t["name"] == "rdc_code_context")

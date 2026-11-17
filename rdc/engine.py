@@ -346,8 +346,17 @@ class Engine:
             reads = []
             if paths:
                 read_limit = min(16384,max(1024,self.settings.max_read_bytes//len(paths)))
+                def checked_read(path):
+                    # The alias may have changed after initial admission or
+                    # directory/search work. Recheck within the selected
+                    # subtree and read the canonical path, not the alias.
+                    resolved = self.files.resolve(path)
+                    if resolved != project and project not in resolved.parents:
+                        raise RDCError('path_denied',
+                            'A code-context request may read only files beneath its selected directory.')
+                    return {'ok':True,**self.files.read(str(resolved),limit=read_limit)}
                 def read_one(path):
-                    return self._guarded(lambda: {'ok':True,**self.files.read(path,limit=read_limit)})
+                    return self._guarded(lambda: checked_read(path))
                 with ThreadPoolExecutor(max_workers=min(4,len(paths))) as pool:
                     reads = list(pool.map(read_one,paths))
             return {'path':str(project),'listing':listing,'search':matches,

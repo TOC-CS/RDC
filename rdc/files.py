@@ -183,7 +183,14 @@ class Files:
                     return {'matches':matches, 'truncated':True, 'files_scanned':scanned, 'files_skipped':skipped}
                 scanned += 1
                 try:
-                    data = self._read_bytes(self.resolve(str(candidate)))
+                    # Directory entries can be replaced with symlinks after
+                    # os.walk enumerates them. Keep each actual opened file
+                    # inside the selected search subtree, even in full-host mode.
+                    resolved = self.resolve(str(candidate))
+                    if resolved != directory and directory not in resolved.parents:
+                        skipped += 1
+                        continue
+                    data = self._read_bytes(resolved)
                     if len(data) > self.settings.max_read_bytes or b'\0' in data:
                         skipped += 1
                         continue
