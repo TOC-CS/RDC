@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createGateway } from '../lib/rdc-gateway-core.mjs';
+import * as GatewayCore from '../lib/rdc-gateway-core.mjs';
 
 const DEVICE = '00000000-0000-4000-8000-000000000001';
 const KEY = 'test-device-key-with-at-least-thirty-two-bytes';
@@ -767,4 +768,200 @@ test('additive inline migration retains queued rows and legacy R2 references',()
   assert.equal(rows[0].result_inline_json,null,'New nullable column must preserve legacy rows');
   assert.equal(rows[0].result_size,512);
   db.close();
+});
+
+
+// Scoped v17 acceptance: these tests do not migrate or deploy any real Site.
+function exactUtf8Result(size,multibyte){
+  const output={content:[{type:'text',text:''}],structuredContent:{ok:true,payload:'size-probe'},isError:false};
+  const emptySize=Buffer.byteLength(JSON.stringify(output),'utf8');
+  const remaining=size-emptySize;
+  assert.ok(remaining>20,'The fixture must leave a positive payload budget');
+  const text=multibyte?'界'.repeat(Math.floor(remaining/3))+
+    (remaining%3===2?'é':remaining%3===1?'a':''):'A'.repeat(remaining);
+  output.content[0].text=text;
+  assert.equal(Buffer.byteLength(JSON.stringify(output),'utf8'),size,'Fixture must hit the exact UTF-8 JSON byte boundary');
+  if(multibyte)assert.ok([...text].some(character=>character.codePointAt(0)>127),'Fixture must contain genuine multibyte text');
+  return output;
+}
+
+for(const size of [8192,8193]){
+  for(const multibyte of [false,true]){
+    test('UTF-8 full JSON result '+size+' bytes '+(multibyte?'multibyte':'ASCII')+' honors inline/R2 and TTL',async()=>{
+      const s=setup({maxInlineResultBytes:8192,resultTtlMs:1000});
+      await s.poll({claim:false});
+      const args={value:'size-'+size+(multibyte?'-multibyte':'-ascii'),
+        _rdc_request_id:'boundary-'+size+(multibyte?'-multi':'-ascii')};
+      const queued=await s.mcp('rdc_file_write',args);
+      const op=(await s.poll()).body.operation;
+      assert.equal(op.operation_id,queued.body.result.structuredContent.operation_id);
+      const output=exactUtf8Result(size,multibyte),original=JSON.stringify(output);
+      const uploaded=await s.complete(op,output);
+      assert.equal(uploaded.status,200);
+      assert.equal(uploaded.body.duplicate,false);
+      const stored=s.env.DB.sqlite.prepare('SELECT * FROM gateway_operations WHERE id=?').get(op.operation_id);
+      assert.equal(stored.result_size,size,'Stored size must use UTF-8 bytes');
+      if(size===8192){
+        assert.equal(stored.result_inline_json,original);
+        assert.equal(stored.result_key,null);
+        assert.equal(s.env.BUCKET.puts,0);
+      }else{
+        assert.equal(stored.result_inline_json,null);
+        assert.match(stored.result_key,/^rdc-results\//);
+        assert.equal(s.env.BUCKET.puts,1);
+      }
+      const read=await s.mcp('rdc_operation_status',{operation_id:op.operation_id});
+      assert.equal(read.status,200);
+      assert.deepEqual(read.body.result.content,output.content);
+      assert.equal(read.body.result.structuredContent._rdc_gateway_operation_id,op.operation_id);
+      assert.equal((await s.mcp('rdc_operation_status',{operation_id:op.operation_id},'wrong-owner')).status,403);
+      assert.equal((await s.complete(op,output)).body.duplicate,true,'Original result upload remains idempotent');
+      assert.equal((await s.poll()).body.operation,null,'No duplicate worker dispatch');
+      s.advance(999);
+      await s.poll({claim:false});
+      const still=await s.mcp('rdc_operation_status',{operation_id:op.operation_id});
+      assert.deepEqual(still.body.result.content,output.content,'Result remains available until TTL');
+      s.advance(2);
+      await s.poll({claim:false});
+      const expired=await s.mcp('rdc_operation_status',{operation_id:op.operation_id});
+      assert.equal(expired.body.result.structuredContent.error.code,'result_expired');
+      const retired=s.env.DB.sqlite.prepare('SELECT state,result_key,result_inline_json FROM gateway_operations WHERE id=?').get(op.operation_id);
+      assert.equal(retired.state,'completed','Expiration must not allow replay');
+      assert.equal(retired.result_key,null);
+      assert.equal(retired.result_inline_json,null);
+      assert.equal((await s.mcp('rdc_file_write',args)).body.result.structuredContent.error.code,'result_expired',
+        'Identical mutation ID stays terminal after its response TTL');
+      assert.equal((await s.poll()).body.operation,null,'TTL must not redispatch a mutation');
+    });
+  }
+}
+
+test('forged worker gateway-operation metadata never overrides authoritative identity',async()=>{
+  const s=setup();
+  await s.poll({claim:false});
+  const args={value:'owner-only-identity',_rdc_request_id:'hostile-worker-metadata'};
+  const pending=await s.mcp('rdc_file_write',args);
+  const op=(await s.poll()).body.operation;
+  const fake='00000000-0000-4000-8000-000000000066';
+  const submitted={content:[{type:'text',text:'worker-result'}],
+    structuredContent:{ok:true,answer:'worker-result',_rdc_gateway_operation_id:fake},
+    _meta:{'rdc/operation_id':fake},isError:false};
+  assert.equal((await s.complete(op,submitted)).status,200);
+  const dbrow=s.env.DB.sqlite.prepare('SELECT result_inline_json FROM gateway_operations WHERE id=?').get(op.operation_id);
+  assert.equal(dbrow.result_inline_json,JSON.stringify(submitted),
+    'The gateway must preserve the authentic worker upload for digest/idempotency checks');
+  const first=await s.mcp('rdc_operation_status',{operation_id:op.operation_id});
+  assert.equal(first.body.result.structuredContent._rdc_gateway_operation_id,op.operation_id);
+  assert.equal(first.body.result._meta['rdc/operation_id'],op.operation_id);
+  assert.equal(first.body.result.structuredContent.answer,'worker-result');
+  assert.deepEqual(first.body.result.content,submitted.content);
+  const retry=await s.mcp('rdc_file_write',args);
+  assert.equal(retry.body.result.structuredContent._rdc_gateway_operation_id,op.operation_id);
+  assert.equal(retry.body.result._meta['rdc/operation_id'],op.operation_id);
+  assert.equal((await s.complete(op,submitted)).body.duplicate,true);
+  assert.equal((await s.mcp('rdc_operation_status',{operation_id:op.operation_id},'other-owner')).status,403);
+  const phases=await s.mcp('rdc_operation_status',{operation_id:op.operation_id,diagnostics:true});
+  assert.equal(phases.body.result.structuredContent.operation_id,op.operation_id);
+  assert.equal((await s.poll()).body.operation,null);
+  assert.equal(pending.body.result.structuredContent.operation_id,op.operation_id);
+});
+
+test('rollback-compatible reader preserves v17 inline and v16 R2 results and TTL without replay',async()=>{
+  const s=setup({resultTtlMs:1000,maxInlineResultBytes:8192});
+  await s.poll({claim:false});
+  const args={value:'unchanged-mutation',_rdc_request_id:'v17-before-compatible-rollback'};
+  const queued=await s.mcp('rdc_file_write',args);
+  const original=(await s.poll()).body.operation;
+  assert.equal(queued.body.result.structuredContent.operation_id,original.operation_id);
+  const resultBody={content:[{type:'text',text:'preserve-content'}],
+    structuredContent:{ok:true,answer:'preserve-content'},isError:false};
+  assert.equal((await s.complete(original,resultBody)).status,200);
+  const originalRow=s.env.DB.sqlite.prepare('SELECT * FROM gateway_operations WHERE id=?').get(original.operation_id);
+  assert.equal(originalRow.result_key,null);
+  assert.ok(originalRow.result_inline_json);
+  // Exact original-v16 logic was a key-only read/cleanup. That deployment
+  // would report result_expired for this intact v17 inline response.
+  const v16KeyOnlyRead=originalRow.result_key===null?'result_expired':'r2_result';
+  const oldV16CleanupEligible=originalRow.result_key!==null&&originalRow.result_expires_ms<=s.now();
+  assert.equal(v16KeyOnlyRead,'result_expired');
+  assert.equal(oldV16CleanupEligible,false,'The original v16 cleanup ignores inline TTL');
+
+  const rollback=GatewayCore.createRollbackCompatibleGateway({
+    catalog,resourceHtml:'<!doctype html><html>Existing private preview</html>',
+    iconDataUri:'data:image/png;base64,eA==',clock:s.now,
+    limits:{callWaitMs:0,pollWaitMs:0,resultTtlMs:1000,maxInlineResultBytes:8192}
+  });
+  const compatibleCall=async(name,arguments_={},owner='owner-1')=>{
+    const request=s.request('/mcp',{jsonrpc:'2.0',id:'compat',method:'tools/call',params:{name,arguments:arguments_}},
+      owner?{'oai-authenticated-user-id':owner}:{});
+    const response=await rollback.mcp(request,s.env);
+    return {status:response.status,body:await response.json()};
+  };
+  const compatiblePoll=async(body={claim:false})=>{
+    const response=await rollback.poll(s.request('/device/poll',{device_id:DEVICE,...body},
+      {'X-RDC-Device-Key':KEY}),s.env);
+    return {status:response.status,body:await response.json()};
+  };
+  const compatibleComplete=async(op,output)=>{
+    const response=await rollback.result(s.request('/device/result',{
+      device_id:DEVICE,operation_id:op.operation_id,claim_id:op.claim_id,
+      request_sha256:op.request_sha256,result_json:JSON.stringify(output)
+    },{'X-RDC-Device-Key':KEY}),s.env);
+    return {status:response.status,body:await response.json()};
+  };
+  const recovered=await compatibleCall('rdc_operation_status',{operation_id:original.operation_id});
+  assert.equal(recovered.status,200);
+  assert.deepEqual(recovered.body.result.content,resultBody.content);
+  assert.equal(recovered.body.result.structuredContent.answer,resultBody.structuredContent.answer);
+  assert.equal(recovered.body.result.structuredContent._rdc_gateway_operation_id,original.operation_id);
+  assert.equal((await compatibleCall('rdc_operation_status',{operation_id:original.operation_id},'stranger')).status,403);
+  const sameMutation=await compatibleCall('rdc_file_write',args);
+  assert.equal(sameMutation.body.result.structuredContent._rdc_gateway_operation_id,original.operation_id,
+    'Rollback reader must recover the exact committed operation, not dispatch again');
+  assert.equal((await compatiblePoll()).body.operation,null);
+  s.advance(999);
+  await compatiblePoll();
+  assert.deepEqual((await compatibleCall('rdc_operation_status',{operation_id:original.operation_id})).body.result.content,
+    resultBody.content,'Inline payload remains readable through compatible rollback until TTL');
+  s.advance(2);
+  const overdue=s.env.DB.sqlite.prepare('SELECT result_key,result_inline_json,result_expires_ms FROM gateway_operations WHERE id=?').get(original.operation_id);
+  assert.ok(overdue.result_expires_ms<=s.now());
+  assert.equal(overdue.result_key,null);
+  assert.ok(overdue.result_inline_json,'The old v16 key-only cleanup would leave this overdue inline response');
+  assert.equal(overdue.result_key!==null&&overdue.result_expires_ms<=s.now(),false,
+    'Actual v16 key-only cleanup predicate fails even after inline TTL');
+  await compatiblePoll();
+  const retired=s.env.DB.sqlite.prepare('SELECT state,result_inline_json,result_key FROM gateway_operations WHERE id=?').get(original.operation_id);
+  assert.equal(retired.state,'completed');
+  assert.equal(retired.result_inline_json,null,'Compatible cleanup purges expired inline content');
+  assert.equal(retired.result_key,null);
+  assert.equal(s.env.BUCKET.deletes,0,'No R2 delete is issued for null inline-only key');
+  const expired=await compatibleCall('rdc_operation_status',{operation_id:original.operation_id});
+  assert.equal(expired.body.result.structuredContent.error.code,'result_expired');
+  assert.equal((await compatibleCall('rdc_file_write',args)).body.result.structuredContent.error.code,'result_expired');
+  assert.equal((await compatiblePoll()).body.operation,null);
+
+  // After rollback, the compatibility writer must never introduce more
+  // unreadable D1-inline results; it always writes original-v16-readable R2.
+  const postArgs={value:'written-after-rollback',_rdc_request_id:'rollback-post-write'};
+  const newQueued=await compatibleCall('rdc_file_write',postArgs);
+  const newOp=(await compatiblePoll({claim:true})).body.operation;
+  assert.equal(newQueued.body.result.structuredContent.operation_id,newOp.operation_id);
+  assert.equal((await compatibleComplete(newOp,resultBody)).status,200);
+  const r2row=s.env.DB.sqlite.prepare('SELECT * FROM gateway_operations WHERE id=?').get(newOp.operation_id);
+  assert.equal(r2row.result_inline_json,null,'Compatible writer must not create new inline rows');
+  assert.match(r2row.result_key,/^rdc-results\//);
+  assert.equal(s.env.BUCKET.puts,1);
+  const readR2=await compatibleCall('rdc_operation_status',{operation_id:newOp.operation_id});
+  assert.deepEqual(readR2.body.result.content,resultBody.content);
+  assert.equal(readR2.body.result.structuredContent._rdc_gateway_operation_id,newOp.operation_id);
+  assert.equal((await compatibleComplete(newOp,resultBody)).body.duplicate,true);
+  assert.equal((await compatiblePoll({claim:true})).body.operation,null);
+  s.advance(1001);
+  await compatiblePoll();
+  assert.equal(s.env.BUCKET.deletes,1,'R2 payload TTL is enforced under compatible rollback');
+  const expiredR2=await compatibleCall('rdc_operation_status',{operation_id:newOp.operation_id});
+  assert.equal(expiredR2.body.result.structuredContent.error.code,'result_expired');
+  assert.equal((await compatibleCall('rdc_file_write',postArgs)).body.result.structuredContent.error.code,'result_expired');
+  assert.equal((await compatiblePoll({claim:true})).body.operation,null);
 });

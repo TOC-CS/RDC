@@ -447,3 +447,17 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
   }
   return {mcp,poll,result,status};
 }
+
+
+/**
+ * Post-migration rollback target: the same authenticated, owner-scoped reader
+ * that understands BOTH v17 D1-inline and legacy R2 results, but a writer that
+ * ALWAYS stores new results in R2. The historical v16 binary cannot read
+ * inline-only rows and MUST NOT be selected as a post-inline rollback.
+ *
+ * Save a separate owner-private Sites version of this factory before activating
+ * any inline writer. This function does not migrate, deploy or rewrite data.
+ */
+export function createRollbackCompatibleGateway(options){
+  return createGateway({...options,limits:{...(options?.limits??{}),maxInlineResultBytes:0}});
+}
