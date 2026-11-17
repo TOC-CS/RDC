@@ -21,7 +21,8 @@ const DEFAULTS={callWaitMs:20_000,previewWaitMs:8_000,pollWaitMs:10_000,pollStep
   queueTtlMs:30_000,onlineMs:35_000,unknownMs:120_000,operationTtlMs:86_400_000,
   resultTtlMs:3_600_000,frameTtlMs:30_000,frameOperationTtlMs:60_000,maxBacklog:32,maxOperations:2000,
   maxRequestBytes:1_048_576,maxResultBytes:12*1024*1024,maxUploadBytes:16*1024*1024,
-  maxStoredRequestBytes:32*1024*1024,maxStoredResultBytes:512*1024*1024};
+  maxStoredRequestBytes:32*1024*1024,maxStoredResultBytes:512*1024*1024,
+  maxInlineResultBytes:8192};
 
 class GatewayError extends Error {
   constructor(status,code,message,rpcCode,data){super(message);this.status=status;this.code=code;this.rpcCode=rpcCode;this.data=data}
@@ -168,16 +169,20 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     const now=clock();
     await env.DB.prepare("UPDATE gateway_operations SET state='expired',request_json=NULL,request_size=0 WHERE state='queued' AND expires_ms<=?").bind(now).run();
     await env.DB.prepare("UPDATE gateway_operations SET state='unknown' WHERE state='claimed' AND claimed_ms<=?").bind(now-L.unknownMs).run();
-    const old=await env.DB.prepare('SELECT id,result_key FROM gateway_operations WHERE result_key IS NOT NULL AND result_expires_ms<=? LIMIT 16').bind(now).all();
+    const old=await env.DB.prepare('SELECT id,result_key FROM gateway_operations WHERE (result_key IS NOT NULL OR result_inline_json IS NOT NULL) AND result_expires_ms<=? LIMIT 16').bind(now).all();
     for(const row of old.results){
-      await env.BUCKET.delete(row.result_key);
-      await env.DB.prepare('UPDATE gateway_operations SET result_key=NULL,result_size=0 WHERE id=? AND result_key=?').bind(row.id,row.result_key).run();
+      // Inline payloads and R2 objects share the same retention deadline.
+      // An inline expiry must not issue an R2 delete for a null key.
+      if(row.result_key!==null)await env.BUCKET.delete(row.result_key);
+      await env.DB.prepare('UPDATE gateway_operations SET result_key=NULL,result_inline_json=NULL,result_size=0 WHERE id=? AND result_expires_ms<=?')
+        .bind(row.id,now).run();
     }
     // Frequent, read-only observations must not consume the day's mutation
     // capacity. A late upload of a retired frame receives operation_not_found;
     // the pump retires that obsolete observation without repeating any work.
     await env.DB.prepare(`DELETE FROM gateway_operations WHERE id IN (
-      SELECT id FROM gateway_operations WHERE state IN ('completed','expired','unknown') AND result_key IS NULL
+      SELECT id FROM gateway_operations WHERE state IN ('completed','expired','unknown')
+        AND result_key IS NULL AND result_inline_json IS NULL
         AND (created_ms<? OR (mutating=0 AND tool IN ('rdc_preview_frame','rdc_preview_activity')
           AND COALESCE(completed_ms,claimed_ms,created_ms)<=?)) LIMIT 32)`)
       .bind(now-L.operationTtlMs,now-L.frameOperationTtlMs).run();
@@ -219,11 +224,24 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         toolFailure(reason,reason==='result_expired'?
           'The operation completed, but its retained response expired. Inspect the device state before repeating a mutation.':
           'The stored response is unavailable. The operation will not be repeated.',{operation_id:op.id,completed:true});
-      if(!op.result_key)return missingResult('result_expired');
-      const stored=await env.BUCKET.get(op.result_key);
-      if(!stored)return missingResult('result_unavailable');
-      const value=JSON.parse(await stored.text());
-      return {...value,_meta:{...(value._meta??{}),'rdc/operation_id':op.id}};
+      if(!op.result_key&&!op.result_inline_json)return missingResult('result_expired');
+      // For small results the same authorized operation record is the durable
+      // result store. Larger payloads keep the existing R2 readback path.
+      let resultJson=op.result_inline_json;
+      if(!resultJson){
+        const stored=await env.BUCKET.get(op.result_key);
+        if(!stored)return missingResult('result_unavailable');
+        resultJson=await stored.text();
+      }
+      const value=JSON.parse(resultJson);
+      // Some host tool connectors retain structuredContent but strip MCP
+      // result _meta. Keep the authoritative operation ID in both places so
+      // the owner can request phase diagnostics after a fast completed call.
+      // The gateway-owned ID overrides any untrusted worker placeholder.
+      return {...value,
+        ...(object(value.structuredContent)?{structuredContent:{
+          ...value.structuredContent,_rdc_gateway_operation_id:op.id}}:{}),
+        _meta:{...(value._meta??{}),'rdc/operation_id':op.id}};
     }
     if(op.state==='expired')return toolFailure('expired_before_execution','The queued operation expired before the device claimed it. It was not dispatched.',{operation_id:op.id,status:op.state});
     if(op.state==='unknown')return toolFailure('outcome_unknown','The device may have executed this operation. It will not be dispatched again. Recover status or inspect the device before another mutation.',{operation_id:op.id,status:op.state});
@@ -379,7 +397,8 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
   async function result(request,env){
     try{
       await device(request,env);const body=await readBody(request,L.maxUploadBytes);
-      if(typeof body.result_json==='string'&&encoder.encode(body.result_json).length>L.maxResultBytes)
+      const resultBytes=typeof body.result_json==='string'?encoder.encode(body.result_json).length:0;
+      if(resultBytes>L.maxResultBytes)
         fail(413,'result_too_large','The result exceeds the 12 MiB relay limit.');
       if(body.device_id!==env.RDC_DEVICE_ID)fail(403,'device_mismatch','This credential belongs to another device.');
       if(!text(body.operation_id,100)||!text(body.claim_id,100)||!text(body.request_sha256,64)||typeof body.result_json!=='string')
@@ -398,18 +417,22 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       if(!object(value)||!Array.isArray(value.content)||value.content.length>1000||
         (value.isError!==undefined&&typeof value.isError!=='boolean'))
         fail(400,'invalid_result','A standard MCP CallToolResult is required.');
-      const key=`rdc-results/${env.RDC_DEVICE_ID}/${op.id}/${digest}.json`;
-      // The object is durable before the database advertises completion. A lost
-      // acknowledgment only repeats this upload; it never repeats device work.
-      // D1 failure after this write can leave an unrecorded orphan. Admission
-      // bounds committed/reserved bytes, not every object in the R2 bucket.
-      await env.BUCKET.put(key,body.result_json,{httpMetadata:{contentType:'application/json'}});
-      const completed=await env.DB.prepare(`UPDATE gateway_operations SET state='completed',completed_ms=?,result_key=?,result_sha256=?,result_size=?,result_expires_ms=?,request_json=NULL,request_size=0
+      const inline=resultBytes<=L.maxInlineResultBytes?body.result_json:null;
+      const key=inline===null?`rdc-results/${env.RDC_DEVICE_ID}/${op.id}/${digest}.json`:null;
+      // At most 8 KiB remains inline in the same committed D1 operation record.
+      // Larger results remain durable in R2 before D1 advertises completion.
+      // A lost acknowledgment only repeats the exact result upload, never work.
+      // D1 failure after a large R2 PUT may still leave an orphan object.
+      if(key!==null)await env.BUCKET.put(key,body.result_json,{httpMetadata:{contentType:'application/json'}});
+      const completed=await env.DB.prepare(`UPDATE gateway_operations SET state='completed',completed_ms=?,result_key=?,result_inline_json=?,result_sha256=?,result_size=?,result_expires_ms=?,request_json=NULL,request_size=0
         WHERE id=? AND device_id=? AND result_sha256 IS NULL AND state IN ('claimed','unknown') RETURNING id`)
-        .bind(clock(),key,digest,encoder.encode(body.result_json).length,clock()+(['rdc_preview_frame','rdc_preview_activity'].includes(op.tool)?L.frameTtlMs:L.resultTtlMs),op.id,env.RDC_DEVICE_ID).first();
+        .bind(clock(),key,inline,digest,resultBytes,clock()+(['rdc_preview_frame','rdc_preview_activity'].includes(op.tool)?L.frameTtlMs:L.resultTtlMs),op.id,env.RDC_DEVICE_ID).first();
       if(!completed){
         const current=await env.DB.prepare('SELECT result_sha256 FROM gateway_operations WHERE id=?').bind(op.id).first();
-        if(current?.result_sha256!==digest){await env.BUCKET.delete(key);fail(409,'result_conflict','A different result won the completion race.');}
+        if(current?.result_sha256!==digest){
+          if(key!==null)await env.BUCKET.delete(key);
+          fail(409,'result_conflict','A different result won the completion race.');
+        }
       }
       return json({ok:true,operation_id:op.id,status:'completed',duplicate:!completed});
     }catch(error){return apiError(error);}
