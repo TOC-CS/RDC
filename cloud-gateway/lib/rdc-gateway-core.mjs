@@ -133,7 +133,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     inputSchema:{type:'object',properties:{},additionalProperties:false},
     annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false}});
   const serverInfo={name:'rdc',title:'RDC',version:'0.1.0a8',description:'Independent agent workspace with an embedded live preview.',
-    ...(iconDataUri?{icons:[{src:iconDataUri,mimeType:'image/png'}]}:{})};
+    ...(iconDataUri?{icons:[{src:iconDataUri,mimeType:'image/png',sizes:['192x192']}]}:{})};
   const capabilities={tools:{listChanged:false},resources:{subscribe:false,listChanged:false},extensions:{[UI_EXTENSION]:{}}};
   const instructions='RDC controls the paired device through its existing local grants. Pass the current task session_id to rdc_preview_open to see only that live visual source. Closing or moving that view never stops work. Mutating cloud tools require a stable _rdc_request_id. When a call returns pending, recover it using rdc_operation_status and the returned operation_id. Never repeat an uncertain mutation under a new ID. Mutation request IDs are retained for 24 hours; preview frame and activity results and operation identities have short retention. Owner approvals remain in the local owner administration.';
 
@@ -446,4 +446,18 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     catch(error){return apiError(error);}
   }
   return {mcp,poll,result,status};
+}
+
+
+/**
+ * Post-migration rollback target: the same authenticated, owner-scoped reader
+ * that understands BOTH v17 D1-inline and legacy R2 results, but a writer that
+ * ALWAYS stores new results in R2. The historical v16 binary cannot read
+ * inline-only rows and MUST NOT be selected as a post-inline rollback.
+ *
+ * Save a separate owner-private Sites version of this factory before activating
+ * any inline writer. This function does not migrate, deploy or rewrite data.
+ */
+export function createRollbackCompatibleGateway(options){
+  return createGateway({...options,limits:{...(options?.limits??{}),maxInlineResultBytes:0}});
 }

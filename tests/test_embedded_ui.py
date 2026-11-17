@@ -184,7 +184,10 @@ def real_worker_tool_result(engine, request):
 class EmbeddedResourceTests(unittest.TestCase):
     def test_bundled_resource_is_self_contained_and_bounded(self):
         html = (EMBEDDED / 'preview.html').read_text()
-        self.assertLess(len(html.encode()), 4 * 1024 * 1024)
+        self.assertLess(len(html.encode()), 800_000)
+        branded_thumbnail = (EMBEDDED.parent / 'assets' / 'rdc-icon-192.png').read_bytes()
+        self.assertLess(len(branded_thumbnail), 60_000)
+        self.assertIn('data:image/png;base64,' + base64.b64encode(branded_thumbnail).decode(), html)
         self.assertNotIn('RDC_LOGO_DATA', html)
         self.assertNotIn('/* RDC_SCRIPT */', html)
         self.assertNotRegex(html, r'<script[^>]+src=')
@@ -329,8 +332,18 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.assertLess(args['width'],400)
         self.assertAlmostEqual(args['width']/args['height'],16/9,delta=.02)
         self.assertTrue(args['_rdc_request_id'])
-        panel=self.view.locator('#panel').bounding_box()
-        host=self.page.locator('#app-frame').bounding_box()
+        # The host observes the resize dispatch before the asynchronous native
+        # readback and frame dimensions settle. Assert eventual panel fit.
+        self.view.locator('#screen.window-sized').wait_for(timeout=15000)
+        deadline=time.monotonic()+15
+        while True:
+            panel=self.view.locator('#panel').bounding_box()
+            host=self.page.locator('#app-frame').bounding_box()
+            if panel and host and abs(panel['height']-host['height'])<=2:
+                break
+            if time.monotonic()>=deadline:
+                break
+            self.page.wait_for_timeout(25)
         self.assertAlmostEqual(panel['height'],host['height'],delta=2)
         self.view.get_by_role('button',name='Hide preview',exact=True).click()
         count=len(self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_preview_resize')"))
