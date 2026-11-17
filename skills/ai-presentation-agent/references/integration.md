@@ -34,3 +34,33 @@ The viewer token appears in the local URL and may be stored in browser history. 
 - ProPresenter readback observes the active cue through GET /v1/presentation/slide_index. MCP tool presentation_readback and authenticated local GET /v1/readback expose whether the actual app cue matches the expected index. Some other adapters cannot independently confirm output.
 - Windows PowerPoint uses an existing slideshow COM bridge through Windows PowerShell, with next, previous, goto and CurrentShowPosition readback. Source contract tests pass on macOS, but Windows execution still requires a separate verified host and user approval.
 - A local HTTP venue simulator verified a complete BandMates cue, voice command, slide output and readback sequence. No physical ProPresenter instance was controlled.
+
+
+## Managed crash recovery, live-viewer authority and private talkback
+
+An owner-authorized managed-server.mjs stores a private token-free last-known.json file with the previous deck and local index, and refuses to auto-arm or auto-project it after a process crash. It can replace stale control credentials only when the previous PID is proven dead; it refuses takeover of an active session. presentationctl.mjs sends authenticated local commands using private credentials on disk instead of exposing tokens in AI tool arguments.
+
+The authenticated live viewer uses direct slide-state notifications with polling fallback for older handlers. Unlike the offline HTML player, a live viewer cannot independently advance through keyboard, local button or postMessage inputs. Its status label distinguishes LIVE, HELD, PREVIEW ONLY, RECOVERED PREVIEW, RECONNECTING and OUTPUT UNVERIFIED.
+
+Local speech playback requires an operator-confirmed private output. Query IDs with node scripts/local-microphone.mjs --list-outputs without capture/playback; then select --output-device DEVICE_ID and --confirm-private-monitor alongside --commands --speak, explicit microphone device and local model path. The default system speaker route is forbidden for local AI talkback. Physical house/stream isolation remains an outstanding venue acceptance step.
+
+## Operator stop contract
+
+MCP presentation_stop and authenticated POST /v1/stop stop the local controller without sending native display or projector commands. The privacy-preserving CLI node scripts/presentationctl.mjs stop calls the same path. Physical output blanking is a distinct operation and remains app-specific.
+
+
+## Finished presentation unload and privacy clearing
+
+After node scripts/presentationctl.mjs stop, use node scripts/presentationctl.mjs unload or the authenticated presentation_unload MCP / POST /v1/unload action. The stopped-only command removes the loaded deck and deletes the owner-only last-known.json recovery checkpoint so finished slides cannot reappear on a process restart. Failure to delete the checkpoint is reported and can be safely retried after storage repair. The already connected live viewer receives loaded:false, clears previous slide content from its DOM, and shows PRESENTATION CLEARED. Unload never blanks a native projector or quits a separate presentation app.
+
+## Worship production outputs and stage-only operator permissions, November 17 2026
+
+The nested worship skill at skills/ai-presentation-agent/worship/ supplies researched church-service practices, 26 modules and 18 acceptance scenarios. The Presentation Agent runtime remains independent of ProPresenter. It uses one authoritative cue state to render independently restricted audience, stage confidence and broadcast outputs. Original and licensed song/NKJV text must be separately authorized for each destination, and stage notes, chords and private speech never appear in public stream payloads.
+
+MCP supports presentation_load_worship, presentation_worship_rundown, presentation_worship_looks, presentation_worship_look_set, presentation_worship_visibility and presentation_worship_visibility_set. Owner-authorized local HTTP provides separate audience/stage/broadcast Look and visibility routes, with public data whitelisted at source. The local audience browser blank is an HTML blackout, not a physical projector write. Broadcast clear hides OBS-compatible transparent lyrics, without changing OBS Program or starting/stopping streaming or recording. Look/visibility edits require a separate owner grant: PRESENTATION_ALLOW_WORSHIP_LOOK_EDIT=1 at server startup.
+
+The private stage countdown is routed exclusively to the stage confidence view. It may show a private label and remaining minutes/seconds but never automatically advances slides. POST /v1/stage/clock requires the operator bearer AND the distinct private stage credential in X-Stage-Credential, with PRESENTATION_ALLOW_STAGE_CLOCK=1 at startup. GET /v1/stage/clock with the independently authorized stage key is private. Ordinary audience and stream viewers, status, operator rundown and general MCP tools never serialize the private timer label.
+
+RDC owner commands include stage-clock --file ABSOLUTE_OWNER_ONLY_JSON, stage-clock-status, stage-clock-start, stage-clock-pause, stage-clock-resume and stage-clock-reset. The configuration file must be owner-owned, owner-only and not a symlink. All CLI responses omit the private timer caption. No native app, camera, microphone, audio, projection, livestream or MIDI is activated by these commands.
+
+The read-only venue-readiness command reports macOS display candidates, and preflight adds separate Presentation Agent, BandMates, display and OBS read-only statuses. OBS production diagnostics are available through obs-production-status with separate Studio Preview/Program, stream/record status and frame metrics; OBS WebSocket may be unavailable if the app is not connected. A connected output or accepted network command cannot qualify a real projector or remote streaming provider. Real stage, broadcast, hardware and Atlas acceptance remain outstanding; a controlled production restart or plugin release requires independent operator approval.

@@ -1,0 +1,28 @@
+{
+  "title": "Example OBS scene map, NONE were verified or activated",
+  "scenes": [
+    "Countdown",
+    "Camera + Lyrics",
+    "Pastor + Scripture",
+    "Sermon Camera",
+    "Prayer Camera",
+    "Announcements",
+    "Media Playback",
+    "Closing"
+  ],
+  "suggestedBrowserOverlays": [
+    "stream-lyrics-lower-third",
+    "stream-scripture-lower-third",
+    "stream-service-title"
+  ],
+  "audienceDisplay": "separate projector output, NOT the OBS stream",
+  "stageDisplay": "private confidence monitor, NEVER captured in OBS program",
+  "safety": {
+    "armed": false,
+    "streaming": false,
+    "recording": false,
+    "sceneControlAuthorized": false,
+    "readbackVerified": false
+  },
+  "notes": "Configure exact names and source visibility in OBS Studio before a supervised rehearsal. Never store stream credentials in this map."
+}

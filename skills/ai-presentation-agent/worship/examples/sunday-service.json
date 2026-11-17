@@ -1,0 +1,121 @@
+{
+  "title": "Sunday Worship Service, independent rehearsal",
+  "theme": "dark",
+  "livestream": {
+    "enabled": true,
+    "obsScenes": {
+      "countdown": "Countdown",
+      "worship": "Camera + Lyrics",
+      "scripture": "Pastor + Scripture",
+      "sermon": "Sermon Camera",
+      "prayer": "Prayer Camera",
+      "announcement": "Announcements",
+      "media": "Media Playback",
+      "closing": "Closing"
+    }
+  },
+  "items": [
+    {
+      "id": "pre-service",
+      "type": "countdown",
+      "title": "Service Begins Soon",
+      "text": "Welcome to worship. Service begins shortly.",
+      "notes": "PRIVATE: confirm stream preview, program and audio sync"
+    },
+    {
+      "id": "welcome",
+      "type": "announcement",
+      "title": "Welcome",
+      "text": "Welcome to today's worship service.",
+      "notes": "PRIVATE: greet guests and confirm microphones"
+    },
+    {
+      "id": "praise-song",
+      "type": "song",
+      "title": "Light of the Morning",
+      "rights": {
+        "source": "original",
+        "displayAuthorized": true
+      },
+      "sections": [
+        {
+          "label": "verse 1",
+          "lines": [
+            "We lift our voices in the morning light",
+            "With grateful hearts we sing today",
+            "Your goodness meets us as we gather",
+            "And leads us onward in Your way"
+          ],
+          "chords": [
+            "C",
+            "F",
+            "Am",
+            "G"
+          ],
+          "notes": "PRIVATE: stage cue, piano intro. Original demonstration lyrics."
+        },
+        {
+          "label": "chorus",
+          "lines": [
+            "Our hearts rejoice, our voices rise",
+            "We sing together, lifted high"
+          ],
+          "chords": [
+            "F",
+            "C",
+            "G"
+          ],
+          "notes": "PRIVATE: drums enter on downbeat."
+        },
+        {
+          "label": "bridge",
+          "lines": [
+            "We remember all Your kindness",
+            "We give thanks with every breath"
+          ],
+          "chords": [
+            "Am",
+            "F",
+            "G"
+          ],
+          "notes": "PRIVATE: softer dynamics on first bridge"
+        }
+      ],
+      "order": [
+        "verse 1",
+        "chorus",
+        "bridge",
+        "chorus"
+      ]
+    },
+    {
+      "id": "first-reading",
+      "type": "scripture",
+      "title": "Scripture Reading",
+      "reference": "Psalm 100:1-2",
+      "translation": "NKJV",
+      "notes": "PRIVATE: pastor reads the licensed NKJV passage from authorized Bible source. Display reference only here."
+    },
+    {
+      "id": "special-prayer",
+      "type": "prayer",
+      "title": "Prayer",
+      "text": "Congregational Prayer",
+      "notes": "PRIVATE: stage lighting on pastor"
+    },
+    {
+      "id": "message",
+      "type": "sermon",
+      "title": "A Life of Gratitude",
+      "text": "Biblical Teaching: Gratitude and Worship",
+      "notes": "PRIVATE: sermon outline and private pastoral notes remain stage-only."
+    },
+    {
+      "id": "closing",
+      "type": "closing",
+      "title": "Thank You",
+      "text": "Thank you for worshiping with us today.",
+      "notes": "PRIVATE: exit music after outro"
+    }
+  ]
+}
