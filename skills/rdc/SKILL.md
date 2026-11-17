@@ -7,6 +7,8 @@ description: Use RDC (Remote Desktop Commander) by TOC Ministries for independen
 
 Use the existing connected RDC App and its current tool schemas. Keep the user's worker, authorization, and task context together. Read [cloud operations](references/cloud-operations.md) when a call is pending or reconnecting, [diagnostics](references/diagnostics.md) for incident reports, [credentials](references/credentials.md) for saved-password fills, [mobile](references/mobile.md) for phones and tablets, and [compatibility](references/compatibility.md) before making platform or host-support claims.
 
+For two-way, cross-session communication among ChatGPT, Claude, Grok, BandMates and other AI apps, use [RDC communications](../rdc-communications/SKILL.md). Its message bus and terminal prototypes are synthetic-only until actual host enrollment and direct-chat readback are verified. Never treat an open browser tab as an authenticated peer AI session.
+
 ## Keep the owner’s work in the foreground
 
 Work in the background by default. Preserve the owner's active app/window, keyboard target, mouse pointer, active desktop/Space, and preview visibility. A general instruction to complete a task or watch a preview does not authorize taking over the shared desktop.
