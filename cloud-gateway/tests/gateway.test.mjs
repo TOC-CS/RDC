@@ -71,6 +71,27 @@ test('MCP metadata exposes the actual HTML and resource link without device secr
   assert.deepEqual(content._meta.ui.csp.connectDomains,[]);
 });
 
+test('synced RDC gateway advertises bounded, read-only batched coding context',async()=>{
+  const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
+  const target=assets.catalog.find(x=>x.name==='rdc_code_context');
+  assert.ok(target,'The on-disk engine code-context tool must be synced to the gateway');
+  assert.equal(target['x-rdc-mutating'],false);
+  assert.ok(target.inputSchema.required.includes('path'));
+  assert.equal(target.inputSchema.properties.list_limit.maximum,200);
+  assert.equal(target.inputSchema.properties.search_limit.maximum,100);
+  assert.equal(target.inputSchema.properties.max_files.maximum,1000);
+  assert.equal(target.inputSchema.properties.file_paths.maxItems,20);
+  const s=setup({},assets.catalog);
+  const response=await s.gateway.mcp(s.request('/mcp',{
+    jsonrpc:'2.0',id:'code-list',method:'tools/list'
+  }),s.env);
+  assert.equal(response.status,200);
+  const body=await response.json();
+  const spec=body.result.tools.find(x=>x.name==='rdc_code_context');
+  assert.ok(spec);
+  assert.equal(spec.annotations.readOnlyHint,true);
+});
+
 test('shipped RDC server icon stays compact, branded, and recoverable in initialize metadata',async()=>{
   const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
   assert.match(assets.iconDataUri,/^data:image\/png;base64,/);

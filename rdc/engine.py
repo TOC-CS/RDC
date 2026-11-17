@@ -82,6 +82,13 @@ class Engine:
                  {'file_path':STRING,'offset':{'type':'integer','minimum':0},'limit':LIMIT},['file_path']),
             tool('rdc_file_read_many','Read up to 20 independent files in one call. Per-file failures are retained.',
                  {'file_paths':{'type':'array','items':STRING,'minItems':1,'maxItems':20}},['file_paths']),
+            tool('rdc_code_context','Gather bounded source directory listing, literal symbol matches and up to 20 versioned file reads in one read-only request. Restricted to one selected project subtree. Per-file errors remain visible; source is not an atomic snapshot.',
+                 {'path':STRING,
+                  'query':{'type':'string','minLength':1,'maxLength':2000},
+                  'file_paths':{'type':'array','items':STRING,'maxItems':20},
+                  'list_limit':{'type':'integer','minimum':1,'maximum':200},
+                  'search_limit':{'type':'integer','minimum':1,'maximum':100},
+                  'max_files':{'type':'integer','minimum':1,'maximum':1000}},['path']),
             tool('rdc_file_search','Bounded literal content search; reports skipped files and truncation.',
                  {'path':STRING,'query':{'type':'string','minLength':1,'maxLength':2000},
                   'limit':{'type':'integer','minimum':1,'maximum':1000},'max_files':{'type':'integer','minimum':1,'maximum':10000}},['path','query']),
@@ -157,6 +164,13 @@ class Engine:
             self.files.resolve(arguments['cwd'],directory=True)
         if name.startswith('rdc_file_') and 'file_path' in arguments:
             self.files.resolve(arguments['file_path'])
+        if name == 'rdc_code_context':
+            selected = self.files.resolve(arguments['path'],directory=True)
+            for candidate in arguments.get('file_paths',[]):
+                resolved = self.files.resolve(candidate)
+                if resolved != selected and selected not in resolved.parents:
+                    raise RDCError('path_denied',
+                        'A code-context request may read only files beneath its selected directory.')
         if name in ('rdc_directory_create','rdc_file_list','rdc_file_search'):
             self.files.resolve(arguments.get('path','.'))
 
@@ -319,6 +333,26 @@ class Engine:
             with self.adapters._native_lock:
                 result=self.adapters.windows.resize(args['session_id'],args['width'],args['height'],request_id=args.get('_rdc_request_id'))
             return {**result,'device_id':self.store.device_id}
+        if name == 'rdc_code_context':
+            project = self.files.resolve(args['path'],directory=True)
+            paths = args.get('file_paths',[])
+            # Combined output remains bounded for cloud result transport. Files
+            # keep their independent hash and truncated/offset fields.
+            listing = self.files.list(str(project),limit=args.get('list_limit',120))
+            matches = (self.files.search(str(project),args['query'],
+                       limit=args.get('search_limit',100),
+                       max_files=args.get('max_files',1000))
+                       if 'query' in args else None)
+            reads = []
+            if paths:
+                read_limit = min(16384,max(1024,self.settings.max_read_bytes//len(paths)))
+                def read_one(path):
+                    return self._guarded(lambda: {'ok':True,**self.files.read(path,limit=read_limit)})
+                with ThreadPoolExecutor(max_workers=min(4,len(paths))) as pool:
+                    reads = list(pool.map(read_one,paths))
+            return {'path':str(project),'listing':listing,'search':matches,
+                    'reads':reads,'read_limit_per_file':min(16384,
+                        max(1024,self.settings.max_read_bytes//len(paths))) if paths else 0}
         if name == 'rdc_file_read_many':
             paths = args['file_paths']
             def read(path):
