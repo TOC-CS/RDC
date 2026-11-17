@@ -13,3 +13,11 @@ test-results/
 .tmp/
 node_modules/
 
+
+# Independently staged Presentation Agent runtime build files
+apps/ai-presentation-agent/node_modules/
+apps/ai-presentation-agent/.tooling/
+apps/ai-presentation-agent/evidence/
+apps/ai-presentation-agent/exports/
+apps/ai-presentation-agent/.DS_Store
+apps/ai-presentation-agent/node_modules

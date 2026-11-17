@@ -1,0 +1,14 @@
+[
+  {
+    "type": "livestream_lyrics_rights",
+    "itemId": "opening-worship"
+  },
+  {
+    "type": "scripture_reference_only",
+    "itemId": "reading"
+  },
+  {
+    "type": "livestream_lyrics_rights",
+    "itemId": "reprise"
+  }
+]

@@ -1,0 +1,60 @@
+{
+  "title": "Worship Service",
+  "theme": "dark",
+  "slides": [
+    {
+      "id": "title",
+      "title": "Worship Service",
+      "text": "AI Presentation Agent demonstration",
+      "kind": "title"
+    },
+    {
+      "id": "section-1",
+      "title": "Morning Praise",
+      "text": "We gather here in joyful song\nOur hearts unite in grateful praise",
+      "kind": "lyrics",
+      "cues": [
+        "we gather here in joyful song"
+      ],
+      "section": "verse 1",
+      "song": "Original Sample",
+      "reference": null,
+      "scene": null
+    },
+    {
+      "id": "section-2",
+      "title": "Morning Praise",
+      "text": "We will sing and rejoice\nTogether we give thanks",
+      "kind": "lyrics",
+      "cues": [
+        "we will sing and rejoice"
+      ],
+      "section": "chorus",
+      "song": "Original Sample",
+      "reference": null,
+      "scene": null
+    },
+    {
+      "id": "section-3",
+      "title": "Scripture Reading",
+      "text": "John 3:16 (reference only)",
+      "kind": "scripture",
+      "cues": [],
+      "section": null,
+      "song": null,
+      "reference": "John 3:16",
+      "scene": null
+    },
+    {
+      "id": "section-4",
+      "title": "Message Notes",
+      "text": "Opening introduction\nMain teaching\nClosing reflection",
+      "kind": "teaching",
+      "cues": [],
+      "section": null,
+      "song": null,
+      "reference": null,
+      "scene": null
+    }
+  ]
+}

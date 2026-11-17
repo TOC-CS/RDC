@@ -1,0 +1,118 @@
+{
+  "title": "TOC Original Service Rehearsal",
+  "theme": "dark",
+  "slides": [
+    {
+      "id": "pre-service",
+      "title": "Service Begins Soon",
+      "text": "Welcome to worship.",
+      "kind": "countdown"
+    },
+    {
+      "id": "welcome-slot",
+      "title": "Welcome",
+      "text": "Thank you for joining this service.",
+      "kind": "announcement"
+    },
+    {
+      "id": "opening-worship-s1-p1",
+      "title": "Morning Song of Gratitude",
+      "text": "",
+      "kind": "song",
+      "song": "Morning Song of Gratitude",
+      "section": "verse 1",
+      "occurrence": 1
+    },
+    {
+      "id": "opening-worship-s2-p1",
+      "title": "Morning Song of Gratitude",
+      "text": "",
+      "kind": "song",
+      "song": "Morning Song of Gratitude",
+      "section": "chorus",
+      "occurrence": 1
+    },
+    {
+      "id": "opening-worship-s3-p1",
+      "title": "Morning Song of Gratitude",
+      "text": "",
+      "kind": "song",
+      "song": "Morning Song of Gratitude",
+      "section": "verse 2",
+      "occurrence": 1
+    },
+    {
+      "id": "opening-worship-s4-p1",
+      "title": "Morning Song of Gratitude",
+      "text": "",
+      "kind": "song",
+      "song": "Morning Song of Gratitude",
+      "section": "chorus",
+      "occurrence": 2
+    },
+    {
+      "id": "opening-worship-s5-p1",
+      "title": "Morning Song of Gratitude",
+      "text": "",
+      "kind": "song",
+      "song": "Morning Song of Gratitude",
+      "section": "bridge",
+      "occurrence": 1
+    },
+    {
+      "id": "opening-worship-s6-p1",
+      "title": "Morning Song of Gratitude",
+      "text": "",
+      "kind": "song",
+      "song": "Morning Song of Gratitude",
+      "section": "chorus",
+      "occurrence": 3
+    },
+    {
+      "id": "reading",
+      "title": "Scripture Reading",
+      "text": "",
+      "kind": "scripture",
+      "reference": "Psalm 100:1-2"
+    },
+    {
+      "id": "sermon",
+      "title": "A Life of Gratitude",
+      "text": "Scripture and Gratitude",
+      "kind": "sermon"
+    },
+    {
+      "id": "reprise-s1-p1",
+      "title": "Morning Song of Gratitude",
+      "text": "",
+      "kind": "song",
+      "song": "Morning Song of Gratitude",
+      "section": "chorus",
+      "occurrence": 1
+    },
+    {
+      "id": "reprise-s2-p1",
+      "title": "Morning Song of Gratitude",
+      "text": "",
+      "kind": "song",
+      "song": "Morning Song of Gratitude",
+      "section": "bridge",
+      "occurrence": 1
+    },
+    {
+      "id": "reprise-s3-p1",
+      "title": "Morning Song of Gratitude",
+      "text": "",
+      "kind": "song",
+      "song": "Morning Song of Gratitude",
+      "section": "chorus",
+      "occurrence": 2
+    },
+    {
+      "id": "closing-slot",
+      "title": "Thank You",
+      "text": "Thank you for worshiping with us.",
+      "kind": "closing"
+    }
+  ]
+}

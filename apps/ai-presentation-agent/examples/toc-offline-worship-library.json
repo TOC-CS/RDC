@@ -1,0 +1,151 @@
+{
+  "schema": "toc.worship-library/v1",
+  "songs": [
+    {
+      "id": "morning-song",
+      "revision": "2026-11-16.1",
+      "title": "Morning Song of Gratitude",
+      "rights": {
+        "source": "original",
+        "displayAuthorized": true,
+        "streamAuthorized": false
+      },
+      "key": "C",
+      "notes": "PRIVATE REHEARSAL: instrumental introduction",
+      "sections": [
+        {
+          "id": "verse-1",
+          "label": "verse 1",
+          "lines": [
+            "We greet the morning with a thankful song",
+            "And gather here in love and hope"
+          ],
+          "chords": [
+            "C",
+            "F"
+          ],
+          "notes": "PRIVATE REHEARSAL: quiet entry"
+        },
+        {
+          "id": "verse-2",
+          "label": "verse 2",
+          "lines": [
+            "We listen now and share the gifts of grace",
+            "And lift our hearts in grateful praise"
+          ],
+          "chords": [
+            "Am",
+            "G"
+          ],
+          "notes": "PRIVATE REHEARSAL: lift dynamic gently"
+        },
+        {
+          "id": "chorus",
+          "label": "chorus",
+          "lines": [
+            "With grateful hearts we sing today",
+            "And offer all our thanks in praise"
+          ],
+          "chords": [
+            "F",
+            "C",
+            "G"
+          ],
+          "notes": "PRIVATE REHEARSAL: full band enters"
+        },
+        {
+          "id": "bridge",
+          "label": "bridge",
+          "lines": [
+            "In every season we remember",
+            "The love that gathers us as one"
+          ],
+          "chords": [
+            "Am",
+            "F"
+          ],
+          "notes": "PRIVATE REHEARSAL: softer first time"
+        }
+      ],
+      "arrangements": [
+        {
+          "id": "main-service",
+          "sectionIds": [
+            "verse-1",
+            "chorus",
+            "verse-2",
+            "chorus",
+            "bridge",
+            "chorus"
+          ]
+        },
+        {
+          "id": "short-reprise",
+          "sectionIds": [
+            "chorus",
+            "bridge",
+            "chorus"
+          ]
+        }
+      ]
+    }
+  ],
+  "scriptures": [
+    {
+      "id": "scripture-psalm-100",
+      "revision": "2026-11-16.1",
+      "title": "Scripture Reading",
+      "reference": "Psalm 100:1-2",
+      "translation": "NKJV",
+      "text": "",
+      "scriptureRights": {
+        "source": "unknown",
+        "displayAuthorized": false,
+        "streamAuthorized": false
+      },
+      "notes": "PRIVATE REHEARSAL: read only from owner-authorized NKJV source"
+    }
+  ],
+  "segments": [
+    {
+      "id": "countdown",
+      "revision": "2026-11-16.1",
+      "type": "countdown",
+      "title": "Service Begins Soon",
+      "text": "Welcome to worship.",
+      "publicAuthorized": true,
+      "streamAuthorized": true,
+      "notes": "PRIVATE REHEARSAL: confirm permitted program preview"
+    },
+    {
+      "id": "welcome",
+      "revision": "2026-11-16.1",
+      "type": "announcement",
+      "title": "Welcome",
+      "text": "Thank you for joining this service.",
+      "publicAuthorized": true,
+      "streamAuthorized": true,
+      "notes": "PRIVATE REHEARSAL: greet guests"
+    },
+    {
+      "id": "sermon-title",
+      "revision": "2026-11-16.1",
+      "type": "sermon",
+      "title": "A Life of Gratitude",
+      "text": "Scripture and Gratitude",
+      "publicAuthorized": true,
+      "streamAuthorized": true,
+      "notes": "PRIVATE REHEARSAL: sermon outline stays on stage"
+    },
+    {
+      "id": "closing",
+      "revision": "2026-11-16.1",
+      "type": "closing",
+      "title": "Thank You",
+      "text": "Thank you for worshiping with us.",
+      "publicAuthorized": true,
+      "streamAuthorized": true,
+      "notes": "PRIVATE REHEARSAL: operator closes the presentation deliberately"
+    }
+  ]
+}
