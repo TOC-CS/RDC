@@ -14,7 +14,8 @@ const state = {
   hidden: false, busy: false, timer: null, generation: 0,
   sessionId: null, deviceId: null, frame: null, haveOpenResult: false,
   availability: null, selectionLost: false, setupProblem: null,
-  mode: 'inline', modes: ['inline'],
+  mode: 'inline', modes: ['inline'], presentationBridge: 'mcp',
+  autoFloatAttempted: false, floatPending: false, modeRequest: 0, openPresentationRequested: false,
   resizeEnabled: false, resizeBlocked: false, pendingResize: null, resizedFor: null, resizeActual: null,
   pendingOpen: null, pendingFrames: new Map(), blockedFrames: new Map(),
   recoveryTimer: null, recoveryWake: null, retiredOpens: new Set(), retiredObservations: new Map(),
@@ -393,6 +394,8 @@ function renderFrame(result, data) {
     el('frame').style.width = actual.width + 'px';
     el('frame').style.height = actual.height + 'px';
   }
+  // Never attach the next cursor position to the previous decoded frame.
+  el('cursor').hidden = true;
   el('frame').src = 'data:' + image.mimeType + ';base64,' + image.data;
   el('frame').hidden = false;
   el('empty').hidden = true;
@@ -400,23 +403,53 @@ function renderFrame(result, data) {
   updateCursor();
 }
 function updateCursor() {
+  const marker = el('cursor');
+  marker.hidden = true;
   const image = el('frame');
-  const cursor = state.frame?.cursor;
-  if (image.hidden || !cursor || cursor.visible === false || !Number.isFinite(cursor.x) || !Number.isFinite(cursor.y)) {
-    el('cursor').hidden = true; return;
-  }
-  const sourceWidth = state.frame?.viewport?.width || state.frame?.width || image.naturalWidth;
-  const sourceHeight = state.frame?.viewport?.height || state.frame?.height || image.naturalHeight;
-  if (!sourceWidth || !sourceHeight || cursor.x < 0 || cursor.y < 0 || cursor.x > sourceWidth || cursor.y > sourceHeight) {
-    el('cursor').hidden = true; return;
-  }
-  const width = el('screen').clientWidth, height = el('screen').clientHeight;
-  const factor = Math.min(width / sourceWidth, height / sourceHeight);
-  const x = (width - sourceWidth * factor) / 2 + cursor.x * factor;
-  const y = cursor.y * factor;
-  el('cursor').style.left = `${x - 3}px`;
-  el('cursor').style.top = `${y - 2}px`;
-  el('cursor').hidden = false;
+  const frame = state.frame;
+  const cursor = frame?.cursor;
+  if (image.hidden || !image.complete || !image.naturalWidth || !image.naturalHeight ||
+      state.hidden || state.disposed || frame?.cursor_in_image === true ||
+      frame?.session_id !== state.sessionId || frame?.device_id !== state.deviceId ||
+      !cursor || cursor.visible === false ||
+      (cursor.visible !== true && cursor.x === 0 && cursor.y === 0) ||
+      !Number.isFinite(cursor.x) || !Number.isFinite(cursor.y)) return;
+  const sourceWidth = frame?.viewport?.width || frame?.width || image.naturalWidth;
+  const sourceHeight = frame?.viewport?.height || frame?.height || image.naturalHeight;
+  if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight) ||
+      sourceWidth <= 0 || sourceHeight <= 0 ||
+      cursor.x < 0 || cursor.y < 0 || cursor.x >= sourceWidth || cursor.y >= sourceHeight) return;
+
+  const imageBox = image.getBoundingClientRect();
+  const screen = el('screen'), screenBox = screen.getBoundingClientRect();
+  const fit = getComputedStyle(image).objectFit;
+  let drawWidth = imageBox.width, drawHeight = imageBox.height;
+  let drawLeft = imageBox.left, drawTop = imageBox.top;
+  if (fit === 'contain') {
+    // The image is top-centered inside its IMG box, with possible side bars.
+    // Calculate from actual decoded pixels rather than the preview container.
+    const scale = Math.min(imageBox.width / image.naturalWidth, imageBox.height / image.naturalHeight);
+    drawWidth = image.naturalWidth * scale;
+    drawHeight = image.naturalHeight * scale;
+    drawLeft += (imageBox.width - drawWidth) / 2;
+  } else if (fit !== 'fill') return;
+  if (!drawWidth || !drawHeight) return;
+
+  // Convert the actual rendered pixels to scroll-content coordinates for
+  // native windows larger than the preview. Do not use global desktop coords.
+  const left = drawLeft - screenBox.left + screen.scrollLeft;
+  const top = drawTop - screenBox.top + screen.scrollTop;
+  const markerLeft = left + cursor.x / sourceWidth * drawWidth - 3;
+  const markerTop = top + cursor.y / sourceHeight * drawHeight - 2;
+  marker.style.left = markerLeft + 'px';
+  marker.style.top = markerTop + 'px';
+  // Clip the entire marker glyph to the selected source, including at edges.
+  const clipTop = Math.max(0, top - markerTop);
+  const clipRight = Math.max(0, markerLeft + 23 - (left + drawWidth));
+  const clipBottom = Math.max(0, markerTop + 29 - (top + drawHeight));
+  const clipLeft = Math.max(0, left - markerLeft);
+  marker.style.clipPath = 'inset(' + clipTop + 'px ' + clipRight + 'px ' + clipBottom + 'px ' + clipLeft + 'px)';
+  marker.hidden = false;
 }
 async function fitNativeWindow(sessionId, generation) {
   if (!state.resizeEnabled || state.resizeBlocked) return true;
@@ -530,6 +563,7 @@ async function retryPreview() {
   else await refreshFrame(true);
 }
 function hidePreview() {
+  state.modeRequest += 1; state.floatPending = false; state.autoFloatAttempted = false; state.openPresentationRequested = false;
   state.hidden = true; state.generation += 1; stopPolling(); interruptRecovery();
   if (state.frame) {
     empty('Waiting for the live view', 'The preview reconnects to this session when you reopen it.');
@@ -540,19 +574,38 @@ function hidePreview() {
   el('reopen').focus();
 }
 function reopenPreview() {
-  state.hidden = false; state.generation += 1;
+  state.hidden = false; state.generation += 1; state.autoFloatAttempted = false;
   el('closed-card').hidden = true; el('panel').hidden = false;
   setBusy(state.busy);
   schedule(0);
   void retainSelection();
   el('hide').focus();
+  requestAutomaticFloat();
 }
 function applyLayout() {
   el('canvas').dataset.mode = state.mode;
   el('expand').hidden = state.mode === 'fullscreen' || !state.modes.includes('fullscreen');
-  el('float').hidden = state.mode === 'pip' || !state.modes.includes('pip');
+  el('float').hidden = state.mode === 'pip' || !canFloatInHost();
+  el('float').disabled = state.floatPending;
   el('inline').hidden = state.mode === 'inline' || !state.modes.includes('inline');
   updateCursor();
+}
+function canFloatInHost() {
+  // The host's advertised modes are authoritative. The existence of a
+  // legacy requestDisplayMode function does not establish PiP support.
+  return state.modes.includes('pip');
+}
+function floatingNotice(message = '') {
+  text('float-note', message);
+  el('float-note').hidden = !message;
+}
+const FLOAT_UNAVAILABLE = 'Floating is unavailable in this host.';
+function requestAutomaticFloat() {
+  if (!visibleConnected() || !sourceId(state.sessionId) || state.autoFloatAttempted || state.floatPending) return;
+  if (state.mode === 'pip') { state.autoFloatAttempted = true; floatingNotice(); return; }
+  if (!canFloatInHost()) { floatingNotice(FLOAT_UNAVAILABLE); return; }
+  state.autoFloatAttempted = true;
+  void requestMode('pip');
 }
 function hostContextChanged(context = {}) {
   if (state.disposed) return;
@@ -560,31 +613,87 @@ function hostContextChanged(context = {}) {
   if (current.theme) document.documentElement.dataset.theme = current.theme;
   if (Array.isArray(current.availableDisplayModes)) state.modes = current.availableDisplayModes;
   if (current.displayMode) state.mode = current.displayMode;
+  if (state.presentationBridge === 'openai' && ['inline','fullscreen','pip'].includes(window.openai?.displayMode)) {
+    state.mode = window.openai.displayMode;
+    text('mode-note', '');
+  }
+  if (state.mode === 'pip') floatingNotice();
   applyLayout();
+  requestAutomaticFloat();
 }
 async function requestMode(mode) {
-  if (!state.connected || state.disposed || !state.modes.includes(mode)) return;
+  if (!state.connected || state.disposed || (!state.modes.includes(mode) && !(mode === 'pip' && canFloatInHost()))) return;
+  const request = ++state.modeRequest;
+  const currentRequest = () => !state.disposed && request === state.modeRequest;
+  const legacy = typeof window.openai?.requestDisplayMode === 'function' &&
+    (state.presentationBridge === 'openai' || (mode === 'pip' && !state.modes.includes('pip')));
+  if (legacy) state.presentationBridge = 'openai';
+  if (mode === 'pip') { state.autoFloatAttempted = true; state.floatPending = true; floatingNotice(); applyLayout(); }
+  async function change(requested) {
+    let timeout;
+    try {
+      // Request only an in-host presentation; never create an OS window.
+      return legacy ? await Promise.race([
+        window.openai.requestDisplayMode({mode: requested}),
+        new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('Host timeout')), 10000); }),
+      ]) : await app.requestDisplayMode({mode: requested}, {timeout: 10000});
+    } finally { clearTimeout(timeout); }
+  }
+  const actualMode = result => result?.mode || (legacy ? window.openai?.displayMode : null);
   try {
-    const result = await app.requestDisplayMode({mode}, {timeout: 10000});
-    if (state.disposed) return;
-    state.mode = result.mode;
+    let actual = actualMode(await change(mode));
+    if (!currentRequest()) return;
+    if (!['inline','fullscreen','pip'].includes(actual)) {
+      if (mode === 'pip') floatingNotice(FLOAT_UNAVAILABLE);
+      else text('mode-note', 'The app did not confirm the display mode.');
+      return;
+    }
+    state.presentationBridge = legacy ? 'openai' : 'mcp';
+    if (mode === 'pip' && actual !== 'pip') {
+      floatingNotice(FLOAT_UNAVAILABLE);
+      if (actual === 'fullscreen') {
+        // A fullscreen substitution is never accepted as floating. Ask once
+        // to return inline, without a retry loop if the host refuses that too.
+        const restored = actualMode(await change('inline'));
+        if (!currentRequest()) return;
+        if (['inline','fullscreen','pip'].includes(restored)) actual = restored;
+        if (actual !== 'inline') floatingNotice('Floating is unavailable. This host did not return inline.');
+      }
+    } else {
+      if (mode === 'pip') floatingNotice();
+      text('mode-note', mode === actual ? '' : 'The app kept its current display mode.');
+    }
+    state.mode = actual;
     applyLayout();
-    text('mode-note', mode === result.mode ? '' : 'The app kept its current display mode.');
-  } catch { text('mode-note', 'The app could not change the display mode.'); }
+  } catch {
+    if (currentRequest()) {
+      if (mode === 'pip') floatingNotice(FLOAT_UNAVAILABLE);
+      else text('mode-note', 'The app could not change the display mode.');
+    }
+  } finally {
+    if (mode === 'pip' && request === state.modeRequest) state.floatPending = false;
+    if (currentRequest()) { applyLayout(); requestAutomaticFloat(); }
+  }
 }
 function dispose() {
-  state.disposed = true; state.generation += 1; stopPolling(); interruptRecovery();
+  state.disposed = true; state.generation += 1; state.modeRequest += 1; stopPolling(); interruptRecovery();
   clearFrame();
   // A discarded viewer never changes its source or the worker.
 }
 app.ontoolinput = ({arguments: args}) => {
-  if (state.disposed || state.sessionId || !sourceId(args?.session_id)) return;
+  if (state.disposed || !sourceId(args?.session_id)) return;
+  if (state.sessionId) {
+    if (args.session_id === state.sessionId) state.openPresentationRequested = true;
+    return;
+  }
   state.sessionId = args.session_id;
   if (state.pendingOpen) state.pendingOpen.sessionId ||= state.sessionId;
+  requestAutomaticFloat();
 };
 app.ontoolresult = result => {
   if (state.disposed || (state.connected && !state.bridgeReady)) return;
   try {
+    const wasOpen = state.haveOpenResult;
     const data = dataOf(result);
     const metaId = result?._meta?.['rdc/operation_id'];
     if (operationId(data.operation_id) && operationId(metaId) && data.operation_id !== metaId) {
@@ -607,6 +716,15 @@ app.ontoolresult = result => {
       // original request remains available for explicit inspection.
       if (!data.preview_unavailable && state.pendingOpen) { state.pendingOpen = null; retireOpen(id); }
       acceptOpen(checkResult(result));
+      if (!data.preview_unavailable && state.haveOpenResult && Array.isArray(data.sessions)) {
+        const explicitOpen = state.openPresentationRequested;
+        state.openPresentationRequested = false;
+        if (state.hidden) { if (explicitOpen) reopenPreview(); }
+        else {
+          if (wasOpen) state.autoFloatAttempted = false;
+          requestAutomaticFloat();
+        }
+      }
       if (id && !data.preview_unavailable) retireOpen(id);
     }
     schedule(0);
@@ -619,6 +737,7 @@ app.ontoolresult = result => {
   }
 };
 app.onhostcontextchanged = hostContextChanged;
+window.addEventListener('openai:set_globals', () => hostContextChanged());
 app.onteardown = async () => { dispose(); return {}; };
 el('hide').addEventListener('click', hidePreview);
 el('reopen').addEventListener('click', reopenPreview);
@@ -634,6 +753,12 @@ el('preview-retry').addEventListener('click', retryPreview);
 el('resize-retry').addEventListener('click', () => { state.resizeBlocked=false; void refreshFrame(true); });
 el('connection-retry').addEventListener('click', () => connect());
 el('frame').addEventListener('load', updateCursor);
+el('screen').addEventListener('scroll', updateCursor, {passive: true});
+if (typeof ResizeObserver !== 'undefined') {
+  const cursorResizeObserver = new ResizeObserver(updateCursor);
+  cursorResizeObserver.observe(el('screen'));
+  cursorResizeObserver.observe(el('frame'));
+}
 el('frame').addEventListener('error', () => {
   if (!visibleConnected() || !state.frame) return;
   stopPolling();
@@ -672,6 +797,7 @@ async function connect() {
       return;
     }
     setBusy(false);
+    requestAutomaticFloat();
     // The host already invoked preview_open. Wait for its result.
     schedule(0);
   } catch {

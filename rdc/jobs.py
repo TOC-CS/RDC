@@ -80,6 +80,44 @@ class Jobs:
             raise RDCError('launch_failed', 'Could not start the durable worker.', {'job_id':identifier}) from exc
         return {'job':self.store.job(identifier), 'reused':False}
 
+    def run(self, argv, cwd, timeout=None, idempotency_key=None, wait_ms=1500, output_limit=16384):
+        # Persist and launch the exact durable job before any inline observation.
+        # A collection failure must always return its original recovery identity.
+        started = self.start(argv, cwd, timeout=timeout, idempotency_key=idempotency_key)
+        identifier = started['job']['id']
+        if wait_ms == 0:
+            job = started['job']
+            return {'job':job, 'reused':started['reused'],
+                    'complete':job['status'] not in ACTIVE, 'output':None}
+        wait_started = time.monotonic()
+        deadline = wait_started + wait_ms / 1000
+        try:
+            while True:
+                job = self.store.job(identifier)
+                if job['status'] not in ACTIVE:
+                    break
+                now = time.monotonic()
+                remaining = deadline - now
+                if remaining <= 0:
+                    return {'job':job, 'reused':started['reused'],
+                            'complete':False, 'output':None}
+                # Observe short completions promptly, then bound SQLite polling
+                # for commands that need the durable background lifecycle.
+                interval = 0.01 if now - wait_started < 0.2 else 0.04
+                time.sleep(min(interval, remaining))
+            # Read one terminal snapshot. Do not give job and output
+            # different status or completion metadata.
+            output = self.output(
+                identifier, limit=min(output_limit, self.settings.max_read_bytes),
+                job_snapshot=job)
+            return {'job':job, 'reused':started['reused'], 'complete':True, 'output':output}
+        except Exception as exc:
+            raise RDCError('result_unavailable',
+                'The durable job started, but its immediate result could not be collected. '
+                'Recover with the original job_id; do not launch it again.',
+                {'job_id':identifier, 'reused':started['reused'],
+                 'recovery_tool':'rdc_job_status'}) from exc
+
     def status(self, job_id):
         self.reconcile()
         return {'job':self.store.job(job_id)}
@@ -88,26 +126,38 @@ class Jobs:
         self.reconcile()
         return {'jobs':self.store.jobs(limit)}
 
-    def output(self, job_id, offset=0, limit=65536):
-        job = self.status(job_id)['job']
+    def output(self, job_id, offset=0, limit=65536, job_snapshot=None):
+        job = job_snapshot if job_snapshot is not None else self.status(job_id)['job']
         path = self.directory/f'{job_id}.output'
         limit = min(limit, self.settings.max_read_bytes)
-        if path.exists():
-            with open(path, 'rb') as source:
-                size = os.fstat(source.fileno()).st_size
+        size = 0
+        data = b''
+        try:
+            if path.is_symlink():
+                raise OSError('Redirected output')
+            descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) |
+                                 getattr(os, 'O_NONBLOCK', 0))
+            with os.fdopen(descriptor, 'rb') as source:
+                info = os.fstat(source.fileno())
+                if not stat.S_ISREG(info.st_mode):
+                    raise OSError('Nonregular output')
+                size = info.st_size
                 if offset > size:
-                    raise RDCError('invalid_offset', 'Output offset is beyond the saved log.', {'bytes_available':size})
+                    raise RDCError('invalid_offset', 'Output offset is beyond the saved log.',
+                                   {'bytes_available':size})
                 source.seek(offset)
-                data = source.read(limit)
-        else:
-            size = 0
-            data = b''
+                data = source.read(min(limit, size-offset))
+        except FileNotFoundError:
             if offset:
-                raise RDCError('invalid_offset', 'No output is available at that offset.')
+                raise RDCError('invalid_offset', 'No output is available at that offset.') from None
+        except OSError:
+            raise RDCError('output_unavailable',
+                           'Saved job output is unavailable or redirected.') from None
         return {'job_id':job_id, 'device_id':self.store.device_id, 'offset':offset,
                 'next_offset':offset+len(data), 'text':data.decode('utf-8', errors='replace'),
                 'encoding':'utf-8', 'offset_unit':'bytes', 'status':job['status'],
-                'complete':job['status'] not in ACTIVE, 'truncated':job['truncated'], 'bytes_available':size}
+                'complete':job['status'] not in ACTIVE, 'truncated':job['truncated'],
+                'bytes_available':size}
 
     def preview(self, job_id=None):
         """Allowlisted persisted state and an explicitly selected bounded tail."""

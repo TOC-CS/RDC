@@ -31,7 +31,7 @@ class MacSetupTests(unittest.TestCase):
         self.assertTrue(report['screen_recording'])
         self.assertFalse(report['accessibility'])
         self.assertFalse(report['ready'])
-        self.assertTrue(report['helper_path'].endswith('/RDC Window Preview.app'))
+        self.assertEqual(Path(report['helper_path']).name, 'RDC Window Preview.app')
         self.assertEqual([c.args[0] for c in calls], ['permissions'])
 
     def test_explicit_request_does_not_claim_an_async_prompt_granted_access(self):

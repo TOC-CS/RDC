@@ -1,0 +1,960 @@
+{
+  "benchmark": "Live legacy RDC cloud route versus Desktop Commander on the same macOS host",
+  "date": "2026-11-16",
+  "trials_per_route": 30,
+  "pair_order": "Alternating: DC first on odd trials; RDC first on even trials",
+  "timing_boundary": "Tool orchestration wall time, excluding model thinking. DC primary latency is start_process only; RDC primary latency is durable start plus concurrent status/output retrieval.",
+  "numeric_exit_verification": "DC follow-up reads are recorded separately: completed sessions may no longer be retained. A verification attempt is not proof of a numeric exit when unavailable.",
+  "limitations": [
+    "Live worker and gateway were unchanged during these trials. The candidate single-call fast path was not measured live.",
+    "The three earlier pilot pairs are excluded. All 30 final pairs, including transport outliers, are retained.",
+    "Trial 1 sums individually timed tool stages to exclude a model inspection gap; later pairs run continuously within orchestration batches.",
+    "RDC worker timestamps and DC verbose machine timings include different supervision boundaries and are not isolated shell-runtime comparisons.",
+    "These live measurements do not establish the target of twice the Desktop Commander speed. Tail estimates from 30 observations remain preliminary."
+  ],
+  "summary": {
+    "dc_initial_call": {
+      "n": 30,
+      "p50_ms": 4972.0,
+      "p95_ms": 7211.55,
+      "p99_ms": 17581.96,
+      "mean_ms": 5648.767,
+      "stddev_ms": 3133.038,
+      "min_ms": 3924,
+      "max_ms": 21722
+    },
+    "rdc_start_plus_concurrent_status_output": {
+      "n": 30,
+      "p50_ms": 9420.0,
+      "p95_ms": 11426.35,
+      "p99_ms": 12170.14,
+      "mean_ms": 9544.8,
+      "stddev_ms": 985.908,
+      "min_ms": 8255,
+      "max_ms": 12412
+    },
+    "dc_numeric_exit_verification_attempt": {
+      "n": 30,
+      "p50_ms": 1583.0,
+      "p95_ms": 2153.1,
+      "p99_ms": 2979.98,
+      "mean_ms": 1713.2,
+      "stddev_ms": 362.778,
+      "min_ms": 1428,
+      "max_ms": 3310
+    },
+    "dc_initial_plus_verification_attempt": {
+      "n": 30,
+      "p50_ms": 6813.5,
+      "p95_ms": 9104.4,
+      "p99_ms": 19244.99,
+      "mean_ms": 7361.967,
+      "stddev_ms": 3107.955,
+      "min_ms": 5433,
+      "max_ms": 23209
+    },
+    "rdc_start_call": {
+      "n": 30,
+      "p50_ms": 5743.0,
+      "p95_ms": 7748.85,
+      "p99_ms": 8392.23,
+      "mean_ms": 5786.833,
+      "stddev_ms": 938.185,
+      "min_ms": 4157,
+      "max_ms": 8628
+    },
+    "rdc_concurrent_status_output": {
+      "n": 30,
+      "p50_ms": 3783.5,
+      "p95_ms": 4176.6,
+      "p99_ms": 4280.48,
+      "mean_ms": 3757.967,
+      "stddev_ms": 316.054,
+      "min_ms": 3145,
+      "max_ms": 4306
+    },
+    "dc_reported_machine_duration": {
+      "n": 30,
+      "p50_ms": 47.5,
+      "p95_ms": 92.5,
+      "p99_ms": 213.21,
+      "mean_ms": 56.6,
+      "stddev_ms": 40.691,
+      "min_ms": 27,
+      "max_ms": 257
+    },
+    "dc_reported_first_output": {
+      "n": 30,
+      "p50_ms": 44.0,
+      "p95_ms": 89.8,
+      "p99_ms": 209.66,
+      "mean_ms": 52.7,
+      "stddev_ms": 40.533,
+      "min_ms": 21,
+      "max_ms": 252
+    },
+    "rdc_job_started_to_finished": {
+      "n": 30,
+      "p50_ms": 48.336,
+      "p95_ms": 49.795,
+      "p99_ms": 50.128,
+      "mean_ms": 48.003,
+      "stddev_ms": 1.708,
+      "min_ms": 43.391,
+      "max_ms": 50.235
+    },
+    "median_ratio_rdc_to_dc": 1.8946,
+    "p95_ratio_rdc_to_dc": 1.5845,
+    "median_paired_ratio_rdc_to_dc": 1.9754,
+    "dc_numeric_exit_zero_confirmed": 19,
+    "dc_numeric_exit_unavailable": 11,
+    "rdc_numeric_exit_zero_confirmed": 30,
+    "dc_exact_stdout_and_normal_completion": 30,
+    "rdc_exact_stdout_and_completed_zero_exit": 30,
+    "primary_tool_errors": 0,
+    "rdc_operation_recovery_calls": 0,
+    "rdc_unique_jobs": 30
+  },
+  "trials": [
+    {
+      "trial": 1,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 3967,
+        "verification_attempt_ms": 2130,
+        "initial_plus_verification_attempt_ms": 6097,
+        "reported_machine_ms": 56,
+        "reported_first_output_ms": 52,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 10313,
+        "start_ms": 6007,
+        "concurrent_status_output_ms": 4306,
+        "job_started_to_finished_ms": 49.866,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 2,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 4079,
+        "verification_attempt_ms": 1919,
+        "initial_plus_verification_attempt_ms": 5998,
+        "reported_machine_ms": 42,
+        "reported_first_output_ms": 35,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": false,
+        "exit_code": null
+      },
+      "rdc": {
+        "total_ms": 11163,
+        "start_ms": 6945,
+        "concurrent_status_output_ms": 4218,
+        "job_started_to_finished_ms": 49.28,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 3,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 4044,
+        "verification_attempt_ms": 1468,
+        "initial_plus_verification_attempt_ms": 5512,
+        "reported_machine_ms": 35,
+        "reported_first_output_ms": 33,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": false,
+        "exit_code": null
+      },
+      "rdc": {
+        "total_ms": 9432,
+        "start_ms": 5799,
+        "concurrent_status_output_ms": 3633,
+        "job_started_to_finished_ms": 48.082,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 4,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 5286,
+        "verification_attempt_ms": 1993,
+        "initial_plus_verification_attempt_ms": 7279,
+        "reported_machine_ms": 56,
+        "reported_first_output_ms": 52,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 10127,
+        "start_ms": 6020,
+        "concurrent_status_output_ms": 4107,
+        "job_started_to_finished_ms": 49.601,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 5,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 5315,
+        "verification_attempt_ms": 1718,
+        "initial_plus_verification_attempt_ms": 7033,
+        "reported_machine_ms": 42,
+        "reported_first_output_ms": 38,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 9722,
+        "start_ms": 5773,
+        "concurrent_status_output_ms": 3949,
+        "job_started_to_finished_ms": 49.244,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 6,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 4255,
+        "verification_attempt_ms": 1584,
+        "initial_plus_verification_attempt_ms": 5839,
+        "reported_machine_ms": 74,
+        "reported_first_output_ms": 70,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": false,
+        "exit_code": null
+      },
+      "rdc": {
+        "total_ms": 9844,
+        "start_ms": 6061,
+        "concurrent_status_output_ms": 3783,
+        "job_started_to_finished_ms": 48.244,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 7,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 4918,
+        "verification_attempt_ms": 1586,
+        "initial_plus_verification_attempt_ms": 6504,
+        "reported_machine_ms": 44,
+        "reported_first_output_ms": 41,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": false,
+        "exit_code": null
+      },
+      "rdc": {
+        "total_ms": 11578,
+        "start_ms": 7668,
+        "concurrent_status_output_ms": 3910,
+        "job_started_to_finished_ms": 48.054,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 8,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 6324,
+        "verification_attempt_ms": 1627,
+        "initial_plus_verification_attempt_ms": 7951,
+        "reported_machine_ms": 37,
+        "reported_first_output_ms": 35,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 9254,
+        "start_ms": 5157,
+        "concurrent_status_output_ms": 4097,
+        "job_started_to_finished_ms": 48.094,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 9,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 5269,
+        "verification_attempt_ms": 1482,
+        "initial_plus_verification_attempt_ms": 6751,
+        "reported_machine_ms": 36,
+        "reported_first_output_ms": 33,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 9408,
+        "start_ms": 5282,
+        "concurrent_status_output_ms": 4126,
+        "job_started_to_finished_ms": 46.197,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 10,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 3965,
+        "verification_attempt_ms": 1541,
+        "initial_plus_verification_attempt_ms": 5506,
+        "reported_machine_ms": 35,
+        "reported_first_output_ms": 31,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": false,
+        "exit_code": null
+      },
+      "rdc": {
+        "total_ms": 8682,
+        "start_ms": 4867,
+        "concurrent_status_output_ms": 3815,
+        "job_started_to_finished_ms": 49.331,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 11,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 4707,
+        "verification_attempt_ms": 2172,
+        "initial_plus_verification_attempt_ms": 6879,
+        "reported_machine_ms": 70,
+        "reported_first_output_ms": 64,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": false,
+        "exit_code": null
+      },
+      "rdc": {
+        "total_ms": 9796,
+        "start_ms": 5838,
+        "concurrent_status_output_ms": 3958,
+        "job_started_to_finished_ms": 43.391,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 12,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 21722,
+        "verification_attempt_ms": 1487,
+        "initial_plus_verification_attempt_ms": 23209,
+        "reported_machine_ms": 48,
+        "reported_first_output_ms": 32,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": false,
+        "exit_code": null
+      },
+      "rdc": {
+        "total_ms": 8255,
+        "start_ms": 4157,
+        "concurrent_status_output_ms": 4098,
+        "job_started_to_finished_ms": 44.244,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 13,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 5980,
+        "verification_attempt_ms": 1733,
+        "initial_plus_verification_attempt_ms": 7713,
+        "reported_machine_ms": 27,
+        "reported_first_output_ms": 21,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 9469,
+        "start_ms": 5564,
+        "concurrent_status_output_ms": 3905,
+        "job_started_to_finished_ms": 48.364,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 14,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 4554,
+        "verification_attempt_ms": 1455,
+        "initial_plus_verification_attempt_ms": 6009,
+        "reported_machine_ms": 32,
+        "reported_first_output_ms": 30,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 8370,
+        "start_ms": 4529,
+        "concurrent_status_output_ms": 3841,
+        "job_started_to_finished_ms": 48.048,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 15,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 4330,
+        "verification_attempt_ms": 1428,
+        "initial_plus_verification_attempt_ms": 5758,
+        "reported_machine_ms": 106,
+        "reported_first_output_ms": 106,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 8984,
+        "start_ms": 5726,
+        "concurrent_status_output_ms": 3258,
+        "job_started_to_finished_ms": 45.046,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 16,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 6504,
+        "verification_attempt_ms": 1582,
+        "initial_plus_verification_attempt_ms": 8086,
+        "reported_machine_ms": 76,
+        "reported_first_output_ms": 68,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 9063,
+        "start_ms": 5528,
+        "concurrent_status_output_ms": 3535,
+        "job_started_to_finished_ms": 44.699,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 17,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 3924,
+        "verification_attempt_ms": 1509,
+        "initial_plus_verification_attempt_ms": 5433,
+        "reported_machine_ms": 31,
+        "reported_first_output_ms": 29,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 9111,
+        "start_ms": 5778,
+        "concurrent_status_output_ms": 3333,
+        "job_started_to_finished_ms": 48.386,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 18,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 4987,
+        "verification_attempt_ms": 1571,
+        "initial_plus_verification_attempt_ms": 6558,
+        "reported_machine_ms": 257,
+        "reported_first_output_ms": 252,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 10071,
+        "start_ms": 5975,
+        "concurrent_status_output_ms": 4096,
+        "job_started_to_finished_ms": 50.235,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 19,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 5244,
+        "verification_attempt_ms": 1699,
+        "initial_plus_verification_attempt_ms": 6943,
+        "reported_machine_ms": 41,
+        "reported_first_output_ms": 39,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 8803,
+        "start_ms": 5052,
+        "concurrent_status_output_ms": 3751,
+        "job_started_to_finished_ms": 48.346,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 20,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 4957,
+        "verification_attempt_ms": 1919,
+        "initial_plus_verification_attempt_ms": 6876,
+        "reported_machine_ms": 48,
+        "reported_first_output_ms": 46,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 11241,
+        "start_ms": 7815,
+        "concurrent_status_output_ms": 3426,
+        "job_started_to_finished_ms": 46.053,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 21,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 4354,
+        "verification_attempt_ms": 3310,
+        "initial_plus_verification_attempt_ms": 7664,
+        "reported_machine_ms": 64,
+        "reported_first_output_ms": 55,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": false,
+        "exit_code": null
+      },
+      "rdc": {
+        "total_ms": 8982,
+        "start_ms": 5765,
+        "concurrent_status_output_ms": 3217,
+        "job_started_to_finished_ms": 49.163,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 22,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 4396,
+        "verification_attempt_ms": 1593,
+        "initial_plus_verification_attempt_ms": 5989,
+        "reported_machine_ms": 47,
+        "reported_first_output_ms": 45,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": false,
+        "exit_code": null
+      },
+      "rdc": {
+        "total_ms": 9005,
+        "start_ms": 5419,
+        "concurrent_status_output_ms": 3586,
+        "job_started_to_finished_ms": 49.479,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 23,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 4296,
+        "verification_attempt_ms": 1515,
+        "initial_plus_verification_attempt_ms": 5811,
+        "reported_machine_ms": 54,
+        "reported_first_output_ms": 52,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 8333,
+        "start_ms": 5078,
+        "concurrent_status_output_ms": 3255,
+        "job_started_to_finished_ms": 49.431,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 24,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 5145,
+        "verification_attempt_ms": 1574,
+        "initial_plus_verification_attempt_ms": 6719,
+        "reported_machine_ms": 49,
+        "reported_first_output_ms": 47,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": false,
+        "exit_code": null
+      },
+      "rdc": {
+        "total_ms": 9940,
+        "start_ms": 6576,
+        "concurrent_status_output_ms": 3364,
+        "job_started_to_finished_ms": 49.707,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 25,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 7446,
+        "verification_attempt_ms": 2094,
+        "initial_plus_verification_attempt_ms": 9540,
+        "reported_machine_ms": 49,
+        "reported_first_output_ms": 46,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 8784,
+        "start_ms": 5053,
+        "concurrent_status_output_ms": 3731,
+        "job_started_to_finished_ms": 48.289,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 26,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 5445,
+        "verification_attempt_ms": 1558,
+        "initial_plus_verification_attempt_ms": 7003,
+        "reported_machine_ms": 71,
+        "reported_first_output_ms": 68,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": false,
+        "exit_code": null
+      },
+      "rdc": {
+        "total_ms": 12412,
+        "start_ms": 8628,
+        "concurrent_status_output_ms": 3784,
+        "job_started_to_finished_ms": 48.349,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 27,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 6925,
+        "verification_attempt_ms": 1482,
+        "initial_plus_verification_attempt_ms": 8407,
+        "reported_machine_ms": 34,
+        "reported_first_output_ms": 32,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 9542,
+        "start_ms": 5760,
+        "concurrent_status_output_ms": 3782,
+        "job_started_to_finished_ms": 48.369,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 28,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 4404,
+        "verification_attempt_ms": 1493,
+        "initial_plus_verification_attempt_ms": 5897,
+        "reported_machine_ms": 43,
+        "reported_first_output_ms": 41,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 8857,
+        "start_ms": 5074,
+        "concurrent_status_output_ms": 3783,
+        "job_started_to_finished_ms": 48.19,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 29,
+      "order": [
+        "dc",
+        "rdc"
+      ],
+      "dc": {
+        "initial_call_ms": 6905,
+        "verification_attempt_ms": 1667,
+        "initial_plus_verification_attempt_ms": 8572,
+        "reported_machine_ms": 48,
+        "reported_first_output_ms": 45,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 9455,
+        "start_ms": 5508,
+        "concurrent_status_output_ms": 3947,
+        "job_started_to_finished_ms": 48.326,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    },
+    {
+      "trial": 30,
+      "order": [
+        "rdc",
+        "dc"
+      ],
+      "dc": {
+        "initial_call_ms": 5816,
+        "verification_attempt_ms": 1507,
+        "initial_plus_verification_attempt_ms": 7323,
+        "reported_machine_ms": 46,
+        "reported_first_output_ms": 43,
+        "exact_stdout": true,
+        "normal_completion": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      },
+      "rdc": {
+        "total_ms": 8348,
+        "start_ms": 5203,
+        "concurrent_status_output_ms": 3145,
+        "job_started_to_finished_ms": 47.986,
+        "exact_stdout": true,
+        "completed": true,
+        "numeric_exit_available": true,
+        "exit_code": 0
+      }
+    }
+  ]
+}

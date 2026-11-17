@@ -1,0 +1,454 @@
+{
+  "method": "same Mac/direct-local Engine; 30+ runs recommended",
+  "isolated_browser": true,
+  "physical_keyboard_mouse_used": false,
+  "trials_per_method": 30,
+  "summary": {
+    "legacy": {
+      "runs": 30,
+      "correct": 30,
+      "first_call_completed": 0,
+      "p50_ms": 96.106,
+      "p95_ms": 110.463,
+      "p99_ms": 111.592,
+      "min_ms": 84.092,
+      "max_ms": 111.671
+    },
+    "fast_path": {
+      "runs": 30,
+      "correct": 30,
+      "first_call_completed": 30,
+      "p50_ms": 108.336,
+      "p95_ms": 137.845,
+      "p99_ms": 166.166,
+      "min_ms": 92.288,
+      "max_ms": 171.655
+    }
+  },
+  "samples": {
+    "legacy": [
+      {
+        "elapsed_ms": 102.207,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 85.5,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 89.248,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 98.422,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 109.321,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 102.163,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 90.661,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 90.989,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 85.027,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 89.216,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 103.885,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 103.631,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 103.214,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 93.789,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 87.055,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 99.139,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 102.867,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 88.938,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 85.696,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 90.916,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 86.711,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 84.092,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 99.955,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 111.397,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 98.752,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 90.458,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 89.963,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 108.148,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 100.95,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 111.671,
+        "correct": true,
+        "first_call_completed": false,
+        "bytes": 13,
+        "state": "completed"
+      }
+    ],
+    "fast_path": [
+      {
+        "elapsed_ms": 108.356,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 99.413,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 109.722,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 106.383,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 108.096,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 108.62,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 171.655,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 100.747,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 99.336,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 92.288,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 108.739,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 108.804,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 102.125,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 112.725,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 108.316,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 100.053,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 109.242,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 108.513,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 152.726,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 101.931,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 119.657,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 101.125,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 102.903,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 97.487,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 108.768,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 104.395,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 108.537,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 99.585,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 108.461,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      },
+      {
+        "elapsed_ms": 109.157,
+        "correct": true,
+        "first_call_completed": true,
+        "bytes": 13,
+        "state": "completed"
+      }
+    ]
+  }
+}

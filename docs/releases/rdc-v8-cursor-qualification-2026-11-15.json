@@ -1,0 +1,77 @@
+{
+  "release_candidate": "RDC alpha.8 v8 host preview + corrected cursor mapping",
+  "date_local": "2026-11-15",
+  "development_branch": "repair/preview-v8-host",
+  "base_published_github_branch": "repair/preview-v7-setup",
+  "qualifications": {
+    "worker_tests": {
+      "count": 347,
+      "passed": 347,
+      "failed": 0,
+      "skipped": 0
+    },
+    "gateway_tests": {
+      "count": 26,
+      "passed": 26,
+      "failed": 0
+    },
+    "embedded_preview_build": "passed",
+    "asset_sync": "passed",
+    "typescript_check": "passed",
+    "gateway_production_build": "passed",
+    "cursor_regressions": [
+      "source-bound session and worker metadata",
+      "cursor baked into frame suppresses separate overlay",
+      "out-of-bounds coordinates hide overlay",
+      "letterboxed image maps to actual pixels",
+      "native window resize and scroll map to rendered source pixels",
+      "edge glyph clipped within image",
+      "view hide/dispose clears marker",
+      "new browser source explicitly reports cursor.visible=false until a successful pointer action",
+      "pointer success marks browser cursor visible with source-local coordinates",
+      "new navigation hides prior document cursor",
+      "legacy unconfirmed (0,0) cursor placeholder does not paint, but confirmed top-left (0,0) does",
+      "Playwright and WebDriver cursor lifecycle matches preview contract",
+      "WebDriver element clicks without reported coordinates hide previous cursor instead of showing an inaccurate location"
+    ],
+    "cursor_visibility_tested_after_fix": true
+  },
+  "macos_cursor_ownership_trace": {
+    "method": "read-only Quartz CGWindowListCopyWindowInfo",
+    "observed_window_owner": "ChatGPT Computer Use",
+    "observed_window_name": "Software Cursor",
+    "physical_overlay_outside_rdc_iframe": true,
+    "caveat": "One observed host software cursor is identified; direct causality for all user-reported detached markers requires live screenshot correlation. Do not terminate the host process or imply a CSS fix repairs it.",
+    "accessibility_observation": {
+      "AXWindows": 1,
+      "window_title": "Software Cursor",
+      "AXCloseButton": false,
+      "AXMinimizeButton": false,
+      "AXMinimized_settable": false,
+      "supported_window_actions": [
+        "AXRaise"
+      ],
+      "warning": "No supported targeted window-close or hide action; active helper must not be killed or concealed"
+    }
+  },
+  "status": {
+    "local_v8_candidate": "tested and committed",
+    "live_worker": "v7, left running",
+    "live_gateway": "v7, left running",
+    "github_push": "blocked by current GitHub connector's read-only permissions and unauthenticated CLI",
+    "plugin_skill_update": "ChatGPT plugin 1.0.13 published and read back; private audience and App identity preserved",
+    "host_floating_pip": "unverified in actual ChatGPT/Codex",
+    "independent_floating_windows": "not accepted without actual host UI evidence",
+    "outer_chat_icon": "unresolved",
+    "windows_linux_mobile": "not qualified",
+    "bandmates_studio": "not modified, resized or restarted",
+    "host_os_software_cursor": "independent ChatGPT Computer Use Software Cursor window remains host-controlled"
+  },
+  "followup_order": [
+    "test v8 in actual host with confirmation of mode and visible independently movable viewer",
+    "verify the software-cursor overlay's host owner and supported visibility controls without altering active user work",
+    "qualify full host cursor/focus behavior",
+    "publish GitHub PR using a verified write-capable route, then update the existing App-backed skill release",
+    "deploy matching gateway and worker UI only with rollback and no impact on active BandMates"
+  ]
+}

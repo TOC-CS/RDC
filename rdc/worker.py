@@ -180,7 +180,13 @@ def run(state_dir, job_id):
                 # instead of leaving it blocked until the command timeout.
                 terminate_tree(process)
                 break
-            time.sleep(.04)
+            # Wake as soon as output drains for the usual short-command exit.
+            # EOF may precede process exit: an already-set event must not turn
+            # the control/heartbeat loop into a busy spin.
+            if reader_done.is_set():
+                time.sleep(.04)
+            else:
+                reader_done.wait(.04)
         exit_code = process.wait(timeout=10)
         if final not in ('cancelled','timed_out','interrupted'):
             final = 'completed' if exit_code == 0 else 'failed'

@@ -461,6 +461,9 @@ class _Browsers:
             url=args['url'];scheme=urllib.parse.urlsplit(url).scheme.lower()
             if scheme not in ('http','https','data','about') or scheme=='about' and url!='about:blank': raise RDCError('invalid_arguments','Browser URL must use http, https, data, or about:blank')
             self.invalidate(s)
+            # Navigation may replace the rendered source before the next pointer
+            # command. A former page's cursor must not linger in the new page.
+            s['cursor']={**s['cursor'],'visible':False}
             if s['backend']=='playwright': s['page'].goto(url,wait_until='domcontentloaded',timeout=30000)
             else: self.wd(s,'POST','/url',{'url':url})
             s['url']=self.url(s); return self.info(s)
@@ -473,7 +476,6 @@ class _Browsers:
         if action=='pointer':
             if args['x']>=s['width'] or args['y']>=s['height']: raise RDCError('invalid_arguments','Pointer outside viewport')
             pointer_action=args.get('action','click')
-            s['cursor']={'x':args['x'],'y':args['y']}
             if pointer_action!='move': self.invalidate(s)
             if s['backend']=='playwright':
                 mouse=s['page'].mouse;mouse.move(args['x'],args['y'])
@@ -488,6 +490,8 @@ class _Browsers:
                         b={'left':0,'middle':1,'right':2}[args.get('button','left')];acts += [{'type':'pointerDown','button':b},{'type':'pointerUp','button':b}]
                     sequence={'type':'pointer','id':'rdc-pointer','parameters':{'pointerType':'mouse'},'actions':acts}
                 self.wd(s,'POST','/actions',{'actions':[sequence]})
+            # Only a successful source-bound pointer action produces a visible marker.
+            s['cursor']={'x':args['x'],'y':args['y'],'visible':True}
         elif action=='keys':
             parts=_key_parts(args['keys']);self.invalidate(s)
             if s['backend']=='playwright': s['page'].keyboard.press(args['keys'])
@@ -506,14 +510,20 @@ class _Browsers:
                     if action=='click':
                         handle.scroll_into_view_if_needed(timeout=10000)
                         box = handle.bounding_box()
-                        if box:
-                            s['cursor']={'x':box['x']+box['width']/2,'y':box['y']+box['height']/2}
                         handle.click(timeout=10000)
+                        if box:
+                            s['cursor']={'x':box['x']+box['width']/2,'y':box['y']+box['height']/2,'visible':True}
+                        else:
+                            s['cursor']={**s['cursor'],'visible':False}
                     else: handle.fill(args['text'],timeout=10000)
                 finally:handle.dispose()
             else:
                 path='/element/'+urllib.parse.quote(handle,safe='')
-                if action=='click':self.wd(s,'POST',path+'/click',{})
+                if action=='click':
+                    self.wd(s,'POST',path+'/click',{})
+                    # WebDriver does not return click coordinates. Suppress the
+                    # earlier marker rather than drawing it at a stale position.
+                    s['cursor']={**s['cursor'],'visible':False}
                 else:
                     self.wd(s,'POST',path+'/clear',{})
                     self.wd(s,'POST',path+'/value',{'text':args['text'],'value':list(args['text'])})
@@ -524,7 +534,7 @@ class _Browsers:
         if backend=='disabled': raise RDCError('adapter_disabled','Browser control is disabled by owner configuration')
         browser=args.get('browser') or ('chromium' if backend=='playwright' else (self.settings.webdriver_capabilities or {}).get('browserName',''))
         width,height=args.get('width',1280),args.get('height',800)
-        s={'session_id':str(uuid.uuid4()),'backend':backend,'browser':browser,'url':'about:blank','width':width,'height':height,'observation_id':None,'cursor':{'x':0,'y':0},'handles':{}}
+        s={'session_id':str(uuid.uuid4()),'backend':backend,'browser':browser,'url':'about:blank','width':width,'height':height,'observation_id':None,'cursor':{'x':0,'y':0,'visible':False},'handles':{}}
         if backend=='playwright':
             if browser not in ('chromium','firefox','webkit'): raise RDCError('invalid_arguments','Playwright supports chromium, firefox, webkit. Actual Safari requires owner-configured WebDriver.')
             try:

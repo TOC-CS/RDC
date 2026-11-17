@@ -768,7 +768,9 @@ async def _run_relay(config_path, state_dir, *, stop_event=None, diagnostics=Non
                                 await pump.flush()
                                 if pump.worker_lost:
                                     raise RelayTransientError('Local worker connection ended; uncertain actions will not be replayed.')
+                                poll_started = time.monotonic()
                                 operation, poll_delay = await gateway.poll()
+                                poll_elapsed = time.monotonic() - poll_started
                                 if interrupted:
                                     safe_record(diagnostics, 'relay', 'reconnected')
                                     interrupted = False
@@ -776,10 +778,10 @@ async def _run_relay(config_path, state_dir, *, stop_event=None, diagnostics=Non
                                     idle_delay = .25
                                     await pump.handle(operation)
                                 else:
-                                    # The gateway may answer immediately when
-                                    # idle. Reduce empty requests while retaining
-                                    # its minimum delay and quick active polling.
-                                    await anyio.sleep(max(poll_delay, idle_delay))
+                                    # Credit the gateway's long-poll wait toward
+                                    # local idle backoff. Immediate empty replies
+                                    # still back off; the server minimum remains.
+                                    await anyio.sleep(max(poll_delay, idle_delay - poll_elapsed))
                                     idle_delay = min(5, idle_delay * 2)
                     except Exception as exc:
                         fatal = _permanent(exc)

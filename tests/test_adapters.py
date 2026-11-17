@@ -90,12 +90,29 @@ class AdapterTests(unittest.TestCase):
         self.assertIn(('POST','/session/safe-session/element/element1/value',{'text':'Sample User','value':list('Sample User')}),Driver.requests)
         with self.assertRaisesRegex(Exception,'[Oo]bservation|[Ss]tale'): self.a.call('rdc_browser_fill',args)
     def test_pointer_requires_observation_and_updates_preview_cursor(self):
-        sid=self.start(); obs=self.a.call('rdc_browser_observe',{'session_id':sid})
+        sid=self.start()
+        initial=self.a.call('rdc_browser_list',{})['sessions'][0]['cursor']
+        self.assertIs(initial.get('visible'),False)
+        obs=self.a.call('rdc_browser_observe',{'session_id':sid})
         self.a.call('rdc_browser_pointer',{'session_id':sid,'observation_id':obs['observation_id'],'x':41,'y':52,'action':'move'})
         shot=self.a.snapshot(sid)
-        self.assertEqual({'x':41,'y':52},shot['cursor'])
+        self.assertEqual({'x':41,'y':52,'visible':True},shot['cursor'])
         self.assertEqual(b'\x89PNG\r\n\x1a\nfixture',base64.b64decode(shot['data']))
         with self.assertRaises(Exception): self.a.call('rdc_browser_pointer',{'session_id':sid,'observation_id':obs['observation_id'],'x':9000,'y':5})
+    def test_webdriver_click_hides_old_marker_when_driver_does_not_report_click_position(self):
+        sid=self.start()
+        observation=self.a.call('rdc_browser_observe',{'session_id':sid})
+        moved=self.a.call('rdc_browser_pointer',{'session_id':sid,
+            'observation_id':observation['observation_id'],'x':41,'y':52,'action':'move'})
+        self.assertTrue(moved['cursor']['visible'])
+        observation=self.a.call('rdc_browser_observe',{'session_id':sid})
+        clicked=self.a.call('rdc_browser_click',{'session_id':sid,
+            'observation_id':observation['observation_id'],
+            'handle':observation['controls'][0]['handle']})
+        self.assertEqual(sid,clicked['session_id'])
+        self.assertIs(self.a.snapshot(sid)['cursor']['visible'],False,
+            'An unlocated WebDriver click must clear the previously visible marker')
+
     def test_driver_config_cannot_be_overridden_and_sessions_bound(self):
         with self.assertRaises(Exception): self.a.call('rdc_browser_start',{'browser':'safari','webdriver_url':'http://attacker/'})
         for _ in range(8): self.start()

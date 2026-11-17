@@ -35,6 +35,7 @@ window.protocolCalls = []; window.toolCalls = []; window.requestedModes = [];
 window.frameCalls = 0; window.activeRequests = 0; window.maxRequests = 0;
 window.workerTicks = 0; window.workerAlive = true; window.sessionAlive = true;
 window.teardownRequests = 0; window.teardownAcks = 0; window.delayMs = 0;
+window.pipReply = config.get('pip_reply');
 window.deniedMode = null; window.wrongSession = false; window.frameErrorCode = null; window.currentMode = 'inline';
 window.openResult = structuredClone(OPEN); window.contextUpdates = [];
 const selected = config.get('session') || window.openResult.session_id;
@@ -118,8 +119,8 @@ window.addEventListener('message', event => {
       let data = structuredClone(window.openResult), content;
       if (name === 'rdc_preview_frame') {
         data = {ok:true,device_id:'fixture-device',session_id:window.wrongSession?'wrong-session':args.session_id,
-          width:900,height:560,viewport:{width:900,height:560},cursor:{x:280,y:200,visible:true},
-          paused:false,mime_type:'image/png',image_in_content:true,captured_at:new Date().toISOString()};
+          width:900,height:560,viewport:{width:900,height:560},cursor:structuredClone(window.cursorPoint || {x:280,y:200,visible:true}),
+          cursor_in_image:window.cursorInImage===true,paused:false,mime_type:'image/png',image_in_content:true,captured_at:new Date().toISOString()};
         if(window.nativeWidth) Object.assign(data,{window_width:window.nativeWidth,window_height:window.nativeHeight});
         content = [{type:'image',mimeType:'image/png',data:PNG}];
         if(window.frameErrorCode) {data={ok:false,error:{code:window.frameErrorCode,message:'Synthetic capture refusal'}};content=[];}
@@ -146,12 +147,14 @@ window.addEventListener('message', event => {
     window.contextUpdates.push(message.params); reply(message.id,{});
   } else if (message.method === 'ui/request-display-mode') {
     window.requestedModes.push(message.params.mode);
-    window.currentMode = window.deniedMode || message.params.mode;
+    window.currentMode = (message.params.mode==='pip' && window.pipReply) || window.deniedMode || message.params.mode;
     frame.className = window.currentMode === 'inline'?'':window.currentMode;
     if(window.currentMode==='fullscreen') frame.style.height='100vh';
     else if(window.currentMode==='pip') frame.style.height='500px';
     else frame.style.height='730px';
-    window.sendContext(context()); reply(message.id,{mode:window.currentMode});
+    window.sendContext(context());
+    const confirmedMode=window.currentMode;
+    setTimeout(()=>reply(message.id,{mode:confirmedMode}),window.modeDelayMs||0);
   } else if (message.method === 'ui/notifications/size-changed') {
     if (window.currentMode==='inline') frame.style.height=Math.max(80,Math.min(1000,message.params.height))+'px';
   } else if (message.method === 'ui/notifications/request-teardown') {
@@ -181,7 +184,10 @@ def real_worker_tool_result(engine, request):
 class EmbeddedResourceTests(unittest.TestCase):
     def test_bundled_resource_is_self_contained_and_bounded(self):
         html = (EMBEDDED / 'preview.html').read_text()
-        self.assertLess(len(html.encode()), 4 * 1024 * 1024)
+        self.assertLess(len(html.encode()), 800_000)
+        branded_thumbnail = (EMBEDDED.parent / 'assets' / 'rdc-icon-192.png').read_bytes()
+        self.assertLess(len(branded_thumbnail), 60_000)
+        self.assertIn('data:image/png;base64,' + base64.b64encode(branded_thumbnail).decode(), html)
         self.assertNotIn('RDC_LOGO_DATA', html)
         self.assertNotIn('/* RDC_SCRIPT */', html)
         self.assertNotRegex(html, r'<script[^>]+src=')
@@ -316,7 +322,7 @@ class EmbeddedPreviewTests(unittest.TestCase):
 
     def test_native_window_resizes_to_landscape_in_tall_host_and_hide_stops_resizing(self):
         window_session='window-'+SESSION
-        self.page.goto(self.base+'?session='+window_session+'&resize=1')
+        self.page.goto(self.base+'?session='+window_session+'&resize=1&modes=inline')
         self.page.set_viewport_size({'width':400,'height':900})
         self.live()
         self.wait_condition("window.toolCalls.some(c=>c.name==='rdc_preview_resize'&&c.arguments.width<400)")
@@ -326,8 +332,18 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.assertLess(args['width'],400)
         self.assertAlmostEqual(args['width']/args['height'],16/9,delta=.02)
         self.assertTrue(args['_rdc_request_id'])
-        panel=self.view.locator('#panel').bounding_box()
-        host=self.page.locator('#app-frame').bounding_box()
+        # The host observes the resize dispatch before the asynchronous native
+        # readback and frame dimensions settle. Assert eventual panel fit.
+        self.view.locator('#screen.window-sized').wait_for(timeout=15000)
+        deadline=time.monotonic()+15
+        while True:
+            panel=self.view.locator('#panel').bounding_box()
+            host=self.page.locator('#app-frame').bounding_box()
+            if panel and host and abs(panel['height']-host['height'])<=2:
+                break
+            if time.monotonic()>=deadline:
+                break
+            self.page.wait_for_timeout(25)
         self.assertAlmostEqual(panel['height'],host['height'],delta=2)
         self.view.get_by_role('button',name='Hide preview',exact=True).click()
         count=len(self.page.evaluate("window.toolCalls.filter(c=>c.name==='rdc_preview_resize')"))
@@ -337,7 +353,7 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.assertTrue(self.page.evaluate('window.workerAlive && window.sessionAlive'))
 
     def test_inline_landscape_size_recovers_after_hide_and_short_mount(self):
-        self.live()
+        self.page.goto(self.base+'?modes=inline'); self.live()
         self.view.get_by_role('button',name='Hide preview',exact=True).click()
         self.wait_condition("document.getElementById('app-frame').clientHeight<100")
         self.view.get_by_role('button',name='Reopen preview',exact=True).click()
@@ -345,7 +361,7 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.wait_condition("document.getElementById('app-frame').clientHeight>400")
         screen=self.view.locator('#screen').bounding_box()
         self.assertAlmostEqual(screen['width']/screen['height'],16/9,delta=.02)
-        self.page.goto(self.base+'?short_mount=1');self.live()
+        self.page.goto(self.base+'?short_mount=1&modes=inline');self.live()
         self.wait_condition("document.getElementById('app-frame').clientHeight>400")
         screen=self.view.locator('#screen').bounding_box()
         self.assertAlmostEqual(screen['width']/screen['height'],16/9,delta=.02)
@@ -466,6 +482,7 @@ class EmbeddedPreviewTests(unittest.TestCase):
 
     def test_short_fullscreen_host_keeps_panel_and_controls_inside_canvas(self):
         self.page.set_viewport_size({'width': 390, 'height': 400})
+        self.page.goto(self.base+'?modes=inline,fullscreen')
         self.live()
         self.view.get_by_role('button', name='Expand', exact=True).click()
         self.wait_condition('window.currentMode === "fullscreen"')
@@ -507,7 +524,7 @@ class EmbeddedPreviewTests(unittest.TestCase):
                 self.assertEqual(other.get_attribute('src'),b)
                 for page,session in [(self.page,ids[0]),(second_page,ids[1])]:
                     self.assertTrue(all(c['arguments'].get('session_id')==session for c in page.evaluate('window.toolCalls') if c['name'] in ('rdc_preview_open','rdc_preview_frame')))
-                    self.assertEqual(page.evaluate('window.requestedModes'),[])
+                    self.assertEqual(page.evaluate('window.requestedModes'),['pip'])
                 self.view.get_by_role('button',name='Hide preview',exact=True).click()
                 expect(other).to_be_visible()
                 self.assertEqual(len(engine.call('rdc_browser_list',{})['sessions']),2)
@@ -586,6 +603,62 @@ class EmbeddedPreviewTests(unittest.TestCase):
                         while time.monotonic() < deadline and engine.call('rdc_job_status', {'job_id': job_id})['job']['status'] in ('queued', 'running', 'cancelling'):
                             time.sleep(0.05)
                 engine.close(); type(self).real_engine = None
+    def test_automatic_floating_on_open_reopen_and_new_open_result(self):
+        self.live()
+        self.wait_condition('window.currentMode === "pip"')
+        self.assertEqual(self.page.evaluate('window.requestedModes'), ['pip'])
+        self.page.evaluate('window.sendContext({displayMode:"pip"})')
+        count = self.page.evaluate('window.frameCalls')
+        self.wait_condition('(n) => window.frameCalls > n', arg=count)
+        self.assertEqual(self.page.evaluate('window.requestedModes'), ['pip'])
+        self.view.get_by_role('button', name='Inline', exact=True).click()
+        self.wait_condition('window.currentMode === "inline"')
+        self.assertEqual(self.view.get_by_role('button', name='Float', exact=True).get_attribute('title'), 'Request floating view')
+        self.view.get_by_role('button', name='Hide preview', exact=True).click()
+        self.view.get_by_role('button', name='Reopen preview', exact=True).click()
+        self.wait_condition('window.currentMode === "pip"')
+        self.view.get_by_role('button', name='Inline', exact=True).click()
+        self.wait_condition('window.currentMode === "inline"')
+        self.page.evaluate('window.send({method:"ui/notifications/tool-result",params:{structuredContent:window.openResult,content:[]}})')
+        self.wait_condition('window.currentMode === "pip"')
+        self.assertEqual(self.page.evaluate('window.requestedModes'), ['pip', 'inline', 'pip', 'inline', 'pip'])
+        self.assert_pinned(); self.assert_read_only()
+
+    def test_floating_fullscreen_substitution_returns_inline_with_visible_notice(self):
+        self.page.goto(self.base + '?pip_reply=fullscreen')
+        self.view = self.page.frame_locator('#app-frame'); self.live()
+        self.wait_condition('window.requestedModes.length === 2 && window.currentMode === "inline"')
+        self.assertEqual(self.page.evaluate('window.requestedModes'), ['pip', 'inline'])
+        note = self.view.get_by_text('Floating is unavailable in this host.', exact=True)
+        self.assertTrue(note.is_visible())
+        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'), 'inline')
+        self.view.get_by_role('button', name='Float', exact=True).click()
+        self.wait_condition('window.requestedModes.length === 4 && window.currentMode === "inline"')
+        self.assertEqual(self.page.evaluate('window.requestedModes'), ['pip', 'inline', 'pip', 'inline'])
+        self.assertTrue(note.is_visible())
+        self.view.get_by_role('button', name='Expand', exact=True).click()
+        self.wait_condition('window.currentMode === "fullscreen"')
+        self.assertEqual(self.page.evaluate('window.requestedModes.at(-1)'), 'fullscreen')
+        self.assert_pinned(); self.assert_read_only()
+
+    def test_hide_invalidates_pending_float_reply_and_late_open_result(self):
+        self.live()
+        self.view.get_by_role('button', name='Inline', exact=True).click()
+        self.wait_condition('window.currentMode === "inline"')
+        self.page.evaluate('window.pipReply="fullscreen";window.modeDelayMs=300')
+        self.view.get_by_role('button', name='Float', exact=True).click()
+        self.wait_condition('window.currentMode === "fullscreen"')
+        self.view.get_by_role('button', name='Hide preview', exact=True).click()
+        requests = self.page.evaluate('window.requestedModes')
+        self.page.wait_for_timeout(450)
+        self.assertEqual(self.page.evaluate('window.requestedModes'), requests)
+        self.assertTrue(self.view.get_by_role('button', name='Reopen preview', exact=True).is_visible())
+        self.page.evaluate('window.send({method:"ui/notifications/tool-result",params:{structuredContent:window.openResult,content:[]}})')
+        self.page.wait_for_timeout(100)
+        self.assertTrue(self.view.get_by_role('button', name='Reopen preview', exact=True).is_visible())
+        self.assertEqual(self.page.evaluate('window.requestedModes'), requests)
+        self.assert_read_only()
+
     def test_display_mode_tracks_host_and_does_not_change_source(self):
         self.live()
         self.view.get_by_role('button', name='Expand', exact=True).click()
@@ -601,6 +674,167 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'), 'inline')
         self.assert_pinned()
         self.assert_read_only()
+
+    def test_unsolicited_legacy_pip_signal_never_overrides_explicit_host_modes(self):
+        self.page.add_init_script("""if(window.parent!==window) {
+          window.openai={displayMode:'inline',attempts:[],requestDisplayMode:async({mode})=>{
+            window.openai.attempts.push(mode);return {mode};}};
+          setTimeout(()=>{
+            window.openai.displayMode='pip';
+            window.dispatchEvent(new CustomEvent('openai:set_globals',{detail:{globals:{displayMode:'pip'}}}));
+          },150);
+        }""")
+        self.page.goto(self.base+'?modes=inline,fullscreen')
+        self.view=self.page.frame_locator('#app-frame');self.live()
+        self.view.get_by_text('Floating is unavailable in this host.',exact=True).wait_for()
+        self.page.wait_for_timeout(200)
+        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'inline')
+        self.assertEqual(self.view.locator('#canvas').evaluate('() => window.openai.attempts'),[])
+        self.assertEqual(self.page.evaluate('window.requestedModes'),[])
+        self.assert_pinned();self.assert_read_only()
+
+    def test_cursor_tracks_actual_pixels_when_native_window_is_scrolled(self):
+        self.page.goto(self.base + '?session=window-' + SESSION + '&resize=1')
+        self.view = self.page.frame_locator('#app-frame')
+        self.live()
+        self.page.evaluate('window.nativeWidth=1410;window.nativeHeight=950')
+        self.view.locator('#frame[style*="1410px"]').wait_for(timeout=6000)
+        screen = self.view.locator('#screen')
+        screen.evaluate('(node)=>node.scrollTo({left:140,top:85})')
+        self.page.wait_for_timeout(110)
+        measurements = screen.evaluate("""screen => {
+          const img=screen.querySelector('#frame');
+          const marker=screen.querySelector('#cursor');
+          const i=img.getBoundingClientRect(), m=marker.getBoundingClientRect();
+          return {left:m.left,top:m.top,
+             expectedLeft:i.left+280/900*i.width-3,
+             expectedTop:i.top+200/560*i.height-2,
+             scrollLeft:screen.scrollLeft,scrollTop:screen.scrollTop,visible:!marker.hidden};
+        }""")
+        self.assertTrue(measurements['visible'],measurements)
+        self.assertGreater(measurements['scrollLeft'],0,measurements)
+        self.assertGreater(measurements['scrollTop'],0,measurements)
+        self.assertAlmostEqual(measurements['left'],measurements['expectedLeft'],delta=1.1,msg=str(measurements))
+        self.assertAlmostEqual(measurements['top'],measurements['expectedTop'],delta=1.1,msg=str(measurements))
+        self.assert_pinned('window-' + SESSION)
+        self.assertTrue(all(c['name'] in ('rdc_preview_open','rdc_preview_frame','rdc_operation_status','rdc_preview_resize') for c in self.page.evaluate('window.toolCalls')))
+        self.assertEqual(self.errors, [])
+
+    def test_cursor_placeholder_never_draws_before_a_confirmed_pointer_action(self):
+        self.live()
+        marker=self.view.locator('#cursor')
+        self.assertTrue(marker.is_visible())
+        calls=self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:0,y:0}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        marker.wait_for(state='hidden', timeout=1500)
+        calls=self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:0,y:0,visible:true}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        marker.wait_for(state='visible', timeout=1500)
+        calls=self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:250,y:100,visible:false}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        marker.wait_for(state='hidden', timeout=1500)
+        self.assert_pinned()
+        self.assert_read_only()
+
+    def test_cursor_hides_when_outside_bound_source_and_recovers(self):
+        self.live()
+        marker = self.view.locator('#cursor')
+        self.assertTrue(marker.is_visible())
+        calls = self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:-10,y:5,visible:true}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        marker.wait_for(state='hidden',timeout=1500)
+        calls = self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:280,y:200,visible:true}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        marker.wait_for(state='visible',timeout=1500)
+        self.assert_pinned()
+        self.assert_read_only()
+
+    def test_cursor_uses_letterboxed_image_pixels_and_clips_to_its_edges(self):
+        self.live()
+        screen=self.view.locator('#screen')
+        data=screen.evaluate("""screen=>{
+            const img=screen.querySelector('#frame'),marker=screen.querySelector('#cursor');
+            const box=img.getBoundingClientRect(),m=marker.getBoundingClientRect();
+            const scale=Math.min(box.width/img.naturalWidth,box.height/img.naturalHeight);
+            const width=img.naturalWidth*scale,height=img.naturalHeight*scale;
+            const left=box.left+(box.width-width)/2;
+            return {actualX:m.left,actualY:m.top,
+                    expectedX:left+280/900*width-3,
+                    expectedY:box.top+200/560*height-2,
+                    imageWidth:width,boxWidth:box.width};
+        }""")
+        self.assertAlmostEqual(data['actualX'],data['expectedX'],delta=1.1,msg=str(data))
+        self.assertAlmostEqual(data['actualY'],data['expectedY'],delta=1.1,msg=str(data))
+        calls=self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorPoint={x:899,y:559,visible:true}')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        from re import findall
+        clip=self.view.locator('#cursor').evaluate('(node)=>node.style.clipPath')
+        pixels=[float(value) for value in findall(r'([0-9.]+)px',clip)]
+        self.assertEqual(len(pixels),4,clip)
+        self.assertGreater(pixels[1],10,clip)
+        self.assertGreater(pixels[2],10,clip)
+        self.assert_pinned()
+        self.assert_read_only()
+
+    def test_cursor_is_not_duplicated_when_baked_into_the_source_image(self):
+        self.live()
+        self.assertTrue(self.view.locator('#cursor').is_visible())
+        calls=self.page.evaluate('window.frameCalls')
+        self.page.evaluate('window.cursorInImage=true')
+        self.wait_condition('window.frameCalls > '+str(calls))
+        self.view.locator('#cursor').wait_for(state='hidden',timeout=1500)
+        self.assert_pinned();self.assert_read_only()
+
+    def test_unsupported_host_never_attempts_pip_even_when_legacy_bridge_exists(self):
+        self.page.add_init_script("""if(window.parent!==window) {
+          window.openai={displayMode:'inline',attempts:[],
+            requestDisplayMode:async({mode})=>{
+              window.openai.attempts.push(mode);
+              return {mode:mode==='pip'?'fullscreen':'inline'};
+            }};
+        }""")
+        self.page.goto(self.base+'?modes=inline,fullscreen')
+        self.view=self.page.frame_locator('#app-frame');self.live()
+        self.view.get_by_text('Floating is unavailable in this host.',exact=True).wait_for()
+        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'inline')
+        self.assertEqual(self.view.locator('#canvas').evaluate('() => window.openai.attempts'),[],
+            'The host explicitly excluded pip; a legacy method does not override its capability list')
+        self.assertEqual(self.page.evaluate('window.requestedModes'),[])
+        self.assertEqual(self.view.get_by_role('button',name='Float',exact=True).count(),0)
+        self.view.get_by_role('button',name='Hide preview',exact=True).click()
+        self.view.get_by_role('button',name='Reopen preview',exact=True).click()
+        self.view.get_by_text('Floating is unavailable in this host.',exact=True).wait_for()
+        self.assertEqual(self.view.locator('#canvas').evaluate('() => window.openai.attempts'),[])
+        self.assertEqual(self.page.evaluate('window.requestedModes'),[])
+        self.assert_pinned();self.assert_read_only()
+
+    def test_host_advertised_pip_requires_confirmed_mode_even_with_legacy_bridge(self):
+        self.page.add_init_script("""if(window.parent!==window) {
+          window.openai={displayMode:'inline',attempts:[],requestDisplayMode:async({mode})=>{
+            window.openai.attempts.push(mode);
+            window.openai.displayMode=mode;return {mode};}};
+        }""")
+        self.page.goto(self.base+'?modes=inline,fullscreen,pip')
+        self.view=self.page.frame_locator('#app-frame');self.live()
+        self.view.locator('#canvas[data-mode="pip"]').wait_for()
+        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'pip')
+        self.assertEqual(self.page.evaluate('window.requestedModes'),['pip'])
+        self.assertEqual(self.view.locator('#canvas').evaluate('() => window.openai.attempts'),[])
+        self.assert_pinned();self.assert_read_only()
+
+    def test_unconfirmed_host_floating_does_not_claim_success(self):
+        self.page.goto(self.base+'?modes=inline,fullscreen,pip&pip_reply=inline')
+        self.view=self.page.frame_locator('#app-frame');self.live()
+        self.view.get_by_text('Floating is unavailable in this host.',exact=True).wait_for()
+        self.assertEqual(self.page.evaluate('window.requestedModes'),['pip'])
+        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'inline')
+        self.assert_pinned();self.assert_read_only()
 
     def test_small_screen_and_missing_display_modes(self):
         self.page.set_viewport_size({'width': 390, 'height': 844})

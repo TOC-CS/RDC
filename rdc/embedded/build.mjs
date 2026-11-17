@@ -18,8 +18,14 @@ const result = await build({
 const [template, css, logo] = await Promise.all([
   readFile(join(here, 'src', 'index.html'), 'utf8'),
   readFile(join(here, 'src', 'styles.css'), 'utf8'),
-  readFile(join(here, '..', 'assets', 'rdc-logo.png')),
+  readFile(join(here, '..', 'assets', 'rdc-icon-192.png')),
 ]);
+// The app image renders at 20 px; embedding the original 1254 px PNG
+// added 1.3 MB to every resources/read. Use the shared checked-in thumbnail.
+if (logo.length > 60_000 || logo.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
+    || logo.readUInt32BE(16) !== 192 || logo.readUInt32BE(20) !== 192) {
+  throw new Error('Embedded RDC icon must be the checked-in 192x192 branded PNG');
+}
 const script = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 // Callback replacements keep JavaScript's literal $&, $`, and $' sequences
 // from being treated as replacement-string substitutions.

@@ -18,7 +18,7 @@ VISUAL_ACTIONS = {
 } | {
     'rdc_android_'+action for action in ('tap','input','key','swipe','long_press','launch_app')
 }
-JOB_ACTIONS = {'rdc_job_start', 'rdc_job_cancel', 'rdc_job_input'}
+JOB_ACTIONS = {'rdc_job_start', 'rdc_job_run', 'rdc_job_cancel', 'rdc_job_input'}
 FILE_ACTIONS = {'rdc_file_read','rdc_file_read_many','rdc_file_search','rdc_file_write','rdc_file_edit','rdc_directory_create'}
 SESSION_ID = re.compile(r'^(?:(?:mobile-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|desktop|android-adb)$')
 

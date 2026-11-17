@@ -1,7 +1,8 @@
 /* Authenticated outbound relay. The device remains the authority for grants.
  * Queued operations are claimed once; uncertainty never causes redispatch.
  */
-const UI_URI='ui://rdc/preview-v7.html';
+const UI_URI='ui://rdc/preview-v8.html';
+const UI_V7_URI='ui://rdc/preview-v7.html';
 const UI_V6_URI='ui://rdc/preview-v6.html';
 const UI_V5_URI='ui://rdc/preview-v5.html';
 const UI_V4_URI='ui://rdc/preview-v4.html';
@@ -20,7 +21,8 @@ const DEFAULTS={callWaitMs:20_000,previewWaitMs:8_000,pollWaitMs:10_000,pollStep
   queueTtlMs:30_000,onlineMs:35_000,unknownMs:120_000,operationTtlMs:86_400_000,
   resultTtlMs:3_600_000,frameTtlMs:30_000,frameOperationTtlMs:60_000,maxBacklog:32,maxOperations:2000,
   maxRequestBytes:1_048_576,maxResultBytes:12*1024*1024,maxUploadBytes:16*1024*1024,
-  maxStoredRequestBytes:32*1024*1024,maxStoredResultBytes:512*1024*1024};
+  maxStoredRequestBytes:32*1024*1024,maxStoredResultBytes:512*1024*1024,
+  maxInlineResultBytes:8192};
 
 class GatewayError extends Error {
   constructor(status,code,message,rpcCode,data){super(message);this.status=status;this.code=code;this.rpcCode=rpcCode;this.data=data}
@@ -122,15 +124,16 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     delete descriptor['x-rdc-mutating'];
     return descriptor;
   });
-  tools.push({name:'rdc_operation_status',description:'Recover a pending or uncertain cloud operation by operation_id. Returns its original result when ready. This never dispatches or repeats the operation.',
-    inputSchema:{type:'object',properties:{operation_id:{type:'string',minLength:1,maxLength:100}},required:['operation_id'],additionalProperties:false},
+  tools.push({name:'rdc_operation_status',description:'Recover a pending or uncertain cloud operation by operation_id. Returns its original result when ready. Set diagnostics:true for owner-only phase durations instead of the result. This never dispatches or repeats the operation.',
+    inputSchema:{type:'object',properties:{operation_id:{type:'string',minLength:1,maxLength:100},
+      diagnostics:{type:'boolean',description:'Return only the existing operation state and gateway phase durations in milliseconds, without retrieving the result.'}},required:['operation_id'],additionalProperties:false},
     annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false},
     _meta:{ui:{visibility:['model','app']},'openai/widgetAccessible':true}});
   tools.push({name:'rdc_connection_status',description:'Read the authenticated RDC cloud connection, device availability and queue counts without issuing device commands.',
     inputSchema:{type:'object',properties:{},additionalProperties:false},
     annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false}});
   const serverInfo={name:'rdc',title:'RDC',version:'0.1.0a8',description:'Independent agent workspace with an embedded live preview.',
-    ...(iconDataUri?{icons:[{src:iconDataUri,mimeType:'image/png'}]}:{})};
+    ...(iconDataUri?{icons:[{src:iconDataUri,mimeType:'image/png',sizes:['192x192']}]}:{})};
   const capabilities={tools:{listChanged:false},resources:{subscribe:false,listChanged:false},extensions:{[UI_EXTENSION]:{}}};
   const instructions='RDC controls the paired device through its existing local grants. Pass the current task session_id to rdc_preview_open to see only that live visual source. Closing or moving that view never stops work. Mutating cloud tools require a stable _rdc_request_id. When a call returns pending, recover it using rdc_operation_status and the returned operation_id. Never repeat an uncertain mutation under a new ID. Mutation request IDs are retained for 24 hours; preview frame and activity results and operation identities have short retention. Owner approvals remain in the local owner administration.';
 
@@ -166,16 +169,20 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     const now=clock();
     await env.DB.prepare("UPDATE gateway_operations SET state='expired',request_json=NULL,request_size=0 WHERE state='queued' AND expires_ms<=?").bind(now).run();
     await env.DB.prepare("UPDATE gateway_operations SET state='unknown' WHERE state='claimed' AND claimed_ms<=?").bind(now-L.unknownMs).run();
-    const old=await env.DB.prepare('SELECT id,result_key FROM gateway_operations WHERE result_key IS NOT NULL AND result_expires_ms<=? LIMIT 16').bind(now).all();
+    const old=await env.DB.prepare('SELECT id,result_key FROM gateway_operations WHERE (result_key IS NOT NULL OR result_inline_json IS NOT NULL) AND result_expires_ms<=? LIMIT 16').bind(now).all();
     for(const row of old.results){
-      await env.BUCKET.delete(row.result_key);
-      await env.DB.prepare('UPDATE gateway_operations SET result_key=NULL,result_size=0 WHERE id=? AND result_key=?').bind(row.id,row.result_key).run();
+      // Inline payloads and R2 objects share the same retention deadline.
+      // An inline expiry must not issue an R2 delete for a null key.
+      if(row.result_key!==null)await env.BUCKET.delete(row.result_key);
+      await env.DB.prepare('UPDATE gateway_operations SET result_key=NULL,result_inline_json=NULL,result_size=0 WHERE id=? AND result_expires_ms<=?')
+        .bind(row.id,now).run();
     }
     // Frequent, read-only observations must not consume the day's mutation
     // capacity. A late upload of a retired frame receives operation_not_found;
     // the pump retires that obsolete observation without repeating any work.
     await env.DB.prepare(`DELETE FROM gateway_operations WHERE id IN (
-      SELECT id FROM gateway_operations WHERE state IN ('completed','expired','unknown') AND result_key IS NULL
+      SELECT id FROM gateway_operations WHERE state IN ('completed','expired','unknown')
+        AND result_key IS NULL AND result_inline_json IS NULL
         AND (created_ms<? OR (mutating=0 AND tool IN ('rdc_preview_frame','rdc_preview_activity')
           AND COALESCE(completed_ms,claimed_ms,created_ms)<=?)) LIMIT 32)`)
       .bind(now-L.operationTtlMs,now-L.frameOperationTtlMs).run();
@@ -186,6 +193,21 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     return {ok:true,device_id:env.RDC_DEVICE_ID,online:!!row&&clock()-row.last_seen_ms<=L.onlineMs,
       last_seen_ms:row?.last_seen_ms??null,pending_operations:counts.count,
       server_time_ms:clock(),preview_tool:'rdc_preview_open'};
+  }
+  function operationDiagnostics(op){
+    const now=clock();
+    const created=op.created_ms;
+    const claimed=op.claimed_ms;
+    const completed=op.completed_ms;
+    const interval=(end,start)=>end===null||end===undefined||start===null||start===undefined?
+      null:Math.max(0,end-start);
+    return {ok:true,diagnostics:true,operation_id:op.id,tool:op.tool,state:op.state,
+      elapsed_ms:interval(now,created),
+      queue_age_ms:op.state==='queued'?interval(now,created):null,
+      queue_wait_ms:interval(claimed,created),
+      inflight_age_ms:op.state==='claimed'?interval(now,claimed):null,
+      claim_to_result_ms:interval(completed,claimed),
+      completed_age_ms:op.state==='completed'?interval(now,completed):null};
   }
   async function operationResult(op,env){
     if(op.state==='completed'){
@@ -202,11 +224,24 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         toolFailure(reason,reason==='result_expired'?
           'The operation completed, but its retained response expired. Inspect the device state before repeating a mutation.':
           'The stored response is unavailable. The operation will not be repeated.',{operation_id:op.id,completed:true});
-      if(!op.result_key)return missingResult('result_expired');
-      const stored=await env.BUCKET.get(op.result_key);
-      if(!stored)return missingResult('result_unavailable');
-      const value=JSON.parse(await stored.text());
-      return {...value,_meta:{...(value._meta??{}),'rdc/operation_id':op.id}};
+      if(!op.result_key&&!op.result_inline_json)return missingResult('result_expired');
+      // For small results the same authorized operation record is the durable
+      // result store. Larger payloads keep the existing R2 readback path.
+      let resultJson=op.result_inline_json;
+      if(!resultJson){
+        const stored=await env.BUCKET.get(op.result_key);
+        if(!stored)return missingResult('result_unavailable');
+        resultJson=await stored.text();
+      }
+      const value=JSON.parse(resultJson);
+      // Some host tool connectors retain structuredContent but strip MCP
+      // result _meta. Keep the authoritative operation ID in both places so
+      // the owner can request phase diagnostics after a fast completed call.
+      // The gateway-owned ID overrides any untrusted worker placeholder.
+      return {...value,
+        ...(object(value.structuredContent)?{structuredContent:{
+          ...value.structuredContent,_rdc_gateway_operation_id:op.id}}:{}),
+        _meta:{...(value._meta??{}),'rdc/operation_id':op.id}};
     }
     if(op.state==='expired')return toolFailure('expired_before_execution','The queued operation expired before the device claimed it. It was not dispatched.',{operation_id:op.id,status:op.state});
     if(op.state==='unknown')return toolFailure('outcome_unknown','The device may have executed this operation. It will not be dispatched again. Recover status or inspect the device before another mutation.',{operation_id:op.id,status:op.state});
@@ -263,8 +298,15 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     // operation-status polling recovers this same observation without replay.
     if(name==='rdc_preview_open'||name==='rdc_preview_activity')return operationResult(op,env);
     const stop=clock()+Math.min(L.callWaitMs,name.startsWith('rdc_preview_')?L.previewWaitMs:L.callWaitMs);
+    let claimedFastProbes=0;
     while(op.state!=='completed'&&op.state!=='expired'&&op.state!=='unknown'&&clock()<stop){
-      await sleep(Math.min(L.pollStepMs,stop-clock()));
+      // Once the relay claims this operation, make at most three brief checks
+      // for a fast result upload. Do not accelerate queued/idle work, and fall
+      // back to the normal interval for longer-running commands.
+      const fastClaim=op.state==='claimed'&&claimedFastProbes<3;
+      const interval=fastClaim?Math.min(100,L.pollStepMs):L.pollStepMs;
+      if(fastClaim)claimedFastProbes++;
+      await sleep(Math.min(interval,stop-clock()));
       op=await getOperation(op.id,principal,env);
     }
     return operationResult(op,env);
@@ -293,7 +335,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         case 'resources/list':response={resources:[{uri:UI_URI,name:'rdc-preview',title:'RDC Live Preview',mimeType:UI_MIME}]};break;
         case 'resources/templates/list':response={resourceTemplates:[]};break;
         case 'resources/read':
-          if(![UI_URI,UI_V6_URI,UI_V5_URI,UI_V4_URI,UI_PREVIOUS_URI,UI_V2_URI,UI_LEGACY_URI].includes(params.uri))fail(404,'resource_not_found','RDC preview resource not found.');
+          if(![UI_URI,UI_V7_URI,UI_V6_URI,UI_V5_URI,UI_V4_URI,UI_PREVIOUS_URI,UI_V2_URI,UI_LEGACY_URI].includes(params.uri))fail(404,'resource_not_found','RDC preview resource not found.');
           response={contents:[{uri:params.uri,mimeType:UI_MIME,text:resourceHtml,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},
             'openai/ui':{availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'inline'},'openai/widgetDescription':'Live view of the selected RDC session. Hiding the view leaves work running.'}}]};break;
         case 'tools/call':{
@@ -301,7 +343,11 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           if(params.name==='rdc_connection_status')response=toolResult(await connection(env));
           else if(params.name==='rdc_operation_status'){
             if(!text(params.arguments?.operation_id,100))fail(400,'invalid_arguments','operation_id is required.');
-            response=await operationResult(await getOperation(params.arguments.operation_id,principal,env),env);
+            const diagnostics=params.arguments?.diagnostics;
+            if(diagnostics!==undefined&&typeof diagnostics!=='boolean')
+              fail(400,'invalid_arguments','diagnostics must be a boolean.');
+            const operation=await getOperation(params.arguments.operation_id,principal,env);
+            response=diagnostics===true?toolResult(operationDiagnostics(operation)):await operationResult(operation,env);
           }else response=await dispatch(params.name,params.arguments??{},principal,env);
           break;
         }
@@ -351,7 +397,8 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
   async function result(request,env){
     try{
       await device(request,env);const body=await readBody(request,L.maxUploadBytes);
-      if(typeof body.result_json==='string'&&encoder.encode(body.result_json).length>L.maxResultBytes)
+      const resultBytes=typeof body.result_json==='string'?encoder.encode(body.result_json).length:0;
+      if(resultBytes>L.maxResultBytes)
         fail(413,'result_too_large','The result exceeds the 12 MiB relay limit.');
       if(body.device_id!==env.RDC_DEVICE_ID)fail(403,'device_mismatch','This credential belongs to another device.');
       if(!text(body.operation_id,100)||!text(body.claim_id,100)||!text(body.request_sha256,64)||typeof body.result_json!=='string')
@@ -370,18 +417,22 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       if(!object(value)||!Array.isArray(value.content)||value.content.length>1000||
         (value.isError!==undefined&&typeof value.isError!=='boolean'))
         fail(400,'invalid_result','A standard MCP CallToolResult is required.');
-      const key=`rdc-results/${env.RDC_DEVICE_ID}/${op.id}/${digest}.json`;
-      // The object is durable before the database advertises completion. A lost
-      // acknowledgment only repeats this upload; it never repeats device work.
-      // D1 failure after this write can leave an unrecorded orphan. Admission
-      // bounds committed/reserved bytes, not every object in the R2 bucket.
-      await env.BUCKET.put(key,body.result_json,{httpMetadata:{contentType:'application/json'}});
-      const completed=await env.DB.prepare(`UPDATE gateway_operations SET state='completed',completed_ms=?,result_key=?,result_sha256=?,result_size=?,result_expires_ms=?,request_json=NULL,request_size=0
+      const inline=resultBytes<=L.maxInlineResultBytes?body.result_json:null;
+      const key=inline===null?`rdc-results/${env.RDC_DEVICE_ID}/${op.id}/${digest}.json`:null;
+      // At most 8 KiB remains inline in the same committed D1 operation record.
+      // Larger results remain durable in R2 before D1 advertises completion.
+      // A lost acknowledgment only repeats the exact result upload, never work.
+      // D1 failure after a large R2 PUT may still leave an orphan object.
+      if(key!==null)await env.BUCKET.put(key,body.result_json,{httpMetadata:{contentType:'application/json'}});
+      const completed=await env.DB.prepare(`UPDATE gateway_operations SET state='completed',completed_ms=?,result_key=?,result_inline_json=?,result_sha256=?,result_size=?,result_expires_ms=?,request_json=NULL,request_size=0
         WHERE id=? AND device_id=? AND result_sha256 IS NULL AND state IN ('claimed','unknown') RETURNING id`)
-        .bind(clock(),key,digest,encoder.encode(body.result_json).length,clock()+(['rdc_preview_frame','rdc_preview_activity'].includes(op.tool)?L.frameTtlMs:L.resultTtlMs),op.id,env.RDC_DEVICE_ID).first();
+        .bind(clock(),key,inline,digest,resultBytes,clock()+(['rdc_preview_frame','rdc_preview_activity'].includes(op.tool)?L.frameTtlMs:L.resultTtlMs),op.id,env.RDC_DEVICE_ID).first();
       if(!completed){
         const current=await env.DB.prepare('SELECT result_sha256 FROM gateway_operations WHERE id=?').bind(op.id).first();
-        if(current?.result_sha256!==digest){await env.BUCKET.delete(key);fail(409,'result_conflict','A different result won the completion race.');}
+        if(current?.result_sha256!==digest){
+          if(key!==null)await env.BUCKET.delete(key);
+          fail(409,'result_conflict','A different result won the completion race.');
+        }
       }
       return json({ok:true,operation_id:op.id,status:'completed',duplicate:!completed});
     }catch(error){return apiError(error);}
@@ -395,4 +446,18 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     catch(error){return apiError(error);}
   }
   return {mcp,poll,result,status};
+}
+
+
+/**
+ * Post-migration rollback target: the same authenticated, owner-scoped reader
+ * that understands BOTH v17 D1-inline and legacy R2 results, but a writer that
+ * ALWAYS stores new results in R2. The historical v16 binary cannot read
+ * inline-only rows and MUST NOT be selected as a post-inline rollback.
+ *
+ * Save a separate owner-private Sites version of this factory before activating
+ * any inline writer. This function does not migrate, deploy or rewrite data.
+ */
+export function createRollbackCompatibleGateway(options){
+  return createGateway({...options,limits:{...(options?.limits??{}),maxInlineResultBytes:0}});
 }

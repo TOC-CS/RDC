@@ -1,0 +1,88 @@
+{
+  "status": "passed",
+  "source_head": "137a42d67741504697c0e99c2902646948951b7a",
+  "transport": "official MCP SDK over local stdio",
+  "network_required": false,
+  "profile": "disposable, browser and desktop disabled",
+  "server_version": "0.1.0a8",
+  "burst_commands": 12,
+  "concurrency_per_batch": 6,
+  "all_outputs_exact": true,
+  "all_exit_codes_zero": true,
+  "script_workflow": "passed",
+  "idempotent_repeat": "same job, no duplicate",
+  "records": [
+    {
+      "index": 0,
+      "elapsed_ms": 88.302,
+      "exit_code": 0,
+      "output_exact": true
+    },
+    {
+      "index": 1,
+      "elapsed_ms": 99.902,
+      "exit_code": 0,
+      "output_exact": true
+    },
+    {
+      "index": 2,
+      "elapsed_ms": 96.105,
+      "exit_code": 0,
+      "output_exact": true
+    },
+    {
+      "index": 3,
+      "elapsed_ms": 110.808,
+      "exit_code": 0,
+      "output_exact": true
+    },
+    {
+      "index": 4,
+      "elapsed_ms": 112.85,
+      "exit_code": 0,
+      "output_exact": true
+    },
+    {
+      "index": 5,
+      "elapsed_ms": 97.668,
+      "exit_code": 0,
+      "output_exact": true
+    },
+    {
+      "index": 6,
+      "elapsed_ms": 80.077,
+      "exit_code": 0,
+      "output_exact": true
+    },
+    {
+      "index": 7,
+      "elapsed_ms": 79.009,
+      "exit_code": 0,
+      "output_exact": true
+    },
+    {
+      "index": 8,
+      "elapsed_ms": 96.988,
+      "exit_code": 0,
+      "output_exact": true
+    },
+    {
+      "index": 9,
+      "elapsed_ms": 78.451,
+      "exit_code": 0,
+      "output_exact": true
+    },
+    {
+      "index": 10,
+      "elapsed_ms": 87.363,
+      "exit_code": 0,
+      "output_exact": true
+    },
+    {
+      "index": 11,
+      "elapsed_ms": 86.451,
+      "exit_code": 0,
+      "output_exact": true
+    }
+  ]
+}

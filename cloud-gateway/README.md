@@ -22,6 +22,14 @@ The device also requires the Site's service credential in `OAI-Sites-Authorizati
 
 Both device endpoints require `Content-Type: application/json`, `X-RDC-Device-Key`, and the private Site service access header. No inbound connection to the user's device is needed.
 
+## Short-command terminal fast path
+
+When the installed worker and this published gateway both advertise `rdc_job_run`, short authorized terminal actions can return the original durable job status and bounded output in one tool call. `argv` is executed directly as an argument vector, with an explicit `cwd`; supply a shell explicitly for shell interpretation. Use `wait_ms` up to 3000 and `output_limit` to bound the inline wait/output. A pending result is still the original job, not permission to rerun it. Keep the same `_rdc_request_id` for recovery, and use `rdc_operation_status` if the cloud call itself is pending. Long-running or interactive commands retain `rdc_job_start`, status, input, output and cancellation. Server-side and model/tool network latency can dominate local execution, so measure speed rather than assuming faster behavior.
+
+## Owner-only operation timing diagnosis
+
+A developer or authorized agent may request `rdc_operation_status` with the saved `operation_id` and `diagnostics:true`. The gateway returns only state and phase durations, without reading the worker's output. This supports root-cause measurements for cloud queue admission, worker pickup and durable result upload while preserving the normal recovery response when the flag is absent. Do not confuse `claim_to_result_ms` with local execution time, and do not attribute client-side latency to gateway timing without separate measurements. No extra idle polling or mutation occurs.
+
 ## Recovery and bounds
 
 Cloud mutating tools require `_rdc_request_id`; it is removed before passing the original arguments to the local worker. Reusing the key with identical arguments recovers the same operation. Reusing it with different arguments fails. A queue claim is atomic and is never redelivered. Work expires if not claimed within 30 seconds. Claims with no response for two minutes become uncertain, and late results can still resolve them.
