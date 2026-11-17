@@ -22,9 +22,9 @@ class CodingContextTests(unittest.TestCase):
         self.project = self.root / "project"
         self.project.mkdir()
         self.a = self.project / "app.py"
-        self.a.write_text("def add(a,b):\n    return a + b\n", encoding="utf-8")
+        self.a.write_bytes(b"def add(a,b):\n    return a + b\n")
         self.b = self.project / "README.md"
-        self.b.write_text("TOC RDC synthetic coding fixture\n", encoding="utf-8")
+        self.b.write_bytes(b"TOC RDC synthetic coding fixture\n")
         self.extra = self.home / "private-external.txt"
         self.extra.write_text("PRIVATE-NO-CODE-CONTEXT", encoding="utf-8")
         self.engine = Engine(Settings(
@@ -53,6 +53,8 @@ class CodingContextTests(unittest.TestCase):
             max_files=30,
         )
         self.assertTrue(response["ok"], response)
+        self.assertEqual(self.a.read_bytes(), b"def add(a,b):\n    return a + b\n")
+        self.assertEqual(self.b.read_bytes(), b"TOC RDC synthetic coding fixture\n")
         self.assertEqual(response["path"], str(self.project.resolve()))
         self.assertEqual({x["name"] for x in response["listing"]["entries"]}, {"app.py", "README.md"})
         self.assertFalse(response["listing"]["truncated"])

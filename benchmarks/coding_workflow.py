@@ -100,9 +100,10 @@ def execute_case(case_id=0):
         test_dir = project / "tests"
         test_dir.mkdir(parents=True)
         source = project / "calc.py"
-        source.write_text(SOURCE_BROKEN, encoding="utf-8")
+        # Write exact fixture bytes, preserving LF on Windows.
+        source.write_bytes(SOURCE_BROKEN.encode('utf-8'))
         original_test = test_dir / "test_calc.py"
-        original_test.write_text(TEST_ORIGINAL, encoding="utf-8")
+        original_test.write_bytes(TEST_ORIGINAL.encode("utf-8"))
         added_test = test_dir / "test_extra.py"
         outside = scratch / "outside-denied.txt"
         engine = Engine(Settings(
