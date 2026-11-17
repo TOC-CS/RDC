@@ -30,10 +30,10 @@ class D1 {
   }
 }
 class R2 {
-  constructor(){this.objects=new Map();this.puts=0}
+  constructor(){this.objects=new Map();this.puts=0;this.gets=0;this.deletes=0}
   async put(key,body){this.puts++;this.objects.set(key,String(body));return {key}}
-  async get(key){const body=this.objects.get(key);return body===undefined?null:{size:Buffer.byteLength(body),text:async()=>body}}
-  async delete(keys){for(const key of Array.isArray(keys)?keys:[keys])this.objects.delete(key)}
+  async get(key){this.gets++;const body=this.objects.get(key);return body===undefined?null:{size:Buffer.byteLength(body),text:async()=>body}}
+  async delete(keys){this.deletes++;for(const key of Array.isArray(keys)?keys:[keys])this.objects.delete(key)}
 }
 function setup(limits={},testCatalog=catalog,waitHook=async()=>{}) {
   let now=1700000000000;
@@ -184,7 +184,8 @@ test('completed preview expiry reports a fresh read without throwing or redispat
 });
 
 test('a missing stored preview response has the same explicit completed read-only recovery contract',async()=>{
-  const s=setup();await s.poll({claim:false});
+  // Force the R2 path so this test models a missing legacy object, not inline D1 storage.
+  const s=setup({maxInlineResultBytes:0});await s.poll({claim:false});
   await s.mcp('rdc_preview_open',{_rdc_request_id:'missing-preview-result'});
   const op=(await s.poll()).body.operation;await s.complete(op);
   const row=s.env.DB.sqlite.prepare('SELECT result_key FROM gateway_operations WHERE id=?').get(op.operation_id);
@@ -562,6 +563,13 @@ test('fast terminal command result arrives inside first cloud tool call before d
   assert.equal(body.complete,true);
   assert.equal(body.job.id,'job-one');
   assert.equal(body.output.text,'RDC-READY\n');
+  const id=claimed.operation_id;
+  assert.equal(body._rdc_gateway_operation_id,id,'Completed result must expose durable gateway ID');
+  assert.equal(first.body.result.content[0].text,JSON.stringify(workerResult),'Gateway metadata must not rewrite original worker content');
+  const diagnostics=await s.mcp('rdc_operation_status',{operation_id:body._rdc_gateway_operation_id,diagnostics:true});
+  assert.equal(diagnostics.body.result.structuredContent.operation_id,id);
+  assert.equal(diagnostics.body.result.structuredContent.state,'completed');
+  assert.equal((await s.mcp('rdc_operation_status',{operation_id:id,diagnostics:true},'another-owner')).status,403);
   assert.equal((await s.poll()).body.operation,null);
 });
 
@@ -674,4 +682,89 @@ test('cloud diagnostics reject invalid switches without altering operation recov
   const ordinary=await s.mcp('rdc_operation_status',{operation_id});
   assert.equal(ordinary.body.result.structuredContent.pending,true);
   assert.equal((await s.poll()).body.operation.operation_id,operation_id);
+});
+
+test('bounded small terminal results complete and recover entirely in D1 without R2 reads or puts',async()=>{
+  const s=setup({resultTtlMs:1000});
+  await s.poll({claim:false});
+  const queued=await s.mcp('rdc_file_write',{value:'keep private',_rdc_request_id:'inline-small-one'});
+  const id=queued.body.result.structuredContent.operation_id;
+  const claimed=(await s.poll()).body.operation;
+  const output={content:[{type:'text',text:'fast-terminal-output'}],structuredContent:{ok:true,value:'fast-terminal-output'},isError:false};
+  const raw=JSON.stringify(output);
+  assert.ok(Buffer.byteLength(raw)<8192);
+  assert.equal((await s.complete(claimed,output)).body.duplicate,false);
+  assert.equal(s.env.BUCKET.puts,0,'Bounded small result should avoid the R2 PUT');
+  assert.equal(s.env.BUCKET.gets,0,'Bounded small result should not need an R2 GET');
+  const row=s.env.DB.sqlite.prepare('SELECT * FROM gateway_operations WHERE id=?').get(id);
+  assert.equal(row.result_key,null);
+  assert.equal(row.result_inline_json,raw);
+  assert.equal(row.result_size,Buffer.byteLength(raw));
+  assert.equal(row.request_json,null,'Request arguments must still be purged after completion');
+  const status=await s.mcp('rdc_operation_status',{operation_id:id});
+  assert.deepEqual(status.body.result.structuredContent,{...output.structuredContent,_rdc_gateway_operation_id:id});
+  assert.deepEqual(status.body.result.content,output.content);
+  assert.equal((await s.mcp('rdc_operation_status',{operation_id:id},'other-user')).status,403);
+  const diagnostic=await s.mcp('rdc_operation_status',{operation_id:id,diagnostics:true});
+  assert.equal(diagnostic.body.result.structuredContent.state,'completed');
+  assert.ok(!JSON.stringify(diagnostic.body).includes('fast-terminal-output'),'Diagnostics must never leak result payloads');
+  assert.equal((await s.complete(claimed,output)).body.duplicate,true);
+  assert.equal((await s.complete(claimed,{...output,structuredContent:{ok:true,value:'different'}})).status,409);
+  assert.equal(s.env.BUCKET.gets,0);
+  assert.equal(s.env.BUCKET.puts,0);
+  assert.equal((await s.poll()).body.operation,null,'Completed mutation must not be claimed again');
+  s.advance(900);await s.poll({claim:false});
+  assert.equal(s.env.DB.sqlite.prepare('SELECT result_inline_json FROM gateway_operations WHERE id=?').get(id).result_inline_json,raw,
+    'Inline data must remain until the original TTL');
+  s.advance(101);await s.poll({claim:false});
+  const retired=s.env.DB.sqlite.prepare('SELECT * FROM gateway_operations WHERE id=?').get(id);
+  assert.equal(retired.result_inline_json,null,'Expired inline payload must be purged');
+  assert.equal(retired.result_key,null);
+  assert.equal(retired.result_size,0);
+  assert.equal(s.env.BUCKET.deletes,0,'Inline cleanup must not attempt an R2 object deletion');
+  assert.equal(retired.state,'completed');
+  assert.equal((await s.mcp('rdc_operation_status',{operation_id:id})).body.result.structuredContent.error.code,'result_expired');
+});
+
+test('R2 fallback still stores oversized responses and their old records remain recoverable',async()=>{
+  const s=setup({maxInlineResultBytes:8192});
+  await s.poll({claim:false});
+  const queued=await s.mcp('rdc_file_write',{value:'legacy fallback',_rdc_request_id:'r2-oversized-one'});
+  const op=(await s.poll()).body.operation;
+  assert.equal(op.operation_id,queued.body.result.structuredContent.operation_id,'The original queued operation must be claimed');
+  const large={content:[{type:'text',text:'X'.repeat(10000)}],structuredContent:{ok:true,large:true}};
+  assert.ok(Buffer.byteLength(JSON.stringify(large))>8192);
+  assert.equal((await s.complete(op,large)).body.duplicate,false);
+  assert.equal(s.env.BUCKET.puts,1,'Large responses must still use R2');
+  const row=s.env.DB.sqlite.prepare('SELECT * FROM gateway_operations WHERE id=?').get(op.operation_id);
+  assert.equal(row.result_inline_json,null);
+  assert.match(row.result_key,/^rdc-results\//);
+  const status=await s.mcp('rdc_operation_status',{operation_id:op.operation_id});
+  assert.equal(status.body.result.content[0].text.length,10000);
+  assert.equal(status.body.result.structuredContent.large,true);
+  assert.equal((await s.complete(op,large)).body.duplicate,true);
+  assert.equal(s.env.BUCKET.puts,1,'Duplicate result must not re-upload to R2');
+  assert.equal((await s.poll()).body.operation,null);
+});
+
+test('additive inline migration retains queued rows and legacy R2 references',()=>{
+  const db=new DatabaseSync(':memory:');
+  db.exec(readFileSync(new URL('../drizzle/0000_high_fantastic_four.sql',import.meta.url),'utf8'));
+  db.prepare(`INSERT INTO gateway_operations
+    (id,principal,device_id,request_key,tool,request_json,request_sha256,request_size,mutating,state,created_ms,expires_ms,
+     claimed_ms,completed_ms,result_key,result_sha256,result_size,result_expires_ms)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      'legacy-id','owner-1',DEVICE,'legacy-request','rdc_job_run',null,'digest-request',0,1,'completed',100,600,
+      150,200,'rdc-results/legacy.json','digest-result',512,3600000
+    );
+  db.exec(readFileSync(new URL('../drizzle/0001_condemned_clint_barton.sql',import.meta.url),'utf8'));
+  const rows=db.prepare('SELECT * FROM gateway_operations').all();
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].id,'legacy-id');
+  assert.equal(rows[0].state,'completed');
+  assert.equal(rows[0].result_key,'rdc-results/legacy.json');
+  assert.equal(rows[0].result_sha256,'digest-result');
+  assert.equal(rows[0].result_inline_json,null,'New nullable column must preserve legacy rows');
+  assert.equal(rows[0].result_size,512);
+  db.close();
 });
