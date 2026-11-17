@@ -4,6 +4,25 @@ Use the current RDC App tool schemas. The cloud gateway adds `rdc_connection_sta
 
 Some AI hosts also require `link_id` for account routing. Copy an exact ID from the current advertised account choices and select it using the user's request and established conversation context. Do not derive it from an account name or email. If more than one account remains plausible for a write, resolve the target before dispatch. Retain the selected link with the worker identity and every operation, job, approval, credential and session ID, and keep the same link throughout recovery. Two connections reaching the same worker do not justify switching accounts to retry an uncertain action. Add this field only where the current schema requires it.
 
+## Safe cloud latency diagnostics
+
+The private cloud gateway exposes an **optional read-only** view of one existing operation's timing:
+
+`rdc_operation_status {operation_id: "<saved-id>", diagnostics: true}`
+
+This asks for gateway phase durations rather than the worker result. It never executes a tool, repeats an operation, fetches a stored result payload, or changes approvals. The call must use the original authenticated RDC account link and an operation owned by that caller.
+
+- `elapsed_ms`: time since the operation was accepted by the gateway.
+- `queue_age_ms`: time still queued, or null after the claim.
+- `queue_wait_ms`: elapsed from gateway admission to the device claim, or null before claim.
+- `inflight_age_ms`: time since claim while still awaiting a result, or null otherwise.
+- `claim_to_result_ms`: claim to durable result-upload completion, or null before completion.
+- `completed_age_ms`: time since completion, or null while pending.
+
+These are server clock phase durations. The claim-to-result interval includes local worker execution **and** its network/upload overhead. It is not pure CPU time. The gateway cannot measure the caller's total tool latency; record client wall-clock time separately and compare matching commands in repeated tests. Server results are bounded, owner-only and omit original arguments, tokens and result bodies.
+
+Leave `diagnostics` out or set it to false for the existing unchanged recovery behavior. Only the currently deployed gateway version can provide this option; do not assume it is live until deployed and verified. This feature must remain optional and independent of musician, presentation and BandMates code.
+
 ## Select the right recovery ID
 
 | Result or state | Retain | Recover with |
