@@ -101,11 +101,15 @@ POINTER=XY | {'action':{'type':'string','enum':['move','click','wheel']}, 'butto
 def _tools():
     rows=[
       ('browser_start','Create a dedicated browser session. Playwright is headless with a fresh context. WebDriver uses the configured driver and capabilities.',True,{'browser':S,'width':{'type':'integer','minimum':320,'maximum':2560},'height':{'type':'integer','minimum':240,'maximum':1600}},()),
+      ('browser_start_navigate_observe','Start a browser session, navigate once and return fresh page controls in one request. A post-start failure retains its session ID for inspection without retry.',True,{'url':S,'browser':S,'width':{'type':'integer','minimum':320,'maximum':2560},'height':{'type':'integer','minimum':240,'maximum':1600}},('url',)),
       ('browser_list','List active sessions in this daemon.',False,{},()),
       ('browser_observe','Read visible page text and current observation-bound control handles. Refresh before using stale handles.',False,SESSION,('session_id',)),
       ('browser_navigate','Navigate a session. Has worker network access, including local networks.',True,SESSION|{'url':S},('session_id','url')),
+      ('browser_navigate_observe','Navigate once and return a fresh page observation and control handles in the same request. Never retry uncertain navigation.',True,SESSION|{'url':S},('session_id','url')),
       ('browser_click','Click a current observed control once. Uncertain failures are never retried.',True,OBS|{'handle':S},('session_id','observation_id','handle')),
+      ('browser_click_observe','Click one observed control once and return a fresh page observation in the same request. Never retry an uncertain click.',True,OBS|{'handle':S},('session_id','observation_id','handle')),
       ('browser_fill','Fill a current observed editable control once.',True,OBS|{'handle':S,'text':S},('session_id','observation_id','handle','text')),
+      ('browser_fill_observe','Fill one observed editable control once and return a fresh page observation in the same request. Never retry uncertain input.',True,OBS|{'handle':S,'text':S},('session_id','observation_id','handle','text')),
       ('browser_pointer','Control the workspace pointer by CSS viewport coordinates, with a current observation.',True,OBS|POINTER,('session_id','observation_id','x','y')),
       ('browser_keys','Press a supported key or chord in the session; e.g. Enter, Tab, Control+A.',True,OBS|{'keys':S},('session_id','observation_id','keys')),
       ('browser_screenshot','Capture the viewport. Returns bounded base64 image data.',False,SESSION,('session_id',)),
@@ -448,12 +452,38 @@ class _Browsers:
             raise RDCError(code,MESSAGES[code]) from None
     def call(self,action,args):
         if action=='start': return self.start(args)
+        if action=='start_navigate_observe':
+            # Reject unsupported URLs before creating any browser process.
+            url=args['url']
+            scheme=urllib.parse.urlsplit(url).scheme.lower()
+            if scheme not in ('http','https','data','about') or scheme=='about' and url!='about:blank':
+                raise RDCError('invalid_arguments','Browser URL must use http, https, data, or about:blank')
+            # This is one mutation for the cloud journal. Any failure after
+            # startup preserves its exact session ID for readback; no replay.
+            started=self.start({k:args[k] for k in ('browser','width','height') if k in args})
+            session_id=started['session_id']
+            try:
+                self.call('navigate',{'session_id':session_id,'url':url})
+            except Exception:
+                return {'ok':False,'session_id':session_id,'failure_stage':'navigation',
+                        'error_code':'navigation_failed','recover_with':'rdc_browser_list'}
+            try:
+                return {'ok':True,**self.observe(self.sessions[session_id])}
+            except Exception:
+                return {'ok':False,'session_id':session_id,'failure_stage':'observation',
+                        'error_code':'observation_failed','recover_with':'rdc_browser_list'}
         if action=='list': return {'sessions':[self.info(s) for s in self.sessions.values()]}
         s=self.sessions.get(args['session_id'])
         if s is None: raise RDCError('session_not_found','Browser session does not exist in this daemon')
         if action!='close' and s.get('setup_status')=='cleanup_required':
             raise RDCError('webdriver_cleanup_required','This driver session did not finish setup. Close it before starting a replacement.')
         if action=='observe': return self.observe(s)
+        if action in ('navigate_observe','click_observe','fill_observe'):
+            # Execute the existing guarded mutation, then observe on the same
+            # serialized browser-owner thread. A failed observation must never
+            # dispatch the mutation again; the cloud request ID stays authoritative.
+            self.call(action.removesuffix('_observe'), args)
+            return self.observe(s)
         if action=='screenshot': return self.snapshot(s['session_id'])
         if action=='close':
             self.destroy(s);self.sessions.pop(s['session_id']);return {'session_id':s['session_id'],'closed':True}

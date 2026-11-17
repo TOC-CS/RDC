@@ -71,6 +71,139 @@ test('MCP metadata exposes the actual HTML and resource link without device secr
   assert.deepEqual(content._meta.ui.csp.connectDomains,[]);
 });
 
+test('owner-only gateway metrics expose completion phase times without payloads',async()=>{
+  const s=setup();
+  await s.poll({claim:false});
+  const queued=await s.mcp('rdc_file_write',{
+    value:'private-sentinel-do-not-disclose',_rdc_request_id:'metrics-qa-private-key'});
+  assert.equal(queued.status,200);
+  s.advance(125);
+  const claim=await s.poll();
+  assert.ok(claim.body.operation);
+  s.advance(50);
+  const done=await s.complete(claim.body.operation,result('private-dont-echo'));
+  assert.equal(done.status,200);
+  const queries=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=sql=>{queries.push(sql);return original(sql);};
+  const metrics=await s.mcp('rdc_recent_operation_metrics',{limit:5});
+  assert.equal(metrics.status,200);
+  const payload=metrics.body.result.structuredContent;
+  assert.equal(payload.ok,true);
+  assert.equal(payload.count,1);
+  assert.equal(payload.samples[0].tool,'rdc_file_write');
+  assert.equal(payload.samples[0].queue_wait_ms,125);
+  assert.equal(payload.samples[0].claim_to_result_ms,50);
+  assert.equal(payload.samples[0].total_gateway_ms,175);
+  assert.ok(!JSON.stringify(payload).includes('private-sentinel'));
+  assert.ok(!JSON.stringify(payload).includes('private-dont-echo'));
+  assert.ok(!JSON.stringify(payload).includes('metrics-qa-private-key'));
+  assert.ok(!JSON.stringify(payload).includes(claim.body.operation.operation_id));
+  assert.equal(queries.filter(sql=>/^(UPDATE|DELETE|INSERT) /i.test(sql.trim())).length,0,
+    'metrics must be read-only, with no extra maintenance writes');
+  assert.equal((await s.mcp('rdc_recent_operation_metrics',{limit:5},'other-owner')).status,403);
+  assert.equal((await s.mcp('rdc_recent_operation_metrics',{limit:0})).status,400);
+  assert.equal((await s.mcp('rdc_recent_operation_metrics',{limit:51})).status,400);
+  assert.equal((await s.mcp('rdc_recent_operation_metrics',{limit:5,request_id:'inject'})).status,400);
+});
+
+test('connection status omits maintenance writes and ignores expired queued items',async()=>{
+  const s=setup();
+  await s.poll({claim:false});
+  const first=await s.mcp('rdc_file_write',{value:'claimed',_rdc_request_id:'health-claimed-001'});
+  assert.equal(first.status,200);
+  const claimed=await s.poll();
+  assert.ok(claimed.body.operation);
+  const second=await s.mcp('rdc_file_write',{value:'expire',_rdc_request_id:'health-queued-002'});
+  assert.equal(second.status,200);
+  s.advance(30_050); // queued TTL is 30 seconds; claimed is still active.
+  const before=s.env.DB.sqlite.prepare("SELECT state FROM gateway_operations WHERE request_key=?")
+    .get('health-queued-002');
+  assert.equal(before.state,'queued');
+  const queries=[];
+  const prior=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=sql=>{queries.push(sql); return prior(sql);};
+  const status=await s.mcp('rdc_connection_status');
+  assert.equal(status.status,200);
+  assert.equal(status.body.result.structuredContent.pending_operations,1);
+  assert.equal(status.body.result.structuredContent.online,true);
+  assert.equal(queries.filter(sql=>/^(UPDATE|DELETE|INSERT) /i.test(sql.trim())).length,0,
+    'read-only status must not run clean() updates or deletions');
+  const still=s.env.DB.sqlite.prepare("SELECT state FROM gateway_operations WHERE request_key=?")
+    .get('health-queued-002');
+  assert.equal(still.state,'queued','status does not perform maintenance');
+  await s.poll({claim:false});
+  assert.equal(s.env.DB.sqlite.prepare("SELECT state FROM gateway_operations WHERE request_key=?")
+    .get('health-queued-002').state,'expired','ordinary worker poll still cleans up due items');
+});
+
+test('normal cloud dispatch checks worker liveness without a status COUNT query',async()=>{
+  const s=setup();
+  await s.poll({claim:false});
+  const queries=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=sql=>{queries.push(sql);return original(sql);};
+  const sent=await s.mcp('rdc_file_write',{value:'harmless',_rdc_request_id:'perf-online-only-20261117'});
+  assert.equal(sent.status,200);
+  const queueCounts=()=>queries.filter(sql=>sql.includes("SELECT COUNT(*) AS count FROM gateway_operations")).length;
+  assert.equal(queueCounts(),0,
+    'dispatch only uses online state; it need not issue a separate status COUNT');
+  queries.length=0;
+  const status=await s.mcp('rdc_connection_status');
+  assert.equal(status.status,200);
+  assert.equal(queueCounts(),1,'the public status tool still reports pending_operations');
+});
+
+test('synced one-call browser startup advertises durable session setup safely',async()=>{
+  const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
+  const selected=assets.catalog.find(item=>item.name==='rdc_browser_start_navigate_observe');
+  assert.ok(selected,'the worker catalog must include the one-call startup route');
+  assert.equal(selected['x-rdc-mutating'],true);
+  assert.deepEqual(selected.inputSchema.required,['url']);
+  assert.ok(selected.inputSchema.properties.browser);
+  assert.ok(selected.inputSchema.properties.width);
+  assert.ok(selected.inputSchema.properties.height);
+  const s=setup({},assets.catalog);
+  const response=await s.gateway.mcp(s.request('/mcp',{jsonrpc:'2.0',id:123,method:'tools/list'}),s.env);
+  assert.equal(response.status,200);
+  const advertised=(await response.json()).result.tools.find(t=>t.name==='rdc_browser_start_navigate_observe');
+  assert.ok(advertised);
+  assert.equal(advertised.annotations.readOnlyHint,false);
+  assert.deepEqual(advertised.inputSchema.required,['url','_rdc_request_id']);
+});
+
+test('batched coding edits advertise one durable mutating operation and replay guard',async()=>{
+  const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
+  const source=assets.catalog.find(item=>item.name==='rdc_code_edit_many');
+  assert.ok(source,'sync the new bounded project-scoped batch edit into the gateway');
+  assert.equal(source['x-rdc-mutating'],true);
+  assert.equal(source.inputSchema.properties.edits.maxItems,10);
+  assert.deepEqual(source.inputSchema.required,['path','edits']);
+  const s=setup({},assets.catalog);
+  await s.poll({claim:false});
+  const tools=await s.gateway.mcp(s.request('/mcp',{
+    jsonrpc:'2.0',id:110,method:'tools/list'}),s.env);
+  const published=(await tools.json()).result.tools.find(t=>t.name==='rdc_code_edit_many');
+  assert.ok(published);
+  assert.deepEqual(published.inputSchema.required,['path','edits','_rdc_request_id']);
+  const args={path:'/synthetic/project',edits:[{
+      file_path:'first.py',old_text:'bad',new_text:'fixed',expected_sha256:'a'.repeat(64)
+    }],_rdc_request_id:'perf-code-edit-batch-001'};
+  const first=await s.mcp('rdc_code_edit_many',args);
+  assert.equal(first.status,200);
+  const original=first.body.result.structuredContent.operation_id;
+  assert.ok(original);
+  const again=await s.mcp('rdc_code_edit_many',args);
+  assert.equal(again.status,200);
+  assert.equal(again.body.result.structuredContent.operation_id,original);
+  assert.equal((await s.mcp('rdc_code_edit_many',{...args,edits:[{
+    ...args.edits[0],new_text:'changed'
+  }]})).status,409);
+  const count=s.env.DB.sqlite.prepare(
+    "SELECT COUNT(*) AS count FROM gateway_operations WHERE tool='rdc_code_edit_many'").get().count;
+  assert.equal(count,1);
+});
+
 test('synced RDC gateway advertises bounded, read-only batched coding context',async()=>{
   const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
   const target=assets.catalog.find(x=>x.name==='rdc_code_context');
@@ -81,6 +214,7 @@ test('synced RDC gateway advertises bounded, read-only batched coding context',a
   assert.equal(target.inputSchema.properties.search_limit.maximum,100);
   assert.equal(target.inputSchema.properties.max_files.maximum,1000);
   assert.equal(target.inputSchema.properties.file_paths.maxItems,20);
+  assert.deepEqual(target.inputSchema.properties.search_mode.enum,['source','all']);
   const s=setup({},assets.catalog);
   const response=await s.gateway.mcp(s.request('/mcp',{
     jsonrpc:'2.0',id:'code-list',method:'tools/list'
@@ -90,6 +224,32 @@ test('synced RDC gateway advertises bounded, read-only batched coding context',a
   const spec=body.result.tools.find(x=>x.name==='rdc_code_context');
   assert.ok(spec);
   assert.equal(spec.annotations.readOnlyHint,true);
+});
+
+test('synced browser action/observe tools are one guarded cloud mutation each',async()=>{
+  const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
+  const expected=[
+    ['rdc_browser_navigate_observe',['session_id','url']],
+    ['rdc_browser_click_observe',['session_id','observation_id','handle']],
+    ['rdc_browser_fill_observe',['session_id','observation_id','handle','text']]
+  ];
+  const s=setup({},assets.catalog);
+  const listing=await s.gateway.mcp(s.request('/mcp',{
+    jsonrpc:'2.0',id:'atomic-tools',method:'tools/list'
+  }),s.env);
+  assert.equal(listing.status,200);
+  const tools=(await listing.json()).result.tools;
+  for(const [name,required] of expected){
+    const source=assets.catalog.find(x=>x.name===name);
+    assert.ok(source,name+' must be synced into the gateway');
+    assert.equal(source['x-rdc-mutating'],true);
+    assert.equal(source.annotations.readOnlyHint,false);
+    assert.deepEqual(source.inputSchema.required,required);
+    const cloud=tools.find(x=>x.name===name);
+    assert.ok(cloud);
+    assert.equal(cloud.annotations.readOnlyHint,false);
+    assert.deepEqual(cloud.inputSchema.required,[...required,'_rdc_request_id']);
+  }
 });
 
 test('shipped RDC server icon stays compact, branded, and recoverable in initialize metadata',async()=>{

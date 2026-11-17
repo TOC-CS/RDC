@@ -165,6 +165,10 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     }
     for(const field of op.required)if(!Object.hasOwn(args,field))fail(400,'request_id_required','Missing required chat operation field.');
   }
+  tools.push({name:'rdc_recent_operation_metrics',
+    description:'Read owner-only completed RDC gateway phase durations for up to 50 recent operations. Never exposes arguments, messages, results, tokens, identities or full operation IDs.',
+    inputSchema:{type:'object',properties:{limit:{type:'integer',minimum:1,maximum:50}},required:[],additionalProperties:false},
+    annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false}});
   const serverInfo={name:'rdc',title:'RDC',version:'0.1.0a8',description:'Independent agent workspace with an embedded live preview.',
     ...(iconDataUri?{icons:[{src:iconDataUri,mimeType:'image/png',sizes:['192x192']}]}:{})};
   const capabilities={tools:{listChanged:false},resources:{subscribe:false,listChanged:false},extensions:{[UI_EXTENSION]:{}}};
@@ -238,12 +242,44 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           AND COALESCE(completed_ms,claimed_ms,created_ms)<=?)) LIMIT 32)`)
       .bind(now-L.operationTtlMs,now-L.frameOperationTtlMs).run();
   }
-  async function connection(env){
+  // Dispatch consumes only liveness. Keep the pending-operation COUNT in the
+  // public status method where that information is actually requested.
+  async function deviceOnline(env){
     const row=await env.DB.prepare('SELECT last_seen_ms FROM gateway_device WHERE id=?').bind(env.RDC_DEVICE_ID).first();
-    const counts=await env.DB.prepare("SELECT COUNT(*) AS count FROM gateway_operations WHERE device_id=? AND state IN ('queued','claimed')").bind(env.RDC_DEVICE_ID).first();
-    return {ok:true,device_id:env.RDC_DEVICE_ID,online:!!row&&clock()-row.last_seen_ms<=L.onlineMs,
+    return !!row&&clock()-row.last_seen_ms<=L.onlineMs;
+  }
+  async function connection(env){
+    // Keep status read-only. Expired queue rows and stale claimed operations
+    // are excluded without mutating the durable journal on every status call.
+    const now=clock();
+    const row=await env.DB.prepare('SELECT last_seen_ms FROM gateway_device WHERE id=?').bind(env.RDC_DEVICE_ID).first();
+    const counts=await env.DB.prepare("SELECT COUNT(*) AS count FROM gateway_operations WHERE device_id=? AND ((state='queued' AND expires_ms>?) OR (state='claimed' AND claimed_ms>?))").bind(env.RDC_DEVICE_ID,now,now-L.unknownMs).first();
+    return {ok:true,device_id:env.RDC_DEVICE_ID,online:!!row&&now-row.last_seen_ms<=L.onlineMs,
       last_seen_ms:row?.last_seen_ms??null,pending_operations:counts.count,
-      server_time_ms:clock(),preview_tool:'rdc_preview_open'};
+      server_time_ms:now,preview_tool:'rdc_preview_open'};
+  }
+  async function recentMetrics(args,principal,env){
+    if(!object(args)||Object.keys(args).some(k=>k!=='limit'))
+      fail(400,'invalid_arguments','Only the bounded limit is supported.');
+    const limit=args.limit??20;
+    if(!Number.isInteger(limit)||limit<1||limit>50)
+      fail(400,'invalid_arguments','Limit must be an integer between 1 and 50.');
+    // Never read args, request IDs, result bodies, tokens or principal into
+    // the output. This is an owner-authenticated, read-only D1 query.
+    const rows=await env.DB.prepare(
+      "SELECT tool,created_ms,claimed_ms,completed_ms FROM gateway_operations "+
+      "WHERE principal=? AND device_id=? AND state='completed' AND completed_ms IS NOT NULL "+
+      "ORDER BY completed_ms DESC LIMIT ?"
+    ).bind(principal,env.RDC_DEVICE_ID,limit).all();
+    const delta=(later,earlier)=>later===null||earlier===null||
+      later===undefined||earlier===undefined?null:Math.max(0,later-earlier);
+    const samples=rows.results.map(row=>({
+      tool:row.tool,
+      queue_wait_ms:delta(row.claimed_ms,row.created_ms),
+      claim_to_result_ms:delta(row.completed_ms,row.claimed_ms),
+      total_gateway_ms:delta(row.completed_ms,row.created_ms)
+    }));
+    return {ok:true,count:samples.length,completed_only:true,samples};
   }
   function operationDiagnostics(op){
     const now=clock();
@@ -325,7 +361,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     }
     const unavailable=(code,message)=>name==='rdc_preview_open'?
       toolResult({ok:true,preview_unavailable:true,preview_status:code,message,device_id:env.RDC_DEVICE_ID}):toolFailure(code,message);
-    if(!(await connection(env)).online)return unavailable('device_offline','The paired device is offline. No operation was queued.');
+    if(!(await deviceOnline(env)))return unavailable('device_offline','The paired device is offline. No operation was queued.');
     const id=crypto.randomUUID(),now=clock();
     op=await env.DB.prepare(`INSERT INTO gateway_operations
       (id,principal,device_id,request_key,tool,request_json,request_sha256,request_size,mutating,state,created_ms,expires_ms)
@@ -390,41 +426,49 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           response={contents:[{uri:params.uri,mimeType:UI_MIME,text:resourceHtml,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},
             'openai/ui':{availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'inline'},'openai/widgetDescription':'Live view of the selected RDC session. Hiding the view leaves work running.'}}]};break;
         case 'tools/call':{
-          const principal=await owner(request,env);await clean(env);
-          if(params.name==='rdc_connection_status')response=toolResult(await connection(env));
-          else if(params.name==='rdc_chat_session_status'){
+          const principal=await owner(request,env);
+          if(params.name==='rdc_connection_status'){
+            // Fast owner-only read, without queued mutation cleanup.
+            response=toolResult(await connection(env));
+          }else if(params.name==='rdc_recent_operation_metrics'){
+            response=toolResult(await recentMetrics(params.arguments??{},principal,env));
+          }else if(params.name==='rdc_chat_session_status'){
             if(!object(params.arguments??{})||Object.keys(params.arguments??{}).length!==0)
               fail(400,'invalid_arguments','This read-only tool accepts no model-supplied identity or project.');
             response=toolResult(await chatSessionStatus(params._meta,principal,env));
-          }else if(params.name==='rdc_operation_status'){
-            if(!text(params.arguments?.operation_id,100))fail(400,'invalid_arguments','operation_id is required.');
-            const diagnostics=params.arguments?.diagnostics;
-            if(diagnostics!==undefined&&typeof diagnostics!=='boolean')
-              fail(400,'invalid_arguments','diagnostics must be a boolean.');
-            const operation=await getOperation(params.arguments.operation_id,principal,env);
-            response=diagnostics===true?toolResult(operationDiagnostics(operation)):await operationResult(operation,env);
-          }else if(chatOpsByName.has(params.name)){
-            const args=params.arguments??{};
-            validateChatOp(params.name,args);
-            if(!chatRouter||typeof chatRouter.invoke!=='function'){
-              response=toolFailure('chat_bridge_not_enrolled','No authenticated live ChatGPT project/Atlas messenger has been installed. The request was not sent.');
-            }else{
-              const copy={...args};delete copy._rdc_request_id;
-              try{
-                // Never trust _meta as an independent project grant. The
-                // injected host broker must verify session origin, project
-                // enrollment, per-project approval, exact recipient and its
-                // own durable no-replay receipt before any side effect.
-                const outcome=await chatRouter.invoke({name:params.name,args:copy,
-                  request_key:args._rdc_request_id??null,principal,meta:params._meta??null});
-                if(!object(outcome)||typeof outcome.ok!=='boolean')
-                  response=toolFailure('chat_broker_invalid','Chat broker returned no validated delivery result.');
-                else response=toolResult(outcome,outcome.ok!==true);
-              }catch{
-                response=toolFailure('chat_broker_unavailable','Chat broker could not verify or perform this operation. No automatic replay will be attempted.');
+          }else{
+            // Mutation recovery and dispatch retain the durable cleanup policy.
+            await clean(env);
+  if(params.name==='rdc_operation_status'){
+              if(!text(params.arguments?.operation_id,100))fail(400,'invalid_arguments','operation_id is required.');
+              const diagnostics=params.arguments?.diagnostics;
+              if(diagnostics!==undefined&&typeof diagnostics!=='boolean')
+                fail(400,'invalid_arguments','diagnostics must be a boolean.');
+              const operation=await getOperation(params.arguments.operation_id,principal,env);
+              response=diagnostics===true?toolResult(operationDiagnostics(operation)):await operationResult(operation,env);
+            }else if(chatOpsByName.has(params.name)){
+              const args=params.arguments??{};
+              validateChatOp(params.name,args);
+              if(!chatRouter||typeof chatRouter.invoke!=='function'){
+                response=toolFailure('chat_bridge_not_enrolled','No authenticated live ChatGPT project/Atlas messenger has been installed. The request was not sent.');
+              }else{
+                const copy={...args};delete copy._rdc_request_id;
+                try{
+                  // Never trust _meta as an independent project grant. The
+                  // injected host broker must verify session origin, project
+                  // enrollment, per-project approval, exact recipient and its
+                  // own durable no-replay receipt before any side effect.
+                  const outcome=await chatRouter.invoke({name:params.name,args:copy,
+                    request_key:args._rdc_request_id??null,principal,meta:params._meta??null});
+                  if(!object(outcome)||typeof outcome.ok!=='boolean')
+                    response=toolFailure('chat_broker_invalid','Chat broker returned no validated delivery result.');
+                  else response=toolResult(outcome,outcome.ok!==true);
+                }catch{
+                  response=toolFailure('chat_broker_unavailable','Chat broker could not verify or perform this operation. No automatic replay will be attempted.');
+                }
               }
-            }
-          }else response=await dispatch(params.name,params.arguments??{},principal,env);
+            }else response=await dispatch(params.name,params.arguments??{},principal,env);
+          }
           break;
         }
         default:return json({jsonrpc:'2.0',id,error:{code:-32601,message:'Method not found'}},400);

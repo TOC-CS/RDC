@@ -82,13 +82,23 @@ class Engine:
                  {'file_path':STRING,'offset':{'type':'integer','minimum':0},'limit':LIMIT},['file_path']),
             tool('rdc_file_read_many','Read up to 20 independent files in one call. Per-file failures are retained.',
                  {'file_paths':{'type':'array','items':STRING,'minItems':1,'maxItems':20}},['file_paths']),
-            tool('rdc_code_context','Gather bounded source directory listing, literal symbol matches and up to 20 versioned file reads in one read-only request. Restricted to one selected project subtree. Per-file errors remain visible; source is not an atomic snapshot.',
+            tool('rdc_code_context','Read one project-scoped coding context: bounded directory listing, literal source search and up to 20 SHA-256 versioned files. Relative file_paths resolve inside selected path. Source mode skips generated/dependency directories by default; search_mode=all includes them. Per-file errors remain visible; this is not an atomic snapshot.',
                  {'path':STRING,
                   'query':{'type':'string','minLength':1,'maxLength':2000},
                   'file_paths':{'type':'array','items':STRING,'maxItems':20},
                   'list_limit':{'type':'integer','minimum':1,'maximum':200},
                   'search_limit':{'type':'integer','minimum':1,'maximum':100},
-                  'max_files':{'type':'integer','minimum':1,'maximum':1000}},['path']),
+                  'max_files':{'type':'integer','minimum':1,'maximum':1000},
+                  'search_mode':{'type':'string','enum':['source','all']}},['path']),
+            tool('rdc_code_edit_many','Apply up to 10 independent SHA-256-guarded exact edits inside one selected project in one approved cloud operation. Results and partial failures are explicit. Never automatically retry an uncertain batch.',
+                 {'path':STRING,
+                  'edits':{'type':'array','minItems':1,'maxItems':10,'items':{
+                      'type':'object','properties':{
+                          'file_path':STRING,'old_text':{**content,'minLength':1},
+                          'new_text':content,'expected_sha256':SHA,
+                          'expected_count':{'type':'integer','minimum':1,'maximum':10000}},
+                      'required':['file_path','old_text','new_text','expected_sha256'],
+                      'additionalProperties':False}}},['path','edits'],True),
             tool('rdc_file_search','Bounded literal content search; reports skipped files and truncation.',
                  {'path':STRING,'query':{'type':'string','minLength':1,'maxLength':2000},
                   'limit':{'type':'integer','minimum':1,'maximum':1000},'max_files':{'type':'integer','minimum':1,'maximum':10000}},['path','query']),
@@ -167,10 +177,29 @@ class Engine:
         if name == 'rdc_code_context':
             selected = self.files.resolve(arguments['path'],directory=True)
             for candidate in arguments.get('file_paths',[]):
-                resolved = self.files.resolve(candidate)
+                # Relative coding paths belong to this selected project, never
+                # the worker-wide default root. Reject escapes before listing.
+                scoped = candidate if os.path.isabs(candidate) else str(selected / candidate)
+                resolved = self.files.resolve(scoped)
                 if resolved != selected and selected not in resolved.parents:
                     raise RDCError('path_denied',
                         'A code-context request may read only files beneath its selected directory.')
+        if name == 'rdc_code_edit_many':
+            selected = self.files.resolve(arguments['path'],directory=True)
+            seen = set()
+            # Validate every target before touching any file. Even a granted
+            # sibling directory remains outside this explicitly selected task.
+            for entry in arguments['edits']:
+                candidate = entry['file_path']
+                scoped = candidate if os.path.isabs(candidate) else str(selected / candidate)
+                resolved = self.files.resolve(scoped)
+                if resolved == selected or selected not in resolved.parents:
+                    raise RDCError('path_denied',
+                        'A coding edit must stay beneath its selected project.')
+                if resolved in seen:
+                    raise RDCError('invalid_arguments',
+                        'One batch may edit each canonical file only once.')
+                seen.add(resolved)
         if name in ('rdc_directory_create','rdc_file_list','rdc_file_search'):
             self.files.resolve(arguments.get('path','.'))
 
@@ -339,9 +368,17 @@ class Engine:
             # Combined output remains bounded for cloud result transport. Files
             # keep their independent hash and truncated/offset fields.
             listing = self.files.list(str(project),limit=args.get('list_limit',120))
+            mode = args.get('search_mode','source')
+            # Local source discovery should not spend the first thousand file
+            # visits on generated bundles or dependencies. Explicit "all"
+            # mode retains the original comprehensive search semantics.
+            excluded = () if mode == 'all' else (
+                '.git','node_modules','.venv','__pycache__','.next',
+                'dist','build','target')
             matches = (self.files.search(str(project),args['query'],
                        limit=args.get('search_limit',100),
-                       max_files=args.get('max_files',1000))
+                       max_files=args.get('max_files',1000),
+                       exclude_dirs=excluded)
                        if 'query' in args else None)
             reads = []
             if paths:
@@ -350,7 +387,8 @@ class Engine:
                     # The alias may have changed after initial admission or
                     # directory/search work. Recheck within the selected
                     # subtree and read the canonical path, not the alias.
-                    resolved = self.files.resolve(path)
+                    scoped = path if os.path.isabs(path) else str(project / path)
+                    resolved = self.files.resolve(scoped)
                     if resolved != project and project not in resolved.parents:
                         raise RDCError('path_denied',
                             'A code-context request may read only files beneath its selected directory.')
@@ -360,8 +398,35 @@ class Engine:
                 with ThreadPoolExecutor(max_workers=min(4,len(paths))) as pool:
                     reads = list(pool.map(read_one,paths))
             return {'path':str(project),'listing':listing,'search':matches,
+                    'search_mode':mode,'excluded_directories':list(excluded) if matches is not None else [],
                     'reads':reads,'read_limit_per_file':min(16384,
                         max(1024,self.settings.max_read_bytes//len(paths))) if paths else 0}
+        if name == 'rdc_code_edit_many':
+            project = self.files.resolve(args['path'],directory=True)
+            results = []
+            for entry in args['edits']:
+                def edit_one():
+                    candidate = entry['file_path']
+                    scoped = candidate if os.path.isabs(candidate) else str(project / candidate)
+                    resolved = self.files.resolve(scoped)
+                    # Recheck at the moment of each edit, not only at admission.
+                    if resolved == project or project not in resolved.parents:
+                        raise RDCError('path_denied',
+                            'A coding edit must stay beneath its selected project.')
+                    return self.files.edit(
+                        file_path=str(resolved),
+                        old_text=entry['old_text'],new_text=entry['new_text'],
+                        expected_sha256=entry['expected_sha256'],
+                        expected_count=entry.get('expected_count',1),
+                        scoped_root=str(project))
+                outcome = self._guarded(edit_one,'rdc_code_edit_many')
+                results.append(outcome if outcome.get('ok') is False
+                               else {'ok':True,**outcome})
+            applied = sum(item['ok'] is True for item in results)
+            failed = len(results) - applied
+            return {'ok':failed == 0,'results':results,'applied':applied,
+                    'failed':failed,'partial':bool(applied and failed),
+                    'atomic_across_files':False,'recovery':'Inspect each file SHA before any new mutation.'}
         if name == 'rdc_file_read_many':
             paths = args['file_paths']
             def read(path):
