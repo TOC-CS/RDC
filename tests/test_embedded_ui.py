@@ -662,19 +662,23 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.assert_pinned()
         self.assert_read_only()
 
-    def test_late_optional_host_confirmation_updates_actual_mode(self):
+    def test_unsolicited_legacy_pip_signal_never_overrides_explicit_host_modes(self):
         self.page.add_init_script("""if(window.parent!==window) {
-          const wait=window.setTimeout;
-          window.setTimeout=(fn,ms,...args)=>wait(fn,ms===10000?20:ms,...args);
-          window.openai={displayMode:'inline',requestDisplayMode:()=>new Promise(()=>{
-            wait(()=>{window.openai.displayMode='pip';window.dispatchEvent(new CustomEvent('openai:set_globals',{detail:{globals:{displayMode:'pip'}}}));},150);
-          })};
+          window.openai={displayMode:'inline',attempts:[],requestDisplayMode:async({mode})=>{
+            window.openai.attempts.push(mode);return {mode};}};
+          setTimeout(()=>{
+            window.openai.displayMode='pip';
+            window.dispatchEvent(new CustomEvent('openai:set_globals',{detail:{globals:{displayMode:'pip'}}}));
+          },150);
         }""")
         self.page.goto(self.base+'?modes=inline,fullscreen')
         self.view=self.page.frame_locator('#app-frame');self.live()
-        self.view.locator('#canvas[data-mode="pip"]').wait_for(timeout=1500)
-        self.assertTrue(self.view.get_by_role('button',name='Inline',exact=True).is_visible())
-        self.assert_read_only()
+        self.view.get_by_text('Floating is unavailable in this host.',exact=True).wait_for()
+        self.page.wait_for_timeout(200)
+        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'inline')
+        self.assertEqual(self.view.locator('#canvas').evaluate('() => window.openai.attempts'),[])
+        self.assertEqual(self.page.evaluate('window.requestedModes'),[])
+        self.assert_pinned();self.assert_read_only()
 
     def test_cursor_tracks_actual_pixels_when_native_window_is_scrolled(self):
         self.page.goto(self.base + '?session=window-' + SESSION + '&resize=1')
@@ -774,26 +778,50 @@ class EmbeddedPreviewTests(unittest.TestCase):
         self.view.locator('#cursor').wait_for(state='hidden',timeout=1500)
         self.assert_pinned();self.assert_read_only()
 
-    def test_optional_host_floating_extension_requires_confirmed_mode(self):
+    def test_unsupported_host_never_attempts_pip_even_when_legacy_bridge_exists(self):
         self.page.add_init_script("""if(window.parent!==window) {
-          window.openai={displayMode:'inline',requestDisplayMode:async({mode})=>{
-            window.openai.displayMode=mode;return {mode};}};
-        }""")
-        self.page.goto(self.base+'?modes=inline,fullscreen')
-        self.view=self.page.frame_locator('#app-frame');self.live()
-        self.view.locator('#canvas[data-mode="pip"]').wait_for()
-        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'pip')
-        self.assert_pinned();self.assert_read_only()
-
-    def test_unconfirmed_host_floating_does_not_claim_success(self):
-        self.page.add_init_script("""if(window.parent!==window) {
-          window.openai={displayMode:'inline',requestDisplayMode:async()=>({})};
+          window.openai={displayMode:'inline',attempts:[],
+            requestDisplayMode:async({mode})=>{
+              window.openai.attempts.push(mode);
+              return {mode:mode==='pip'?'fullscreen':'inline'};
+            }};
         }""")
         self.page.goto(self.base+'?modes=inline,fullscreen')
         self.view=self.page.frame_locator('#app-frame');self.live()
         self.view.get_by_text('Floating is unavailable in this host.',exact=True).wait_for()
         self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'inline')
-        self.assert_read_only()
+        self.assertEqual(self.view.locator('#canvas').evaluate('() => window.openai.attempts'),[],
+            'The host explicitly excluded pip; a legacy method does not override its capability list')
+        self.assertEqual(self.page.evaluate('window.requestedModes'),[])
+        self.assertEqual(self.view.get_by_role('button',name='Float',exact=True).count(),0)
+        self.view.get_by_role('button',name='Hide preview',exact=True).click()
+        self.view.get_by_role('button',name='Reopen preview',exact=True).click()
+        self.view.get_by_text('Floating is unavailable in this host.',exact=True).wait_for()
+        self.assertEqual(self.view.locator('#canvas').evaluate('() => window.openai.attempts'),[])
+        self.assertEqual(self.page.evaluate('window.requestedModes'),[])
+        self.assert_pinned();self.assert_read_only()
+
+    def test_host_advertised_pip_requires_confirmed_mode_even_with_legacy_bridge(self):
+        self.page.add_init_script("""if(window.parent!==window) {
+          window.openai={displayMode:'inline',attempts:[],requestDisplayMode:async({mode})=>{
+            window.openai.attempts.push(mode);
+            window.openai.displayMode=mode;return {mode};}};
+        }""")
+        self.page.goto(self.base+'?modes=inline,fullscreen,pip')
+        self.view=self.page.frame_locator('#app-frame');self.live()
+        self.view.locator('#canvas[data-mode="pip"]').wait_for()
+        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'pip')
+        self.assertEqual(self.page.evaluate('window.requestedModes'),['pip'])
+        self.assertEqual(self.view.locator('#canvas').evaluate('() => window.openai.attempts'),[])
+        self.assert_pinned();self.assert_read_only()
+
+    def test_unconfirmed_host_floating_does_not_claim_success(self):
+        self.page.goto(self.base+'?modes=inline,fullscreen,pip&pip_reply=inline')
+        self.view=self.page.frame_locator('#app-frame');self.live()
+        self.view.get_by_text('Floating is unavailable in this host.',exact=True).wait_for()
+        self.assertEqual(self.page.evaluate('window.requestedModes'),['pip'])
+        self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'inline')
+        self.assert_pinned();self.assert_read_only()
 
     def test_small_screen_and_missing_display_modes(self):
         self.page.set_viewport_size({'width': 390, 'height': 844})
