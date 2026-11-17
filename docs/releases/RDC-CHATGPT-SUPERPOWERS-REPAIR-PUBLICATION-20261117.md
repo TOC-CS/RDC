@@ -22,3 +22,6 @@ Actual connected @RDC repeat acceptance call after ChatGPT plugin update:
 - The already tested source hotfix commit 7145b06 remains isolated. Do not claim plugin skill publication removed the backlog refusal.
 
 GitHub connected repository TOC-CS/RDC reports push=false. Do not bypass connection permission or force-push. Source staging and exact commit are retained locally for authorized publisher; remote GitHub publication needs write-granted path and independent release/rollback gates.
+
+
+GitHub write attempt: connected GitHub repository reports push=false; an attempted top-level handoff comment to existing draft PR #1 returned 403 FORBIDDEN, Resource not accessible by integration. No GitHub source branch, PR comment, or commit was published by this session. The remote integration branch was read-only verified as b2349b66a1431b4592277b9c43763cf7889a8c3e.
