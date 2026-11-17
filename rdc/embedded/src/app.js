@@ -591,7 +591,9 @@ function applyLayout() {
   updateCursor();
 }
 function canFloatInHost() {
-  return state.modes.includes('pip') || typeof window.openai?.requestDisplayMode === 'function';
+  // The host's advertised modes are authoritative. The existence of a
+  // legacy requestDisplayMode function does not establish PiP support.
+  return state.modes.includes('pip');
 }
 function floatingNotice(message = '') {
   text('float-note', message);
