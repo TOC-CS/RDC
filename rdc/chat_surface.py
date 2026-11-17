@@ -38,8 +38,12 @@ class ChatSurfaceGateway:
     REQ = re.compile(r"^[A-Za-z0-9._:-]{1,200}$")
 
     def __init__(self, adapter: ChatSurface, *, authorized_providers: set[str],
-                 operator_authorized: bool):
+                 operator_authorized: bool, continuity_gate=None):
         self.adapter = adapter
+        # Optional synthetic/live-adapter gate. Without it peer-to-peer
+        # unsolicited direct pushes stay disabled. Manual operator submits
+        # retain their separately authorized behavior.
+        self.continuity_gate = continuity_gate
         self.allowed = set(authorized_providers)
         self.authorized = operator_authorized is True
         self._sessions: dict[str, dict] = {}
@@ -149,6 +153,45 @@ class ChatSurfaceGateway:
             # unknown state and require readback, never blindly send again.
             pass
         return receipt.copy()
+
+    def deliver_peer(self, handle: dict, text: str, *, request_id: str) -> dict:
+        """Offer a peer message only when this exact chat is opted in and idle.
+
+        This method does not enqueue anything into the durable Atlas Bus. The
+        caller must enqueue the message separately before attempting a direct
+        chat delivery. DEFERRED means no UI submission occurred and there is
+        no automatic wake/retry loop. A missing response is delivery-unknown,
+        not proof that the receiving ChatGPT session stopped.
+        """
+        verified = self._bound(handle)
+        self._permit(verified["provider"], "submit_once")
+        if not isinstance(request_id, str) or not self.REQ.fullmatch(request_id):
+            raise ChatSurfaceError("A stable request ID is required.")
+        try:
+            payload = _valid_text(text)
+        except ChatError as exc:
+            raise ChatSurfaceError(str(exc)) from exc
+        previous = self._requests.get(request_id)
+        if previous is not None:
+            if previous["handle_id"] != verified["opaque_id"] or previous["text"] != payload:
+                raise ChatSurfaceError("A reused peer request ID has changed content or recipient.")
+            return previous["receipt"].copy()
+        if self.continuity_gate is None:
+            status = {"allowed": False, "reason": "CONTINUITY_GUARD_UNAVAILABLE"}
+        else:
+            # Reserve the single direct-delivery slot before the host call.
+            # Concurrent peer senders then cannot independently see READY.
+            status = self.continuity_gate.reserve_direct(
+                verified["opaque_id"], actor=verified["opaque_id"])
+        if status["allowed"] is not True:
+            return {"request_id": request_id, "session_id": verified["opaque_id"],
+                    "state": "DEFERRED", "reason": status["reason"]}
+        result = self.submit(verified.copy(), payload, request_id=request_id)
+        if result["state"] == "OUTCOME_UNKNOWN":
+            # The recipient may be fine; its actual delivery result is simply
+            # unconfirmed. Suspend further pushes until verified recovery.
+            self.continuity_gate.unconfirmed(verified["opaque_id"], actor=verified["opaque_id"])
+        return result
 
     def observe(self, handle: dict, *, after: str | None = None) -> dict:
         verified = self._bound(handle)

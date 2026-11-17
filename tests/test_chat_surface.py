@@ -2,6 +2,7 @@
 import unittest
 
 from rdc.chat_surface import ChatSurfaceGateway, ChatSurfaceUnavailable, ChatSurfaceError
+from rdc.chat_continuity import ContinuityGate
 
 
 class FakeChatSurface:
@@ -72,6 +73,72 @@ class ChatSurfaceGatewayTests(unittest.TestCase):
         self.assertEqual(followup["state"], "SUBMITTED_OBSERVED")
         self.assertEqual(self.host.open_calls, ["chatgpt"])
         self.assertEqual(len(self.host.submit_calls), 2)
+
+    def test_peer_delivery_does_not_interrupt_busy_or_unenrolled_chat(self):
+        now = [1794906000000]
+        gate = ContinuityGate(clock_ms=lambda: now[0])
+        gw = ChatSurfaceGateway(self.host, authorized_providers={"chatgpt"},
+                                operator_authorized=True, continuity_gate=gate)
+        peer = gw.open_new("chatgpt", request_id="new-peer-1")
+        session = peer["opaque_id"]
+        unverified = gw.deliver_peer(peer, "Status update", request_id="peer-note-1")
+        self.assertEqual(unverified["state"], "DEFERRED")
+        self.assertEqual(unverified["reason"], "UNVERIFIED_SESSION")
+        gate.heartbeat(session, actor=session, epoch=1, busy=True, direct_opt_in=True)
+        busy = gw.deliver_peer(peer, "Status update", request_id="peer-note-1")
+        self.assertEqual(busy["state"], "DEFERRED")
+        self.assertEqual(busy["reason"], "SESSION_BUSY")
+        self.assertEqual(self.host.submit_calls, [])
+        gate.heartbeat(session, actor=session, epoch=1, busy=False, direct_opt_in=True)
+        delivered = gw.deliver_peer(peer, "Status update", request_id="peer-note-1")
+        self.assertEqual(delivered["state"], "SUBMITTED_OBSERVED")
+        self.assertEqual(len(self.host.submit_calls), 1)
+        gate.interrupted(session, actor=session)
+        later = gw.deliver_peer(peer, "Please resume work", request_id="peer-note-2")
+        self.assertEqual(later["state"], "DEFERRED")
+        self.assertEqual(later["reason"], "SESSION_INTERRUPTED")
+        self.assertEqual(len(self.host.submit_calls), 1)
+
+    def test_successful_peer_post_blocks_next_direct_push_until_recipient_ready_again(self):
+        gate = ContinuityGate(clock_ms=lambda: 1794906000000)
+        gw = ChatSurfaceGateway(self.host, authorized_providers={"chatgpt"},
+                                operator_authorized=True, continuity_gate=gate)
+        session = gw.open_new("chatgpt", request_id="open-single-flight")
+        sid = session["opaque_id"]
+        gate.heartbeat(sid, actor=sid, epoch=1, busy=False, direct_opt_in=True)
+        first = gw.deliver_peer(session, "First peer message", request_id="peer-msg-1")
+        self.assertEqual(first["state"], "SUBMITTED_OBSERVED")
+        self.assertEqual(gate.direct_status(sid)["reason"], "SESSION_BUSY")
+        second = gw.deliver_peer(session, "Second peer message", request_id="peer-msg-2")
+        self.assertEqual(second["state"], "DEFERRED")
+        self.assertEqual(second["reason"], "SESSION_BUSY")
+        self.assertEqual(len(self.host.submit_calls), 1)
+        gate.heartbeat(sid, actor=sid, epoch=1, busy=False, direct_opt_in=True)
+        admitted = gw.deliver_peer(session, "Second peer message", request_id="peer-msg-2")
+        self.assertEqual(admitted["state"], "SUBMITTED_OBSERVED")
+        self.assertEqual(len(self.host.submit_calls), 2)
+
+    def test_uncertain_peer_push_suspends_additional_delivery_and_no_replay(self):
+        now = [1794906000000]
+        gate = ContinuityGate(clock_ms=lambda: now[0])
+        gw = ChatSurfaceGateway(self.host, authorized_providers={"chatgpt"},
+                                operator_authorized=True, continuity_gate=gate)
+        peer = gw.open_new("chatgpt", request_id="new-peer-unknown")
+        session = peer["opaque_id"]
+        gate.heartbeat(session, actor=session, epoch=1, busy=False, direct_opt_in=True)
+        self.host.timeout_on_submit = True
+        first = gw.deliver_peer(peer, "Status update", request_id="maybe-delivered")
+        self.assertEqual(first["state"], "OUTCOME_UNKNOWN")
+        self.assertEqual(gate.direct_status(session)["reason"], "DELIVERY_UNCONFIRMED")
+        second = gw.deliver_peer(peer, "Status update", request_id="maybe-delivered")
+        self.assertEqual(first, second)
+        another = gw.deliver_peer(peer, "New peer task", request_id="new-unsafe")
+        self.assertEqual(another["reason"], "DELIVERY_UNCONFIRMED")
+        self.assertEqual(len(self.host.submit_calls), 1)
+        with self.assertRaises(Exception):
+            gate.heartbeat(session, actor=session, epoch=1, busy=False, direct_opt_in=True)
+        gate.resume(session, actor=session, epoch=2, verified=True)
+        self.assertEqual(gate.direct_status(session)["reason"], "DIRECT_NOT_OPTED_IN")
 
     def test_existing_chat_attachment_requires_owner_verified_binding(self):
         session = self.gateway.attach_existing("claude", "owner-approved-existing-tab")

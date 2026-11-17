@@ -12,6 +12,7 @@ from pathlib import Path
 import sys
 
 from .chat_interconnect import ChatClient, ChatError
+from .chat_rooms import ChatRoom
 
 
 MARKER_VERSION = "rdc.chat.synthetic.v1"
@@ -31,6 +32,17 @@ def parser():
     init = sub.add_parser("init", help="Create an isolated synthetic session sandbox.")
     init.add_argument("--session", action="append", required=True)
     sub.add_parser("sessions", help="List synthetic fixtures, never consumer chat tabs.")
+    room_id = sub.add_parser("room-id", help="Inspect the same two/three-member synthetic room from either connector.")
+    room_id.add_argument("--as", dest="principal", required=True)
+    room_id.add_argument("--members", required=True, help="Comma-separated exact fixture session IDs")
+    room_id.add_argument("--room-key", required=True)
+    room_send = sub.add_parser("room-send", help="Deliver to each other room member using one shared correlation ID.")
+    room_send.add_argument("--from", dest="source", required=True)
+    room_send.add_argument("--members", required=True, help="Two or three exact fixture session IDs")
+    room_send.add_argument("--room-key", required=True)
+    room_send.add_argument("--key", required=True)
+    room_send.add_argument("--text", required=True)
+    room_send.add_argument("--parent-id", help="Exact inbound message ID for a room reply")
     send = sub.add_parser("send", help="Queue a message by stable idempotency key.")
     send.add_argument("--from", dest="source", required=True)
     send.add_argument("--to", required=True)
@@ -158,6 +170,13 @@ def run(argv=None):
                     "SELECT session_id FROM synthetic_sessions ORDER BY session_id"
                 )
             ]}
+        elif args.command == "room-id":
+            room = ChatRoom(bus, args.principal, args.members.split(","), room_key=args.room_key)
+            result = {"room_id": room.room_id, "room_size": len(room.members),
+                      "participants": list(room.members)}
+        elif args.command == "room-send":
+            room = ChatRoom(bus, args.source, args.members.split(","), room_key=args.room_key)
+            result = room.broadcast(args.text, key=args.key, parent_id=args.parent_id)
         elif args.command == "send":
             client = ChatClient(bus, args.source)
             result = client.send(args.to, args.text, key=args.key)

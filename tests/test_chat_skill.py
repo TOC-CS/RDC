@@ -29,6 +29,38 @@ class RDCCommunicationsSkillTests(unittest.TestCase):
         self.assertIn("grok", text.lower())
         self.assertIn("bandmates", text.lower())
 
+    def test_one_skill_supports_rdc_and_dc_for_two_or_three_chatgpt_sessions(self):
+        text = SKILL.read_text(encoding="utf-8").lower()
+        reference = REFERENCE.read_text(encoding="utf-8").lower()
+        self.assertIn("desktop commander", text)
+        self.assertIn("rdc_job_run", text)
+        self.assertIn("start_process", text)
+        self.assertIn("same shared", text)
+        self.assertIn("2-way", text)
+        self.assertIn("3-way", text)
+        self.assertIn("room-send", reference)
+        self.assertIn("room-id", reference)
+        self.assertIn("rdc.chat_rooms", reference)
+        self.assertIn("active chatgpt", reference)
+        self.assertIn("cannot automatically wake", reference)
+
+    def test_session_continuity_messages_cannot_stop_or_take_over_active_peer(self):
+        text = SKILL.read_text(encoding="utf-8").lower()
+        reference = REFERENCE.read_text(encoding="utf-8").lower()
+        self.assertIn("continuitygate", text)
+        self.assertIn("session_busy", text)
+        self.assertIn("session_interrupted", text)
+        self.assertIn("delivery_unconfirmed", text)
+        self.assertIn("do not stop", text)
+        self.assertIn("no automatic wake", text)
+        self.assertIn("recipient", text)
+        self.assertIn("pull-only", reference)
+        self.assertIn("new connection epoch", reference)
+        self.assertIn("outcome_unknown", reference)
+        self.assertIn("desktop commander", reference)
+        self.assertIn("single-flight", text)
+        self.assertIn("fresh readiness signal", reference)
+
     def test_skill_refuses_unverified_real_chat_claims_and_unsafe_replay(self):
         text = SKILL.read_text(encoding="utf-8").lower()
         self.assertIn("synthetic", text)

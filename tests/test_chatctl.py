@@ -113,6 +113,51 @@ class CLIAtlasBusTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertEqual(data.get("error"), "ACCESS_DENIED")
 
+    def test_two_and_three_way_chatgpt_rooms_across_independent_cli_processes(self):
+        members = "chatgpt-fixture,claude-fixture,grok-fixture"
+        room = self.ok("room-id", "--as", "chatgpt-fixture", "--members", members,
+                       "--room-key", "operator-room-1")
+        self.assertEqual(room["room_size"], 3)
+        broadcast = self.ok("room-send", "--from", "chatgpt-fixture", "--members", members,
+                            "--room-key", "operator-room-1", "--key", "invite-1",
+                            "--text", "Review our shared task")
+        self.assertEqual(set(broadcast["receipts"]), {"claude-fixture", "grok-fixture"})
+        self.assertEqual(broadcast["room_id"], room["room_id"])
+        claimed_claude = self.ok("claim", "--as", "claude-fixture", "--holder", "claude-room-reader")["claim"]
+        claimed_grok = self.ok("claim", "--as", "grok-fixture", "--holder", "grok-room-reader")["claim"]
+        self.assertEqual(claimed_claude["envelope"]["correlation_id"], room["room_id"])
+        self.assertEqual(claimed_grok["envelope"]["correlation_id"], room["room_id"])
+        replied = self.ok("room-send", "--from", "claude-fixture", "--members", members,
+                          "--room-key", "operator-room-1", "--key", "reply-1",
+                          "--parent-id", claimed_claude["message_id"],
+                          "--text", "Reviewed: ready for the next step")
+        self.assertEqual(set(replied["receipts"]), {"chatgpt-fixture", "grok-fixture"})
+        claim_back = self.ok("claim", "--as", "chatgpt-fixture", "--holder", "chatgpt-room-reader")["claim"]
+        self.assertEqual(claim_back["envelope"]["causation_id"], claimed_claude["message_id"])
+        self.assertEqual(claim_back["envelope"]["correlation_id"], room["room_id"])
+        repeated = self.ok("room-send", "--from", "chatgpt-fixture", "--members", members,
+                           "--room-key", "operator-room-1", "--key", "invite-1",
+                           "--text", "Review our shared task")
+        self.assertEqual(broadcast["receipts"], repeated["receipts"])
+        self.assertTrue(all(repeated["duplicates"].values()))
+
+    def test_room_membership_and_mutated_request_are_denied(self):
+        members = "chatgpt-fixture,claude-fixture,grok-fixture"
+        self.ok("room-send", "--from", "chatgpt-fixture", "--members", members,
+                "--room-key", "operator-room-1", "--key", "stable-1", "--text", "A task")
+        code, result, _ = command(self.db, "room-send", "--from", "chatgpt-fixture",
+                                  "--members", "chatgpt-fixture,claude-fixture",
+                                  "--room-key", "operator-room-1", "--key", "stable-1",
+                                  "--text", "A task")
+        self.assertNotEqual(code, 0)
+        self.assertEqual(result["error"], "IDEMPOTENCY_CONFLICT")
+        code, result, _ = command(self.db, "room-send", "--from", "chatgpt-fixture",
+                                  "--members", "claude-fixture,grok-fixture",
+                                  "--room-key", "operator-room-1", "--key", "invalid-member",
+                                  "--text", "A task")
+        self.assertNotEqual(code, 0)
+        self.assertFalse(result["ok"])
+
     def test_symlinked_database_argument_refuses_unsafe_redirect(self):
         target = Path(self.temp.name) / "not-created.sqlite3"
         link = Path(self.temp.name) / "alias.sqlite3"

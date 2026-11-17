@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from rdc.chat_interconnect import ChatClient, ChatError
+from rdc.chat_continuity import ContinuityGate
 
 
 ATLAS = Path(os.environ.get("RDC_ATLAS_BUS_TEST_ROOT", "/nonexistent/atlas-bus"))
@@ -64,6 +65,30 @@ class ActualAtlasBusSandboxTests(unittest.TestCase):
         self.assertTrue(replay["duplicate"])
         self.assertEqual([event["to_state"] for event in self.bus.events(claim["message_id"])], ["QUEUED", "CLAIMED", "ADAPTER_FETCHED", "SESSION_ACKNOWLEDGED"])
         self.assertEqual(reply["receipt"]["message_id"], incoming["message_id"])
+
+    def test_busy_or_disconnected_peer_message_remains_durable_without_waking_chat(self):
+        presence = ContinuityGate(clock_ms=lambda: self.now)
+        presence.heartbeat("chatgpt-fixture", actor="chatgpt-fixture", epoch=1,
+                           busy=False, direct_opt_in=True)
+        presence.heartbeat("claude-fixture", actor="claude-fixture", epoch=1,
+                           busy=True, direct_opt_in=False)
+        created = self.a.send("claude-fixture", "Review the draft when safe", key="deferred-1")
+        mid = created["receipt"]["message_id"]
+        self.assertEqual(presence.direct_status("claude-fixture")["reason"], "SESSION_BUSY")
+        self.assertEqual(self.bus.get_message(mid)["state"], "QUEUED")
+        presence.interrupted("claude-fixture", actor="claude-fixture")
+        self.assertEqual(presence.direct_status("claude-fixture")["reason"], "SESSION_INTERRUPTED")
+        self.assertTrue(presence.direct_status("chatgpt-fixture")["allowed"])
+        self.bus.close()
+        self.bus = self.BusStore(self.db, clock_ms=lambda: self.now, synthetic_mode=True)
+        self.assertEqual(self.bus.get_message(mid)["state"], "QUEUED")
+        self.assertEqual([row["to_state"] for row in self.bus.events(mid)], ["QUEUED"])
+        recreated_presence = ContinuityGate(clock_ms=lambda: self.now)
+        self.assertEqual(recreated_presence.direct_status("claude-fixture")["reason"], "UNVERIFIED_SESSION")
+        self.b = ChatClient(self.bus, "claude-fixture", clock_ms=lambda: self.now)
+        voluntary_claim = self.b.claim(holder="claude-safe-pull")
+        self.assertEqual(voluntary_claim["message_id"], mid)
+        self.assertEqual(voluntary_claim["envelope"]["payload"]["text"], "Review the draft when safe")
 
     def test_wrong_owner_and_changed_content_are_rejected_by_atlas_core(self):
         first = self.a.send("grok-fixture", "Review this", key="secure1")
