@@ -89,6 +89,34 @@ class AdapterTests(unittest.TestCase):
         self.a.call('rdc_browser_fill',args)
         self.assertIn(('POST','/session/safe-session/element/element1/value',{'text':'Sample User','value':list('Sample User')}),Driver.requests)
         with self.assertRaisesRegex(Exception,'[Oo]bservation|[Ss]tale'): self.a.call('rdc_browser_fill',args)
+    def test_browser_action_observe_composites_preserve_fresh_handles_and_no_replay(self):
+        catalog={item['name']:item for item in self.a.catalog()}
+        for name in ('rdc_browser_navigate_observe','rdc_browser_click_observe',
+                     'rdc_browser_fill_observe'):
+            self.assertTrue(catalog[name]['x-rdc-mutating'])
+            self.assertTrue(catalog[name]['annotations']['destructiveHint'])
+        sid=self.start()
+        observed=self.a.call('rdc_browser_navigate_observe',{
+            'session_id':sid,'url':'https://example.test/forms'})
+        self.assertIn('Fixture text',observed['text'])
+        self.assertTrue(observed['observation_id'])
+        self.assertEqual(1,sum(method=='POST' and path=='/session/safe-session/url'
+                              for method,path,_ in Driver.requests))
+        original={'session_id':sid,'observation_id':observed['observation_id'],
+                  'handle':observed['controls'][0]['handle'],'text':'RDC atomic input'}
+        filled=self.a.call('rdc_browser_fill_observe',original)
+        self.assertNotEqual(observed['observation_id'],filled['observation_id'])
+        self.assertIn('Fixture text',filled['text'])
+        with self.assertRaisesRegex(Exception,'[Oo]bservation|[Ss]tale'):
+            self.a.call('rdc_browser_fill_observe',original)
+        self.assertEqual(1,sum(path.endswith('/value') for _,path,_ in Driver.requests))
+        clicked=self.a.call('rdc_browser_click_observe',{
+            'session_id':sid,'observation_id':filled['observation_id'],
+            'handle':filled['controls'][0]['handle']})
+        self.assertNotEqual(filled['observation_id'],clicked['observation_id'])
+        self.assertEqual(1,sum(path.endswith('/click') for _,path,_ in Driver.requests))
+        self.assertIn('Fixture text',clicked['text'])
+
     def test_pointer_requires_observation_and_updates_preview_cursor(self):
         sid=self.start()
         initial=self.a.call('rdc_browser_list',{})['sessions'][0]['cursor']

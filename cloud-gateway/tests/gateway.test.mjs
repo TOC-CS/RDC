@@ -92,6 +92,32 @@ test('synced RDC gateway advertises bounded, read-only batched coding context',a
   assert.equal(spec.annotations.readOnlyHint,true);
 });
 
+test('synced browser action/observe tools are one guarded cloud mutation each',async()=>{
+  const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
+  const expected=[
+    ['rdc_browser_navigate_observe',['session_id','url']],
+    ['rdc_browser_click_observe',['session_id','observation_id','handle']],
+    ['rdc_browser_fill_observe',['session_id','observation_id','handle','text']]
+  ];
+  const s=setup({},assets.catalog);
+  const listing=await s.gateway.mcp(s.request('/mcp',{
+    jsonrpc:'2.0',id:'atomic-tools',method:'tools/list'
+  }),s.env);
+  assert.equal(listing.status,200);
+  const tools=(await listing.json()).result.tools;
+  for(const [name,required] of expected){
+    const source=assets.catalog.find(x=>x.name===name);
+    assert.ok(source,name+' must be synced into the gateway');
+    assert.equal(source['x-rdc-mutating'],true);
+    assert.equal(source.annotations.readOnlyHint,false);
+    assert.deepEqual(source.inputSchema.required,required);
+    const cloud=tools.find(x=>x.name===name);
+    assert.ok(cloud);
+    assert.equal(cloud.annotations.readOnlyHint,false);
+    assert.deepEqual(cloud.inputSchema.required,[...required,'_rdc_request_id']);
+  }
+});
+
 test('shipped RDC server icon stays compact, branded, and recoverable in initialize metadata',async()=>{
   const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
   assert.match(assets.iconDataUri,/^data:image\/png;base64,/);

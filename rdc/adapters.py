@@ -104,8 +104,11 @@ def _tools():
       ('browser_list','List active sessions in this daemon.',False,{},()),
       ('browser_observe','Read visible page text and current observation-bound control handles. Refresh before using stale handles.',False,SESSION,('session_id',)),
       ('browser_navigate','Navigate a session. Has worker network access, including local networks.',True,SESSION|{'url':S},('session_id','url')),
+      ('browser_navigate_observe','Navigate once and return a fresh page observation and control handles in the same request. Never retry uncertain navigation.',True,SESSION|{'url':S},('session_id','url')),
       ('browser_click','Click a current observed control once. Uncertain failures are never retried.',True,OBS|{'handle':S},('session_id','observation_id','handle')),
+      ('browser_click_observe','Click one observed control once and return a fresh page observation in the same request. Never retry an uncertain click.',True,OBS|{'handle':S},('session_id','observation_id','handle')),
       ('browser_fill','Fill a current observed editable control once.',True,OBS|{'handle':S,'text':S},('session_id','observation_id','handle','text')),
+      ('browser_fill_observe','Fill one observed editable control once and return a fresh page observation in the same request. Never retry uncertain input.',True,OBS|{'handle':S,'text':S},('session_id','observation_id','handle','text')),
       ('browser_pointer','Control the workspace pointer by CSS viewport coordinates, with a current observation.',True,OBS|POINTER,('session_id','observation_id','x','y')),
       ('browser_keys','Press a supported key or chord in the session; e.g. Enter, Tab, Control+A.',True,OBS|{'keys':S},('session_id','observation_id','keys')),
       ('browser_screenshot','Capture the viewport. Returns bounded base64 image data.',False,SESSION,('session_id',)),
@@ -454,6 +457,12 @@ class _Browsers:
         if action!='close' and s.get('setup_status')=='cleanup_required':
             raise RDCError('webdriver_cleanup_required','This driver session did not finish setup. Close it before starting a replacement.')
         if action=='observe': return self.observe(s)
+        if action in ('navigate_observe','click_observe','fill_observe'):
+            # Execute the existing guarded mutation, then observe on the same
+            # serialized browser-owner thread. A failed observation must never
+            # dispatch the mutation again; the cloud request ID stays authoritative.
+            self.call(action.removesuffix('_observe'), args)
+            return self.observe(s)
         if action=='screenshot': return self.snapshot(s['session_id'])
         if action=='close':
             self.destroy(s);self.sessions.pop(s['session_id']);return {'session_id':s['session_id'],'closed':True}
