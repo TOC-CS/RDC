@@ -71,6 +71,41 @@ test('MCP metadata exposes the actual HTML and resource link without device secr
   assert.deepEqual(content._meta.ui.csp.connectDomains,[]);
 });
 
+test('normal cloud dispatch checks worker liveness without a status COUNT query',async()=>{
+  const s=setup();
+  await s.poll({claim:false});
+  const queries=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=sql=>{queries.push(sql);return original(sql);};
+  const sent=await s.mcp('rdc_file_write',{value:'harmless',_rdc_request_id:'perf-online-only-20261117'});
+  assert.equal(sent.status,200);
+  const queueCounts=()=>queries.filter(sql=>sql.includes("SELECT COUNT(*) AS count FROM gateway_operations")).length;
+  assert.equal(queueCounts(),0,
+    'dispatch only uses online state; it need not issue a separate status COUNT');
+  queries.length=0;
+  const status=await s.mcp('rdc_connection_status');
+  assert.equal(status.status,200);
+  assert.equal(queueCounts(),1,'the public status tool still reports pending_operations');
+});
+
+test('synced one-call browser startup advertises durable session setup safely',async()=>{
+  const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
+  const selected=assets.catalog.find(item=>item.name==='rdc_browser_start_navigate_observe');
+  assert.ok(selected,'the worker catalog must include the one-call startup route');
+  assert.equal(selected['x-rdc-mutating'],true);
+  assert.deepEqual(selected.inputSchema.required,['url']);
+  assert.ok(selected.inputSchema.properties.browser);
+  assert.ok(selected.inputSchema.properties.width);
+  assert.ok(selected.inputSchema.properties.height);
+  const s=setup({},assets.catalog);
+  const response=await s.gateway.mcp(s.request('/mcp',{jsonrpc:'2.0',id:123,method:'tools/list'}),s.env);
+  assert.equal(response.status,200);
+  const advertised=(await response.json()).result.tools.find(t=>t.name==='rdc_browser_start_navigate_observe');
+  assert.ok(advertised);
+  assert.equal(advertised.annotations.readOnlyHint,false);
+  assert.deepEqual(advertised.inputSchema.required,['url','_rdc_request_id']);
+});
+
 test('synced RDC gateway advertises bounded, read-only batched coding context',async()=>{
   const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
   const target=assets.catalog.find(x=>x.name==='rdc_code_context');

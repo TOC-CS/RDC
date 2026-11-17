@@ -187,6 +187,12 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           AND COALESCE(completed_ms,claimed_ms,created_ms)<=?)) LIMIT 32)`)
       .bind(now-L.operationTtlMs,now-L.frameOperationTtlMs).run();
   }
+  // Dispatch consumes only liveness. Keep the pending-operation COUNT in the
+  // public status method where that information is actually requested.
+  async function deviceOnline(env){
+    const row=await env.DB.prepare('SELECT last_seen_ms FROM gateway_device WHERE id=?').bind(env.RDC_DEVICE_ID).first();
+    return !!row&&clock()-row.last_seen_ms<=L.onlineMs;
+  }
   async function connection(env){
     const row=await env.DB.prepare('SELECT last_seen_ms FROM gateway_device WHERE id=?').bind(env.RDC_DEVICE_ID).first();
     const counts=await env.DB.prepare("SELECT COUNT(*) AS count FROM gateway_operations WHERE device_id=? AND state IN ('queued','claimed')").bind(env.RDC_DEVICE_ID).first();
@@ -274,7 +280,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     }
     const unavailable=(code,message)=>name==='rdc_preview_open'?
       toolResult({ok:true,preview_unavailable:true,preview_status:code,message,device_id:env.RDC_DEVICE_ID}):toolFailure(code,message);
-    if(!(await connection(env)).online)return unavailable('device_offline','The paired device is offline. No operation was queued.');
+    if(!(await deviceOnline(env)))return unavailable('device_offline','The paired device is offline. No operation was queued.');
     const id=crypto.randomUUID(),now=clock();
     op=await env.DB.prepare(`INSERT INTO gateway_operations
       (id,principal,device_id,request_key,tool,request_json,request_sha256,request_size,mutating,state,created_ms,expires_ms)

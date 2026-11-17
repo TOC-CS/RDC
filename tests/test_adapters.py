@@ -30,6 +30,8 @@ class Driver(BaseHTTPRequestHandler):
     requests = []
     active_sessions = set()
     fail_timeouts = False
+    fail_navigations = False
+    fail_observations = False
     fail_deletes = 0
     malformed_capabilities = False
     def log_message(self, *args): pass
@@ -40,7 +42,7 @@ class Driver(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get('Content-Length',0))) or b'{}')
         type(self).requests.append((method,self.path,body))
         value = None
-        failure = self.path.endswith('/timeouts') and type(self).fail_timeouts
+        failure = (self.path.endswith('/timeouts') and type(self).fail_timeouts) or (method == 'POST' and self.path.endswith('/url') and type(self).fail_navigations) or (self.path.endswith('/execute/sync') and 'RDC_OBSERVE' in body.get('script','') and type(self).fail_observations)
         if method == 'DELETE' and type(self).fail_deletes:
             type(self).fail_deletes -= 1
             failure = True
@@ -69,7 +71,7 @@ class AdapterTests(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(Adapters, 'Adapters must implement the device contract')
         Driver.requests=[]
-        Driver.active_sessions=set(); Driver.fail_timeouts=False; Driver.fail_deletes=0; Driver.malformed_capabilities=False
+        Driver.active_sessions=set(); Driver.fail_timeouts=False; Driver.fail_navigations=False; Driver.fail_observations=False; Driver.fail_deletes=0; Driver.malformed_capabilities=False
         self.server=ThreadingHTTPServer(('127.0.0.1',0),Driver)
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
         self.a=Adapters(settings(webdriver_url=f'http://127.0.0.1:{self.server.server_port}'))
@@ -116,6 +118,56 @@ class AdapterTests(unittest.TestCase):
         self.assertNotEqual(filled['observation_id'],clicked['observation_id'])
         self.assertEqual(1,sum(path.endswith('/click') for _,path,_ in Driver.requests))
         self.assertIn('Fixture text',clicked['text'])
+
+    def test_browser_start_navigate_observe_has_fresh_control_in_one_call(self):
+        catalog={item['name']:item for item in self.a.catalog()}
+        tool=catalog['rdc_browser_start_navigate_observe']
+        self.assertTrue(tool['x-rdc-mutating'])
+        self.assertEqual(['url'],tool['inputSchema']['required'])
+        result=self.a.call('rdc_browser_start_navigate_observe',{
+            'browser':'safari','url':'https://example.test/first'})
+        self.assertTrue(result['ok'])
+        self.assertTrue(result['session_id'])
+        self.assertIn('Fixture text',result['text'])
+        self.assertEqual('input',result['controls'][0]['tag'])
+        self.assertTrue(result['observation_id'])
+        self.assertEqual(1,sum(path=='/session' for _,path,_ in Driver.requests))
+        self.assertEqual(1,sum(path.endswith('/url') and method=='POST'
+                               for method,path,_ in Driver.requests))
+        self.assertEqual(1,len(self.a.call('rdc_browser_list',{})['sessions']))
+
+    def test_browser_start_navigate_observe_invalid_url_never_creates_session(self):
+        for url in ('file:///etc/passwd','about:config','javascript:alert(1)'):
+            with self.assertRaisesRegex(Exception,'URL'):
+                self.a.call('rdc_browser_start_navigate_observe',{
+                    'browser':'safari','url':url})
+        self.assertEqual([],self.a.call('rdc_browser_list',{})['sessions'])
+        self.assertEqual([],Driver.requests)
+
+    def test_browser_start_navigate_observe_navigation_failure_retains_session(self):
+        Driver.fail_navigations=True
+        result=self.a.call('rdc_browser_start_navigate_observe',{
+            'browser':'safari','url':'https://example.test/first'})
+        self.assertIs(result['ok'],False)
+        self.assertEqual('navigation',result['failure_stage'])
+        self.assertEqual('navigation_failed',result['error_code'])
+        self.assertIn(result['session_id'],
+                      [x['session_id'] for x in self.a.call('rdc_browser_list',{})['sessions']])
+        self.assertEqual(1,sum(path.endswith('/url') and method=='POST'
+                               for method,path,_ in Driver.requests))
+        self.assertEqual(1,len(Driver.active_sessions))
+
+    def test_browser_start_navigate_observe_observation_failure_retains_session(self):
+        Driver.fail_observations=True
+        result=self.a.call('rdc_browser_start_navigate_observe',{
+            'browser':'safari','url':'https://example.test/first'})
+        self.assertIs(result['ok'],False)
+        self.assertEqual('observation',result['failure_stage'])
+        self.assertEqual('observation_failed',result['error_code'])
+        self.assertIn(result['session_id'],
+                      [x['session_id'] for x in self.a.call('rdc_browser_list',{})['sessions']])
+        self.assertEqual(1,sum(path.endswith('/url') and method=='POST'
+                               for method,path,_ in Driver.requests))
 
     def test_pointer_requires_observation_and_updates_preview_cursor(self):
         sid=self.start()

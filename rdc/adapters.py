@@ -101,6 +101,7 @@ POINTER=XY | {'action':{'type':'string','enum':['move','click','wheel']}, 'butto
 def _tools():
     rows=[
       ('browser_start','Create a dedicated browser session. Playwright is headless with a fresh context. WebDriver uses the configured driver and capabilities.',True,{'browser':S,'width':{'type':'integer','minimum':320,'maximum':2560},'height':{'type':'integer','minimum':240,'maximum':1600}},()),
+      ('browser_start_navigate_observe','Start a browser session, navigate once and return fresh page controls in one request. A post-start failure retains its session ID for inspection without retry.',True,{'url':S,'browser':S,'width':{'type':'integer','minimum':320,'maximum':2560},'height':{'type':'integer','minimum':240,'maximum':1600}},('url',)),
       ('browser_list','List active sessions in this daemon.',False,{},()),
       ('browser_observe','Read visible page text and current observation-bound control handles. Refresh before using stale handles.',False,SESSION,('session_id',)),
       ('browser_navigate','Navigate a session. Has worker network access, including local networks.',True,SESSION|{'url':S},('session_id','url')),
@@ -451,6 +452,26 @@ class _Browsers:
             raise RDCError(code,MESSAGES[code]) from None
     def call(self,action,args):
         if action=='start': return self.start(args)
+        if action=='start_navigate_observe':
+            # Reject unsupported URLs before creating any browser process.
+            url=args['url']
+            scheme=urllib.parse.urlsplit(url).scheme.lower()
+            if scheme not in ('http','https','data','about') or scheme=='about' and url!='about:blank':
+                raise RDCError('invalid_arguments','Browser URL must use http, https, data, or about:blank')
+            # This is one mutation for the cloud journal. Any failure after
+            # startup preserves its exact session ID for readback; no replay.
+            started=self.start({k:args[k] for k in ('browser','width','height') if k in args})
+            session_id=started['session_id']
+            try:
+                self.call('navigate',{'session_id':session_id,'url':url})
+            except Exception:
+                return {'ok':False,'session_id':session_id,'failure_stage':'navigation',
+                        'error_code':'navigation_failed','recover_with':'rdc_browser_list'}
+            try:
+                return {'ok':True,**self.observe(self.sessions[session_id])}
+            except Exception:
+                return {'ok':False,'session_id':session_id,'failure_stage':'observation',
+                        'error_code':'observation_failed','recover_with':'rdc_browser_list'}
         if action=='list': return {'sessions':[self.info(s) for s in self.sessions.values()]}
         s=self.sessions.get(args['session_id'])
         if s is None: raise RDCError('session_not_found','Browser session does not exist in this daemon')

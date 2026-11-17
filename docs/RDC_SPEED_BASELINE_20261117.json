@@ -1,0 +1,68 @@
+{
+  "schema": "toc.rdc.performance.workflow.v1",
+  "date": "2026-11-17",
+  "host": "ChatGPT connected RDC tool",
+  "installed_worker": "0.1.0a8",
+  "private_site": "v16",
+  "workflow": "new headless Chromium start navigate observe click observe screenshot close",
+  "measured_client_round_trips": [
+    {
+      "operation": "rdc_browser_start",
+      "ms": 3590,
+      "success": true
+    },
+    {
+      "operation": "rdc_browser_navigate",
+      "ms": 3014,
+      "success": true
+    },
+    {
+      "operation": "rdc_browser_observe",
+      "ms": 2162,
+      "success": true
+    },
+    {
+      "operation": "rdc_browser_click",
+      "ms": 2528,
+      "success": true
+    },
+    {
+      "operation": "rdc_browser_observe_after_click",
+      "ms": 2377,
+      "success": true
+    },
+    {
+      "operation": "rdc_browser_screenshot",
+      "ms": 1969,
+      "success": true
+    },
+    {
+      "operation": "rdc_browser_close",
+      "ms": 2598,
+      "success": true
+    }
+  ],
+  "total_start_navigate_observe_ms": 8766,
+  "total_click_and_observe_ms": 4905,
+  "validated": {
+    "browser_closed": true,
+    "button_seen": true,
+    "click_text_changed": true,
+    "jpeg_screenshot": true
+  },
+  "candidate_local_chromium": {
+    "backend": "Playwright Chromium",
+    "test_execution_via": "connected RDC ChatGPT job tool",
+    "startup_navigate_observe_ms": 294.1,
+    "click_observe_ms": 81.17,
+    "verified": true
+  },
+  "tests": {
+    "worker_tests": 377,
+    "worker_skips": 26,
+    "worker_failures": 0,
+    "gateway_tests": 48,
+    "gateway_failures": 0
+  },
+  "caveat": "Single cloud workflow samples, candidate local execution timings are separate and NOT live deploy speed. No production updates performed."
+}
