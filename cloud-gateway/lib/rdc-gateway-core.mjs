@@ -132,6 +132,10 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
   tools.push({name:'rdc_connection_status',description:'Read the authenticated RDC cloud connection, device availability and queue counts without issuing device commands.',
     inputSchema:{type:'object',properties:{},additionalProperties:false},
     annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false}});
+  tools.push({name:'rdc_recent_operation_metrics',
+    description:'Read owner-only completed RDC gateway phase durations for up to 50 recent operations. Never exposes arguments, messages, results, tokens, identities or full operation IDs.',
+    inputSchema:{type:'object',properties:{limit:{type:'integer',minimum:1,maximum:50}},required:[],additionalProperties:false},
+    annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false}});
   const serverInfo={name:'rdc',title:'RDC',version:'0.1.0a8',description:'Independent agent workspace with an embedded live preview.',
     ...(iconDataUri?{icons:[{src:iconDataUri,mimeType:'image/png',sizes:['192x192']}]}:{})};
   const capabilities={tools:{listChanged:false},resources:{subscribe:false,listChanged:false},extensions:{[UI_EXTENSION]:{}}};
@@ -194,11 +198,37 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     return !!row&&clock()-row.last_seen_ms<=L.onlineMs;
   }
   async function connection(env){
+    // Keep status read-only. Expired queue rows and stale claimed operations
+    // are excluded without mutating the durable journal on every status call.
+    const now=clock();
     const row=await env.DB.prepare('SELECT last_seen_ms FROM gateway_device WHERE id=?').bind(env.RDC_DEVICE_ID).first();
-    const counts=await env.DB.prepare("SELECT COUNT(*) AS count FROM gateway_operations WHERE device_id=? AND state IN ('queued','claimed')").bind(env.RDC_DEVICE_ID).first();
-    return {ok:true,device_id:env.RDC_DEVICE_ID,online:!!row&&clock()-row.last_seen_ms<=L.onlineMs,
+    const counts=await env.DB.prepare("SELECT COUNT(*) AS count FROM gateway_operations WHERE device_id=? AND ((state='queued' AND expires_ms>?) OR (state='claimed' AND claimed_ms>?))").bind(env.RDC_DEVICE_ID,now,now-L.unknownMs).first();
+    return {ok:true,device_id:env.RDC_DEVICE_ID,online:!!row&&now-row.last_seen_ms<=L.onlineMs,
       last_seen_ms:row?.last_seen_ms??null,pending_operations:counts.count,
-      server_time_ms:clock(),preview_tool:'rdc_preview_open'};
+      server_time_ms:now,preview_tool:'rdc_preview_open'};
+  }
+  async function recentMetrics(args,principal,env){
+    if(!object(args)||Object.keys(args).some(k=>k!=='limit'))
+      fail(400,'invalid_arguments','Only the bounded limit is supported.');
+    const limit=args.limit??20;
+    if(!Number.isInteger(limit)||limit<1||limit>50)
+      fail(400,'invalid_arguments','Limit must be an integer between 1 and 50.');
+    // Never read args, request IDs, result bodies, tokens or principal into
+    // the output. This is an owner-authenticated, read-only D1 query.
+    const rows=await env.DB.prepare(
+      "SELECT tool,created_ms,claimed_ms,completed_ms FROM gateway_operations "+
+      "WHERE principal=? AND device_id=? AND state='completed' AND completed_ms IS NOT NULL "+
+      "ORDER BY completed_ms DESC LIMIT ?"
+    ).bind(principal,env.RDC_DEVICE_ID,limit).all();
+    const delta=(later,earlier)=>later===null||earlier===null||
+      later===undefined||earlier===undefined?null:Math.max(0,later-earlier);
+    const samples=rows.results.map(row=>({
+      tool:row.tool,
+      queue_wait_ms:delta(row.claimed_ms,row.created_ms),
+      claim_to_result_ms:delta(row.completed_ms,row.claimed_ms),
+      total_gateway_ms:delta(row.completed_ms,row.created_ms)
+    }));
+    return {ok:true,count:samples.length,completed_only:true,samples};
   }
   function operationDiagnostics(op){
     const now=clock();
@@ -345,16 +375,24 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           response={contents:[{uri:params.uri,mimeType:UI_MIME,text:resourceHtml,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},
             'openai/ui':{availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'inline'},'openai/widgetDescription':'Live view of the selected RDC session. Hiding the view leaves work running.'}}]};break;
         case 'tools/call':{
-          const principal=await owner(request,env);await clean(env);
-          if(params.name==='rdc_connection_status')response=toolResult(await connection(env));
-          else if(params.name==='rdc_operation_status'){
-            if(!text(params.arguments?.operation_id,100))fail(400,'invalid_arguments','operation_id is required.');
-            const diagnostics=params.arguments?.diagnostics;
-            if(diagnostics!==undefined&&typeof diagnostics!=='boolean')
-              fail(400,'invalid_arguments','diagnostics must be a boolean.');
-            const operation=await getOperation(params.arguments.operation_id,principal,env);
-            response=diagnostics===true?toolResult(operationDiagnostics(operation)):await operationResult(operation,env);
-          }else response=await dispatch(params.name,params.arguments??{},principal,env);
+          const principal=await owner(request,env);
+          if(params.name==='rdc_connection_status'){
+            // Cloud-only health checks never dispatch device work or clean D1.
+            response=toolResult(await connection(env));
+          }else if(params.name==='rdc_recent_operation_metrics'){
+            response=toolResult(await recentMetrics(params.arguments??{},principal,env));
+          }else{
+            // Recovery/dispatch retain the original durable cleanup behavior.
+            await clean(env);
+            if(params.name==='rdc_operation_status'){
+              if(!text(params.arguments?.operation_id,100))fail(400,'invalid_arguments','operation_id is required.');
+              const diagnostics=params.arguments?.diagnostics;
+              if(diagnostics!==undefined&&typeof diagnostics!=='boolean')
+                fail(400,'invalid_arguments','diagnostics must be a boolean.');
+              const operation=await getOperation(params.arguments.operation_id,principal,env);
+              response=diagnostics===true?toolResult(operationDiagnostics(operation)):await operationResult(operation,env);
+            }else response=await dispatch(params.name,params.arguments??{},principal,env);
+          }
           break;
         }
         default:return json({jsonrpc:'2.0',id,error:{code:-32601,message:'Method not found'}},400);

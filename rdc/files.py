@@ -148,8 +148,17 @@ class Files:
                 os.unlink(temporary)
         return {'file_path':str(path), 'bytes_written':len(data), 'sha256':sha256(data)}
 
-    def edit(self, file_path, old_text, new_text, expected_sha256, expected_count=1):
+    def edit(self, file_path, old_text, new_text, expected_sha256,
+             expected_count=1, scoped_root=None):
         path = self.resolve(file_path)
+        if scoped_root is not None:
+            root = self.resolve(scoped_root, directory=True)
+            # Check the actual resolved target inside the edit operation.
+            # A source path may have turned into a symlink after an earlier
+            # multi-edit admission check; never edit its external destination.
+            if path == root or root not in path.parents:
+                raise RDCError('path_denied',
+                    'A coding edit must stay beneath its selected project.')
         with self.lock(path):
             data, actual = self._current(path)
             self._check_precondition(actual, expected_sha256)
@@ -167,13 +176,16 @@ class Files:
                 raise RDCError('input_too_large', 'Edited content exceeds the configured write limit.')
             return {**self._replace(path, output), 'replacements':count}
 
-    def search(self, path, query, limit=100, max_files=1000):
+    def search(self, path, query, limit=100, max_files=1000, exclude_dirs=()):
+        # Only the coding-context tool opts into source-only pruning.
+        # Generic file search retains its original all-directory behavior.
         directory = self.resolve(path, directory=True)
         matches = []
         scanned = 0
         skipped = 0
         for parent, dirs, filenames in os.walk(directory, followlinks=False):
-            dirs[:] = sorted(d for d in dirs if not (Path(parent)/d).is_symlink()
+            dirs[:] = sorted(d for d in dirs if d not in exclude_dirs
+                             and not (Path(parent)/d).is_symlink()
                              and (Path(parent)/d).resolve() != self.settings.state_dir.resolve())
             for name in sorted(filenames):
                 candidate = Path(parent)/name

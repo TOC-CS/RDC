@@ -168,6 +168,51 @@ class CodingContextTests(unittest.TestCase):
         self.assertEqual(response["search"]["matches"], [])
         self.assertNotIn("SYNTHETIC-EXTERNAL-SCOPE-MATCH", str(response))
 
+    def test_relative_reads_are_project_scoped_and_ordered(self):
+        result = self.context(file_paths=["app.py", "./README.md"])
+        self.assertTrue(result["ok"], result)
+        self.assertEqual([r["file_path"] for r in result["reads"]],
+                         [str(self.a.resolve()), str(self.b.resolve())])
+        self.assertEqual([r["text"] for r in result["reads"]],
+                         [self.a.read_text(), self.b.read_text()])
+        self.assertTrue(all(item["ok"] for item in result["reads"]))
+        outside = self.root / "SIBLING.txt"
+        outside.write_text("SIBLING_SHOULD_STAY_PRIVATE", encoding="utf-8")
+        denied = self.context(file_paths=["../SIBLING.txt"])
+        self.assertFalse(denied["ok"], denied)
+        self.assertEqual(denied["error"]["code"], "path_denied")
+        self.assertNotIn("SIBLING_SHOULD_STAY_PRIVATE", str(denied))
+
+    def test_source_search_skips_generated_trees_and_all_mode_restores_them(self):
+        marker = "RDC-SEARCH-SOURCE-STRING"
+        source = self.project / "module.py"
+        source.write_text("# " + marker + "\\n", encoding="utf-8")
+        excluded = (".git", "node_modules", ".venv", "__pycache__",
+                    ".next", "dist", "build", "target")
+        for directory in excluded:
+            path = self.project / directory / "vendor-file.py"
+            path.parent.mkdir(parents=True)
+            path.write_text("# " + marker + "\\n", encoding="utf-8")
+        fast = self.context(query=marker)
+        self.assertTrue(fast["ok"], fast)
+        self.assertEqual(len(fast["search"]["matches"]), 1)
+        self.assertEqual(fast["search"]["matches"][0]["file_path"], str(source.resolve()))
+        self.assertEqual(fast["search"]["files_scanned"], 3)
+        complete = self.context(query=marker, search_mode="all")
+        self.assertTrue(complete["ok"], complete)
+        self.assertEqual(len(complete["search"]["matches"]), 1 + len(excluded))
+        self.assertGreater(complete["search"]["files_scanned"], fast["search"]["files_scanned"])
+        # Generic file_search still covers all paths by default.
+        ordinary = self.engine.call("rdc_file_search", {
+            "path": str(self.project), "query": marker})
+        self.assertEqual(len(ordinary["matches"]), 1 + len(excluded))
+
+    def test_source_search_requires_no_executable_command_permission(self):
+        with mock.patch("subprocess.run", side_effect=AssertionError("external process forbidden")):
+            result = self.context(query="return a + b", file_paths=["app.py"])
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["reads"][0]["text"], self.a.read_text())
+
     def test_schema_limits_and_readonly_admission(self):
         info = next(t for t in self.engine.catalog() if t["name"] == "rdc_code_context")
         self.assertFalse(info.get("x-rdc-mutating", False))

@@ -28,6 +28,16 @@ Updated workers enforce a separate owner decision for each `rdc_desktop_pointer`
 
 When the host schema requires `link_id`, select an exact advertised account ID using the user's request and established conversation context. Retain that link with the worker and all operation, job, approval, credential and session IDs, and use it throughout recovery. If more than one account remains plausible for a write, resolve the target before dispatch; never invent an ID or switch accounts to retry an uncertain action. Local clients need no host account field unless their schema requires it.
 
+## Fast coding and terminal workflow
+
+When the connected worker actually advertises `rdc_code_context`, select the exact project root and use one bounded request for a directory listing, literal source search and up to 20 SHA-256-versioned file reads. Relative `file_paths` such as `src/main.py` resolve inside the selected `path`. Source search defaults to excluding `.git`, `node_modules`, `.venv`, `__pycache__`, `.next`, `dist`, `build` and `target`. Pass `search_mode:"all"` when a task genuinely needs those directories. The response lists exclusions and preserves per-file error/hash/truncation details. Recheck hashes before edits and never assume a multi-file read was atomic.
+
+When the connected worker advertises `rdc_code_edit_many`, group two to ten independent exact edits in a single selected project using relative `file_path`, each with its original `expected_sha256`. This mutating tool preserves the same owner review and pause gates as ordinary file edits. It rejects duplicate files and project escapes before writing, then reports every file's actual outcome. Edits are **not atomic across files**; if one file conflicts and another succeeds, inspect individual results and current hashes. A lost or uncertain batch response must be recovered by the original gateway request ID, never blindly resent.
+
+Use `rdc_job_run` for short authorized terminal commands with explicit `argv`, a selected project `cwd`, a bounded `wait_ms`, a stable worker `idempotency_key` and the cloud `_rdc_request_id`. Related, already-authorized noninteractive work may use a single explicit shell script if doing so preserves per-command error checking and makes one durable result useful. Do not hide unauthorized actions inside shell scripts or retry uncertain mutations with new keys. If a job continues, recover the same job ID through `rdc_job_status` and `rdc_job_output`; confirm the exact exit code and retained output before claiming success.
+
+When a newer gateway advertises `rdc_recent_operation_metrics`, use its bounded owner-only completed-operation data to distinguish queue wait from worker execution/upload. It contains no arguments, output bodies or operation IDs. Measure actual ChatGPT tool wall-clock separately; direct-local speedups do not prove RDC outperforms Desktop Commander after transport. For fair head-to-head comparisons, use matched calls, balanced order, non-warmup samples and correctness counts.
+
 ## Execute and recover cloud operations
 
 Supply one stable `_rdc_request_id` for each intended cloud mutation whenever its schema requires the field. Retain the exact arguments and any separate worker `idempotency_key`. Reusing the same key with different arguments is a conflict.
