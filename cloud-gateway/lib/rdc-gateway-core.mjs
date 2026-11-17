@@ -123,8 +123,9 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     delete descriptor['x-rdc-mutating'];
     return descriptor;
   });
-  tools.push({name:'rdc_operation_status',description:'Recover a pending or uncertain cloud operation by operation_id. Returns its original result when ready. This never dispatches or repeats the operation.',
-    inputSchema:{type:'object',properties:{operation_id:{type:'string',minLength:1,maxLength:100}},required:['operation_id'],additionalProperties:false},
+  tools.push({name:'rdc_operation_status',description:'Recover a pending or uncertain cloud operation by operation_id. Returns its original result when ready. Set diagnostics:true for owner-only phase durations instead of the result. This never dispatches or repeats the operation.',
+    inputSchema:{type:'object',properties:{operation_id:{type:'string',minLength:1,maxLength:100},
+      diagnostics:{type:'boolean',description:'Return only the existing operation state and gateway phase durations in milliseconds, without retrieving the result.'}},required:['operation_id'],additionalProperties:false},
     annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false},
     _meta:{ui:{visibility:['model','app']},'openai/widgetAccessible':true}});
   tools.push({name:'rdc_connection_status',description:'Read the authenticated RDC cloud connection, device availability and queue counts without issuing device commands.',
@@ -187,6 +188,21 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     return {ok:true,device_id:env.RDC_DEVICE_ID,online:!!row&&clock()-row.last_seen_ms<=L.onlineMs,
       last_seen_ms:row?.last_seen_ms??null,pending_operations:counts.count,
       server_time_ms:clock(),preview_tool:'rdc_preview_open'};
+  }
+  function operationDiagnostics(op){
+    const now=clock();
+    const created=op.created_ms;
+    const claimed=op.claimed_ms;
+    const completed=op.completed_ms;
+    const interval=(end,start)=>end===null||end===undefined||start===null||start===undefined?
+      null:Math.max(0,end-start);
+    return {ok:true,diagnostics:true,operation_id:op.id,tool:op.tool,state:op.state,
+      elapsed_ms:interval(now,created),
+      queue_age_ms:op.state==='queued'?interval(now,created):null,
+      queue_wait_ms:interval(claimed,created),
+      inflight_age_ms:op.state==='claimed'?interval(now,claimed):null,
+      claim_to_result_ms:interval(completed,claimed),
+      completed_age_ms:op.state==='completed'?interval(now,completed):null};
   }
   async function operationResult(op,env){
     if(op.state==='completed'){
@@ -309,7 +325,11 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           if(params.name==='rdc_connection_status')response=toolResult(await connection(env));
           else if(params.name==='rdc_operation_status'){
             if(!text(params.arguments?.operation_id,100))fail(400,'invalid_arguments','operation_id is required.');
-            response=await operationResult(await getOperation(params.arguments.operation_id,principal,env),env);
+            const diagnostics=params.arguments?.diagnostics;
+            if(diagnostics!==undefined&&typeof diagnostics!=='boolean')
+              fail(400,'invalid_arguments','diagnostics must be a boolean.');
+            const operation=await getOperation(params.arguments.operation_id,principal,env);
+            response=diagnostics===true?toolResult(operationDiagnostics(operation)):await operationResult(operation,env);
           }else response=await dispatch(params.name,params.arguments??{},principal,env);
           break;
         }
