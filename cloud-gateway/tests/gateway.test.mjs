@@ -675,3 +675,40 @@ test('cloud diagnostics reject invalid switches without altering operation recov
   assert.equal(ordinary.body.result.structuredContent.pending,true);
   assert.equal((await s.poll()).body.operation.operation_id,operation_id);
 });
+
+test('v16 capacity recovery reclaims only expired readonly journal entries without losing mutations', async () => {
+  const s = setup({maxOperations:2,resultTtlMs:1000});
+  await s.poll({claim:false});
+  const args={value:'keep mutation',_rdc_request_id:'v16-capacity-stable-mutation'};
+  const first=await s.mcp('rdc_file_write',args);
+  const mutation=(await s.poll()).body.operation;
+  await s.complete(mutation,result('done'));
+  const read=await s.mcp('rdc_system_status',{_rdc_request_id:'v16-capacity-observation'});
+  const observation=(await s.poll()).body.operation;
+  await s.complete(observation,result('observed'));
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,2);
+  s.advance(1001);
+  const next=await s.mcp('rdc_system_status',{_rdc_request_id:'v16-capacity-recover-new'});
+  assert.equal(next.status,200);
+  assert.equal(next.body.result.structuredContent.pending,true);
+  const newClaim=(await s.poll()).body.operation;
+  assert.ok(newClaim);
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,2);
+  const old=await s.mcp('rdc_file_write',args);
+  assert.equal(old.body.result.structuredContent.operation_id,mutation.operation_id);
+  assert.equal(old.body.result.structuredContent.error.code,'result_expired');
+  assert.equal(first.status,200);
+  assert.equal(read.status,200);
+});
+
+test('v16 capacity recovery refuses to reclaim unexpired result or unknown mutating identity', async () => {
+  const s=setup({maxOperations:1,resultTtlMs:60000});
+  await s.poll({claim:false});
+  await s.mcp('rdc_system_status',{_rdc_request_id:'v16-current-result'});
+  const read=(await s.poll()).body.operation;
+  await s.complete(read,result('retain'));
+  const blocked=await s.mcp('rdc_system_status',{_rdc_request_id:'v16-should-be-full'});
+  assert.equal(blocked.body.result.structuredContent.error.code,'gateway_busy');
+  const saved=await s.mcp('rdc_operation_status',{operation_id:read.operation_id});
+  assert.equal(saved.body.result.structuredContent.value,'retain');
+});
