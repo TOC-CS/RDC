@@ -1,0 +1,1 @@
+ALTER TABLE `gateway_operations` ADD `result_inline_json` text;
