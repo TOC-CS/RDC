@@ -456,6 +456,8 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         case 'tools/call':{
           const principal=await owner(request,env);
           if(params.name==='rdc_connection_status'){
+            if(!object(params.arguments??{})||Object.keys(params.arguments??{}).length)
+              fail(400,'invalid_arguments','This owner-only status accepts no arguments.');
             // Fast owner-only read, without queued mutation cleanup.
             response=toolResult(await connection(env));
           }else if(params.name==='rdc_recent_operation_metrics'){
@@ -465,15 +467,22 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
               fail(400,'invalid_arguments','This read-only tool accepts no model-supplied identity or project.');
             response=toolResult(await chatSessionStatus(params._meta,principal,env));
           }else{
-            // Mutation recovery and dispatch retain the durable cleanup policy.
-            await clean(env);
-  if(params.name==='rdc_operation_status'){
-              if(!text(params.arguments?.operation_id,100))fail(400,'invalid_arguments','operation_id is required.');
-              const diagnostics=params.arguments?.diagnostics;
-              if(diagnostics!==undefined&&typeof diagnostics!=='boolean')
+            // Reject malformed recovery before the journal maintenance sweep.
+            // Recovery never accepts model-supplied owner or session identity.
+            if(params.name==='rdc_operation_status'){
+              const args=params.arguments;
+              if(!object(args)||!text(args.operation_id,100)||
+                 Object.keys(args).some(key=>!['operation_id','diagnostics'].includes(key)))
+                fail(400,'invalid_arguments','Only operation_id and diagnostics are allowed.');
+              if(args.diagnostics!==undefined&&typeof args.diagnostics!=='boolean')
                 fail(400,'invalid_arguments','diagnostics must be a boolean.');
+            }
+            // Valid recovery and dispatch retain the durable cleanup policy.
+            await clean(env);
+            if(params.name==='rdc_operation_status'){
               const operation=await getOperation(params.arguments.operation_id,principal,env);
-              response=diagnostics===true?toolResult(operationDiagnostics(operation)):await operationResult(operation,env);
+              response=params.arguments.diagnostics===true?
+                toolResult(operationDiagnostics(operation)):await operationResult(operation,env);
             }else if(chatOpsByName.has(params.name)){
               const args=params.arguments??{};
               validateChatOp(params.name,args);

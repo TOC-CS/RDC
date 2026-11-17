@@ -1458,3 +1458,49 @@ test('expiry maintenance uses one D1 update while preserving queued and claimed 
   assert.equal(duplicate.body.result.structuredContent.operation_id,claimed.operation_id);
   assert.equal((await s.poll()).body.operation,null);
 });
+
+test('read-only owner status rejects injected arguments without side effects or owner leakage',async()=>{
+  const s=setup();
+  await s.poll({claim:false});
+  // Establish the private owner before counting maintenance statements.
+  // Initial owner enrollment is an authorized one-time identity write.
+  assert.equal((await s.mcp('rdc_connection_status')).status,200);
+  const queries=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=sql=>{queries.push(sql);return original(sql);};
+  for(const args of [{principal:'spoof'}, {_rdc_request_id:'unauthorized'}, [], 'bad-text']){
+    const res=await s.mcp('rdc_connection_status',args);
+    assert.equal(res.status,400,'unexpected status arguments must be refused');
+    assert.equal(res.body.error.data.code,'invalid_arguments');
+    assert.equal(JSON.stringify(res).includes(KEY),false);
+  }
+  assert.equal(queries.filter(sql=>/^(INSERT|UPDATE|DELETE)\s/i.test(sql.trim())).length,0,
+    'rejected status calls may not mutate journal or connection data');
+  assert.equal((await s.mcp('rdc_connection_status')).body.result.structuredContent.ok,true,
+    'valid zero-argument status remains functional');
+});
+
+test('operation recovery rejects unknown fields before cleanup while preserving valid recovery',async()=>{
+  const s=setup({queueTtlMs:1000});
+  await s.poll({claim:false});
+  const pending=await s.mcp('rdc_file_write',{value:'preserve',_rdc_request_id:'status-strict-unknown'});
+  const id=pending.body.result.structuredContent.operation_id;
+  s.advance(1001);
+  const sql=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=x=>{sql.push(x);return original(x);};
+  for(const args of [{operation_id:id,principal:'spoof'},
+                     {operation_id:id,diagnostics:false,_rdc_request_id:'rewrite'},
+                     {operation_id:id,diagnostics:'true'}]){
+    const res=await s.mcp('rdc_operation_status',args);
+    assert.equal(res.status,400,'unexpected field or type must be denied');
+  }
+  assert.equal(sql.filter(x=>/^(INSERT|UPDATE|DELETE)\s/i.test(x.trim())).length,0,
+    'invalid recovery requests cannot trigger expiry maintenance');
+  assert.equal(s.env.DB.sqlite.prepare('SELECT state FROM gateway_operations WHERE id=?').get(id).state,'queued');
+  const valid=await s.mcp('rdc_operation_status',{operation_id:id});
+  assert.equal(valid.status,200);
+  assert.equal(valid.body.result.structuredContent.error.code,'expired_before_execution');
+  assert.equal(valid.body.result.structuredContent.operation_id,id);
+  assert.equal(s.env.DB.sqlite.prepare('SELECT state FROM gateway_operations WHERE id=?').get(id).state,'expired');
+});
