@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createGateway } from '../lib/rdc-gateway-core.mjs';
 import * as GatewayCore from '../lib/rdc-gateway-core.mjs';
@@ -1006,4 +1007,60 @@ test('rollback-compatible reader preserves v17 inline and v16 R2 results and TTL
   assert.equal(expiredR2.body.result.structuredContent.error.code,'result_expired');
   assert.equal((await compatibleCall('rdc_file_write',postArgs)).body.result.structuredContent.error.code,'result_expired');
   assert.equal((await compatiblePoll({claim:true})).body.operation,null);
+});
+
+
+test('historical v16 gateway executable reproduces the real inline rollback failure and legacy cleanup gap',async()=>{
+  // Use the precise source of the deployed v16 reader, locked by hash.
+  // This regression must fail if the historical fixture is absent or edited.
+  const fixtureUrl=new URL('./fixtures/rdc-gateway-core-v16.mjs',import.meta.url);
+  const historicalSource=readFileSync(fixtureUrl,'utf8');
+  assert.equal(createHash('sha256').update(historicalSource).digest('hex'),
+    '5651f14c6fc8a7308f37a5454a006ec2b0fb459aae97997554a8d296f160cd4f');
+  const {createGateway:createHistoricalV16}=await import('./fixtures/rdc-gateway-core-v16.mjs');
+  const s=setup({resultTtlMs:1000,maxInlineResultBytes:8192});
+  await s.poll({claim:false});
+  const args={value:'historical-v16-inline',_rdc_request_id:'historical-v16-no-replay'};
+  const first=await s.mcp('rdc_file_write',args);
+  const op=(await s.poll()).body.operation;
+  assert.equal(first.body.result.structuredContent.operation_id,op.operation_id);
+  const output={content:[{type:'text',text:'safely-retained'}],structuredContent:{ok:true,value:'safely-retained'}};
+  assert.equal((await s.complete(op,output)).status,200);
+  const initial=s.env.DB.sqlite.prepare('SELECT result_key,result_inline_json FROM gateway_operations WHERE id=?').get(op.operation_id);
+  assert.equal(initial.result_key,null);
+  assert.equal(initial.result_inline_json,JSON.stringify(output));
+
+  const options={catalog,resourceHtml:'<!doctype html><html>Historical resource</html>',
+    iconDataUri:'data:image/png;base64,eA==',clock:s.now,
+    limits:{callWaitMs:0,pollWaitMs:0,resultTtlMs:1000}};
+  const old=createHistoricalV16(options);
+  const request=s.request('/mcp',{jsonrpc:'2.0',id:'historical',method:'tools/call',
+    params:{name:'rdc_operation_status',arguments:{operation_id:op.operation_id}}},
+    {'oai-authenticated-user-id':'owner-1'});
+  const v16Read=await old.mcp(request,s.env);
+  const v16Body=await v16Read.json();
+  assert.equal(v16Read.status,200);
+  assert.equal(v16Body.result.structuredContent.error.code,'result_expired',
+    'Actual original v16 reader loses authorized readback of a still-retained inline result');
+  assert.equal((await s.mcp('rdc_operation_status',{operation_id:op.operation_id})).body.result.content[0].text,
+    'safely-retained','v17 confirms payload exists before expiry');
+
+  s.advance(1001);
+  const oldPoll=await old.poll(s.request('/device/poll',{device_id:DEVICE,claim:false},
+    {'X-RDC-Device-Key':KEY}),s.env);
+  assert.equal(oldPoll.status,200);
+  const stale=s.env.DB.sqlite.prepare('SELECT result_inline_json FROM gateway_operations WHERE id=?').get(op.operation_id);
+  assert.equal(stale.result_inline_json,JSON.stringify(output),
+    'Actual historical v16 cleanup skips expired inline-only results');
+
+  const safe=GatewayCore.createRollbackCompatibleGateway(options);
+  const safePoll=await safe.poll(s.request('/device/poll',{device_id:DEVICE,claim:false},
+    {'X-RDC-Device-Key':KEY}),s.env);
+  assert.equal(safePoll.status,200);
+  const cleaned=s.env.DB.sqlite.prepare('SELECT state,result_inline_json FROM gateway_operations WHERE id=?').get(op.operation_id);
+  assert.equal(cleaned.state,'completed');
+  assert.equal(cleaned.result_inline_json,null);
+  assert.equal(s.env.BUCKET.deletes,0,'No null-key R2 delete on inline TTL');
+  assert.equal((await s.mcp('rdc_file_write',args)).body.result.structuredContent.error.code,'result_expired');
+  assert.equal((await s.poll()).body.operation,null,'Original terminal mutation can never be dispatched again');
 });
