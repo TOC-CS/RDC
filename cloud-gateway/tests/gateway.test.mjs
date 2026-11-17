@@ -1085,3 +1085,60 @@ test('historical v16 gateway executable reproduces the real inline rollback fail
   assert.equal((await s.mcp('rdc_file_write',args)).body.result.structuredContent.error.code,'result_expired');
   assert.equal((await s.poll()).body.operation,null,'Original terminal mutation can never be dispatched again');
 });
+
+
+test('RDC chat session status uses platform metadata but does not guess project membership',async()=>{
+  const s=setup();s.env.RDC_CHAT_IDENTITY_SECRET='test-hmac-secret-that-is-long-enough-and-internal-only';
+  const toolCall=async(meta,args={},owner='owner-1')=>{
+    const r=await s.gateway.mcp(s.request('/mcp',{
+      jsonrpc:'2.0',id:'chat-context',method:'tools/call',
+      params:{name:'rdc_chat_session_status',arguments:args,...(meta===undefined?{}:{_meta:meta})}
+    },owner?{'oai-authenticated-user-id':owner}:{}),s.env);
+    return {status:r.status,payload:await r.json()};
+  };
+  const list=await s.gateway.mcp(s.request('/mcp',{jsonrpc:'2.0',id:'list-chat',method:'tools/list'}),s.env);
+  const spec=(await list.json()).result.tools.find(x=>x.name==='rdc_chat_session_status');
+  assert.ok(spec,'The gateway must advertise the read-only session diagnostic tool');
+  assert.equal(spec.annotations.readOnlyHint,true);
+  const meta={'openai/subject':'anonymous-person','openai/session':'conversation-A'};
+  const first=await toolCall(meta);
+  assert.equal(first.status,200);
+  const data=first.payload.result.structuredContent;
+  assert.equal(data.ok,true);
+  assert.equal(data.available,true);
+  assert.equal(data.chat_project_verified,false);
+  assert.equal(data.can_create,false);
+  assert.equal(data.can_wake,false);
+  assert.equal(data.can_send,false);
+  assert.match(data.opaque_session_id,/^chatgpt-[0-9a-f]{40}$/);
+  assert.equal(JSON.stringify(first).includes('anonymous-person'),false);
+  assert.equal(JSON.stringify(first).includes('conversation-A'),false);
+  const again=(await toolCall(meta)).payload.result.structuredContent;
+  assert.equal(again.opaque_session_id,data.opaque_session_id);
+  const other=(await toolCall({...meta,'openai/session':'conversation-B'})).payload.result.structuredContent;
+  assert.notEqual(other.opaque_session_id,data.opaque_session_id);
+  assert.equal((await toolCall(meta,{project_id:'untrusted-claim'})).status,400);
+  assert.equal((await toolCall(meta,{},'foreign-owner')).status,403);
+  assert.equal((await toolCall(meta,{},null)).status,401);
+});
+test('RDC chat session status fails closed if metadata or private HMAC key is unavailable',async()=>{
+  const s=setup();
+  const call=async(meta)=>{
+    const r=await s.gateway.mcp(s.request('/mcp',{jsonrpc:'2.0',id:'ctx',
+      method:'tools/call',params:{name:'rdc_chat_session_status',arguments:{},
+      ...(meta===undefined?{}:{_meta:meta})}}, {'oai-authenticated-user-id':'owner-1'}),s.env);
+    return {status:r.status,value:(await r.json()).result?.structuredContent};
+  };
+  const noKey=await call({'openai/subject':'user','openai/session':'one'});
+  assert.equal(noKey.status,200);
+  assert.equal(noKey.value.available,false);
+  assert.equal(noKey.value.reason,'IDENTITY_KEY_UNAVAILABLE');
+  s.env.RDC_CHAT_IDENTITY_SECRET='this-key-is-strong-enough-for-the-test-only-source';
+  const noMeta=await call(undefined);
+  assert.equal(noMeta.status,200);
+  assert.equal(noMeta.value.available,false);
+  assert.equal(noMeta.value.reason,'CHAT_CONTEXT_UNAVAILABLE');
+  const incomplete=await call({'openai/subject':'user'});
+  assert.equal(incomplete.value.available,false);
+  assert.equal(incomplete.value.reason,'CHAT_CONTEXT_UNAVAILABLE');
+});

@@ -132,6 +132,9 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
   tools.push({name:'rdc_connection_status',description:'Read the authenticated RDC cloud connection, device availability and queue counts without issuing device commands.',
     inputSchema:{type:'object',properties:{},additionalProperties:false},
     annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false}});
+  tools.push({name:'rdc_chat_session_status',description:'Check whether this authenticated ChatGPT tool call supplies a bounded conversation identity. Return a pseudonymous ID only. Does not enroll a native ChatGPT Project or create/wake other chats.',
+    inputSchema:{type:'object',properties:{},additionalProperties:false},
+    annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false}});
   const serverInfo={name:'rdc',title:'RDC',version:'0.1.0a8',description:'Independent agent workspace with an embedded live preview.',
     ...(iconDataUri?{icons:[{src:iconDataUri,mimeType:'image/png',sizes:['192x192']}]}:{})};
   const capabilities={tools:{listChanged:false},resources:{subscribe:false,listChanged:false},extensions:{[UI_EXTENSION]:{}}};
@@ -139,6 +142,24 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
 
   function configured(env){
     if(!env.DB||!env.BUCKET||!text(env.RDC_DEVICE_ID,100))fail(503,'configuration_required','The RDC gateway is not configured yet.');
+  }
+  async function chatSessionStatus(meta,principal,env){
+    // This diagnostic is read-only. The host account authentication above
+    // cannot establish native ChatGPT Project membership from tool metadata.
+    const secret=env.RDC_CHAT_IDENTITY_SECRET;
+    if(!text(secret,1024)||secret.length<32)
+      return {ok:true,available:false,reason:'IDENTITY_KEY_UNAVAILABLE',chat_project_verified:false};
+    const subject=object(meta)?meta['openai/subject']:null;
+    const session=object(meta)?meta['openai/session']:null;
+    if(!text(subject,256)||!text(session,256))
+      return {ok:true,available:false,reason:'CHAT_CONTEXT_UNAVAILABLE',chat_project_verified:false};
+    const key=await crypto.subtle.importKey('raw',encoder.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+    const bytes=encoder.encode(['rdc-chat-status-v1',principal,subject,session].join(String.fromCharCode(0)));
+    const digest=await crypto.subtle.sign('HMAC',key,bytes);
+    const hashed=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+    return {ok:true,available:true,opaque_session_id:'chatgpt-'+hashed.slice(0,40),
+      session_metadata_present:true,chat_project_verified:false,
+      chat_project_status:'PROJECT_UNVERIFIED',can_create:false,can_wake:false,can_send:false};
   }
   async function owner(request,env){
     configured(env);
@@ -341,7 +362,11 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         case 'tools/call':{
           const principal=await owner(request,env);await clean(env);
           if(params.name==='rdc_connection_status')response=toolResult(await connection(env));
-          else if(params.name==='rdc_operation_status'){
+          else if(params.name==='rdc_chat_session_status'){
+            if(!object(params.arguments??{})||Object.keys(params.arguments??{}).length!==0)
+              fail(400,'invalid_arguments','This read-only tool accepts no model-supplied identity or project.');
+            response=toolResult(await chatSessionStatus(params._meta,principal,env));
+          }else if(params.name==='rdc_operation_status'){
             if(!text(params.arguments?.operation_id,100))fail(400,'invalid_arguments','operation_id is required.');
             const diagnostics=params.arguments?.diagnostics;
             if(diagnostics!==undefined&&typeof diagnostics!=='boolean')

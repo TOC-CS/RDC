@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "rdc-communications" / "SKILL.md"
 REFERENCE = ROOT / "skills" / "rdc-communications" / "references" / "integration.md"
 RDC_SKILL = ROOT / "skills" / "rdc" / "SKILL.md"
+PROJECT_REF = ROOT / "skills" / "rdc-communications" / "references" / "project-activation.md"
 
 
 class RDCCommunicationsSkillTests(unittest.TestCase):
@@ -60,6 +61,28 @@ class RDCCommunicationsSkillTests(unittest.TestCase):
         self.assertIn("desktop commander", reference)
         self.assertIn("single-flight", text)
         self.assertIn("fresh readiness signal", reference)
+
+    def test_one_time_project_activation_is_shared_by_all_verified_chat_sessions(self):
+        main = SKILL.read_text(encoding="utf-8").lower()
+        reference = PROJECT_REF.read_text(encoding="utf-8").lower()
+        self.assertIn("one-time project activation", main)
+        self.assertIn("no repeated approval prompts", main)
+        self.assertIn("projectchatactions", main)
+        self.assertIn("create", main)
+        self.assertIn("wake", main)
+        self.assertIn("revocation", main)
+        self.assertIn("project activation", reference)
+        self.assertIn("rdc.chat_project_actions", reference)
+        self.assertIn("projectactionstore", reference)
+        self.assertIn("host-authenticated", reference)
+        self.assertIn("wake_signal_observed", reference)
+        self.assertIn("model_resumed", reference)
+        self.assertIn("persistent", reference)
+        self.assertIn("project-scoped", reference)
+        self.assertIn("consumer chat", reference)
+        self.assertIn("same project", reference)
+        self.assertIn("desktop commander", reference)
+        self.assertIn("one-time", reference)
 
     def test_skill_refuses_unverified_real_chat_claims_and_unsafe_replay(self):
         text = SKILL.read_text(encoding="utf-8").lower()
