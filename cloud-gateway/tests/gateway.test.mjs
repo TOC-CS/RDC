@@ -1423,3 +1423,38 @@ test('capacity recovery preserves unexpired read-only results and unknown mutati
   assert.equal((await s.mcp('rdc_operation_status',{operation_id:op.operation_id})).body.result.structuredContent.value,'retain recent read');
   assert.equal(first.status,200);
 });
+
+test('expiry maintenance uses one D1 update while preserving queued and claimed outcomes',async()=>{
+  const s=setup({queueTtlMs:1000,unknownMs:1000,operationTtlMs:86_400_000});
+  await s.poll({claim:false});
+  const mutationArgs={value:'DO-NOT-REPLAY',_rdc_request_id:'sweep-claimed-mutation'};
+  const original=await s.mcp('rdc_file_write',mutationArgs);
+  const claimed=(await s.poll()).body.operation;
+  assert.equal(claimed.operation_id,original.body.result.structuredContent.operation_id);
+  const waiting=await s.mcp('rdc_system_status',{_rdc_request_id:'sweep-queued-read'});
+  const queuedId=waiting.body.result.structuredContent.operation_id;
+  assert.equal(s.env.DB.sqlite.prepare('SELECT state FROM gateway_operations WHERE id=?').get(queuedId).state,'queued');
+  s.advance(1201);
+  const sql=[];
+  const prepare=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=statement=>{sql.push(statement);return prepare(statement);};
+  const health=await s.poll({claim:false});
+  assert.equal(health.status,200);
+  const expiryUpdates=sql.filter(statement=>/^UPDATE gateway_operations SET\b/i.test(statement));
+  assert.equal(expiryUpdates.length,1,'one conditional D1 update handles expired queue and overdue claims');
+  const rows=s.env.DB.sqlite.prepare('SELECT id,state,request_json,request_size,mutating FROM gateway_operations').all();
+  assert.equal(rows.length,2);
+  const claimedRow=rows.find(row=>row.id===claimed.operation_id);
+  const queuedRow=rows.find(row=>row.id===queuedId);
+  assert.equal(claimedRow.state,'unknown');
+  assert.equal(claimedRow.mutating,1);
+  assert.ok(claimedRow.request_json?.includes('rdc_file_write'));
+  assert.ok(claimedRow.request_size>0);
+  assert.equal(queuedRow.state,'expired');
+  assert.equal(queuedRow.request_json,null);
+  assert.equal(queuedRow.request_size,0);
+  const duplicate=await s.mcp('rdc_file_write',mutationArgs);
+  assert.equal(duplicate.body.result.structuredContent.error.code,'outcome_unknown');
+  assert.equal(duplicate.body.result.structuredContent.operation_id,claimed.operation_id);
+  assert.equal((await s.poll()).body.operation,null);
+});

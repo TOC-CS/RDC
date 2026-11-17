@@ -222,8 +222,16 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
   }
   async function clean(env){
     const now=clock();
-    await env.DB.prepare("UPDATE gateway_operations SET state='expired',request_json=NULL,request_size=0 WHERE state='queued' AND expires_ms<=?").bind(now).run();
-    await env.DB.prepare("UPDATE gateway_operations SET state='unknown' WHERE state='claimed' AND claimed_ms<=?").bind(now-L.unknownMs).run();
+    // One conditional D1 write replaces two sequential expiry sweeps.
+    // CASE expressions evaluate against the original state. Preserve the
+    // original request JSON/size on unknown claims for recovery diagnostics.
+    await env.DB.prepare(`UPDATE gateway_operations SET
+      state=CASE WHEN state='queued' THEN 'expired' ELSE 'unknown' END,
+      request_json=CASE WHEN state='queued' THEN NULL ELSE request_json END,
+      request_size=CASE WHEN state='queued' THEN 0 ELSE request_size END
+      WHERE (state='queued' AND expires_ms<=?)
+         OR (state='claimed' AND claimed_ms<=?)`)
+      .bind(now,now-L.unknownMs).run();
     const old=await env.DB.prepare('SELECT id,result_key FROM gateway_operations WHERE (result_key IS NOT NULL OR result_inline_json IS NOT NULL) AND result_expires_ms<=? LIMIT 16').bind(now).all();
     for(const row of old.results){
       // Inline payloads and R2 objects share the same retention deadline.
