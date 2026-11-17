@@ -33,6 +33,9 @@ Compiled rollback gateway chunk SHA-256: `a9aa4368d72c17caf97bc8cf16548e5a0815f8
 - Detailed evidence and release gates:
 `docs/releases/RDC-V17-ROLLBACK-REVIEW-2026-11-16.md`.
 
+## Live v16 gateway timing checkpoint
+Read-only timing diagnostics were recovered for the latest 12 owner-accessible completed terminal operations, using only the original local relay journal's operation IDs and authenticated owner-only `rdc_operation_status({diagnostics:true})`. p50/p95 gateway queue wait: **311/596 ms**; claim-to-result: **678/1078 ms**; gateway created-to-completed total: **982.5/1391 ms**. Claim-to-completion is larger than pickup in this sample. Two fresh ChatGPT calls measured ~3.2 and ~3.9 seconds end-to-end despite 4–5 ms command execution. Exact timing breakdown, numeric-only raw summary and scope limitations are documented in `docs/releases/RDC-V16-OWNER-PHASE-DIAGNOSTIC-2026-11-16.md`. No argument bodies, result bodies, tokens or full operation IDs were exported. These are **v16 measurements only**, not v17 speed-acceptance evidence.
+
 ## Release blocking decisions for Atlas
 1. **Protected inactive Site version missing.** Existing Site version management is not exposed in this Chat session. Save and verify the rollback-compatible artifact on the SAME owner-private Site, preserving D1/R2 and App/plugin identity, **before** any v17 inline writer activates. Verify exact version ID and archived SHA. Refuse release if this cannot be proven.
 2. **Latest source not pushed to existing GitHub draft PR.** This chat's GitHub connector is read-only and local Git push returned missing authentication. The branch's remote HEAD remained `3bfd044b2c0aa5ea35709dbb83b20d1a623dc32d`. Retain the local commits and offline Git bundle. Once source push is independently authorized and possible, run GitHub Actions on the precise published commit across macOS, Linux and Windows. Do not claim those results now.
