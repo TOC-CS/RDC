@@ -26,3 +26,11 @@ OBS WebSocket 5 protocol: https://github.com/obsproject/obs-websocket/blob/maste
 Set optional PRESENTATION_VIEW_TOKEN in the local MCP or API launch environment. Once a deck is loaded, open http://127.0.0.1:8789/v1/viewer?key=YOUR_VIEW_TOKEN on the same computer to see a read-only browser presentation. The viewer receives live slide updates by server-sent events, using separate read-only authorization from the private API control token. No microphone, camera or GUI automation is required for browser output.
 
 The viewer token appears in the local URL and may be stored in browser history. Treat it as a private display credential. In the default configuration without a viewer token, the browser output endpoint remains disabled. Run npm run test:browser for isolated headless-Chrome confirmation. This viewer is loopback only. Streaming to another physical machine requires a separate authenticated deployment that has not been implemented.
+
+## Verified additions, November 16, 2026
+
+- The serialized PresentationDirector blocks concurrent command races, disallows arming through ordinary presentation_command calls, and preserves state if native startup fails.
+- A repeat-cue guard prevents continuous speech or repeated camera frames from jumping to later instances of the same chorus. BandMates sends an explicit positive occurrence number when provided by its current song-dynamics snapshot. Operators retain manual override.
+- ProPresenter readback observes the active cue through GET /v1/presentation/slide_index. MCP tool presentation_readback and authenticated local GET /v1/readback expose whether the actual app cue matches the expected index. Some other adapters cannot independently confirm output.
+- Windows PowerPoint uses an existing slideshow COM bridge through Windows PowerShell, with next, previous, goto and CurrentShowPosition readback. Source contract tests pass on macOS, but Windows execution still requires a separate verified host and user approval.
+- A local HTTP venue simulator verified a complete BandMates cue, voice command, slide output and readback sequence. No physical ProPresenter instance was controlled.

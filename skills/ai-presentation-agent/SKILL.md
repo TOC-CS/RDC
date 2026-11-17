@@ -44,7 +44,8 @@ Optional local voice uses a user-provided Whisper.cpp model for speech recogniti
 - ProPresenter: local official REST API paths implemented, no physical ProPresenter available on the checked iMac.
 - OBS: obs-websocket 5 scene control implemented, live software output pending qualification.
 - Other RDC-supported apps: require application-specific controls, a documented API or a verified RDC visual UI adapter.
-- Windows, native iOS/Android and Adobe app adapters are future qualification tasks. Never claim that local tests establish universal coverage.
+- Windows PowerPoint: a conservative Windows PowerShell/COM adapter attaches to an existing running slideshow and performs next, previous, goto and position readback. Its command and simulated parser tests passed; a physical Windows/PowerPoint run is still pending.
+- Native iOS/Android and Adobe app adapters need future per-app qualification. Other installed presentation software may integrate with a documented API or an RDC source-bound adapter; do not claim universal coverage.
 
 ## Real-time viewer and availability
 
@@ -71,6 +72,8 @@ The available standalone engine is installed separately from this skill. ChatGPT
 - Operator grant for external writes is separate from an API bearer token.
 - A valid AI command is not evidence the actual display showed it. Use available readback or independent stage/output verification.
 - Maintain cue identity and idempotent handling across reconnects.
+- A repeat of the same chorus or Scripture reference must not advance across duplicated slides. Match verified BandMates song-section occurrence changes or an intervening distinct section before permitting the next repeated cue.
+- Use presentation_readback or GET /v1/readback for independent output observation when the chosen adapter supports it. An accepted command alone does not verify a projector or stream.
 - Do not describe test simulations as live native hardware verification.
 
 ## Developer quick reference
