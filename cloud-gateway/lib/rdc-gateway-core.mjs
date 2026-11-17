@@ -131,6 +131,9 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
   tools.push({name:'rdc_connection_status',description:'Read the authenticated RDC cloud connection, device availability and queue counts without issuing device commands.',
     inputSchema:{type:'object',properties:{},additionalProperties:false},
     annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false}});
+  tools.push({name:'rdc_gateway_capacity_status',description:'Owner-only, read-only diagnostic of RDC retained journal capacity, active backlog and stored request/result bytes without returning arguments, results, tokens or operation IDs.',
+    inputSchema:{type:'object',properties:{},additionalProperties:false},
+    annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false}});
   const serverInfo={name:'rdc',title:'RDC',version:'0.1.0a8',description:'Independent agent workspace with an embedded live preview.',
     ...(iconDataUri?{icons:[{src:iconDataUri,mimeType:'image/png'}]}:{})};
   const capabilities={tools:{listChanged:false},resources:{subscribe:false,listChanged:false},extensions:{[UI_EXTENSION]:{}}};
@@ -188,6 +191,37 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     return {ok:true,device_id:env.RDC_DEVICE_ID,online:!!row&&clock()-row.last_seen_ms<=L.onlineMs,
       last_seen_ms:row?.last_seen_ms??null,pending_operations:counts.count,
       server_time_ms:clock(),preview_tool:'rdc_preview_open'};
+  }
+  async function gatewayCapacityStatus(env){
+    // Read-only diagnostic, reachable even when no further operation can be
+    // admitted. Do not mutate or display owner data or identifiers.
+    const counts=await env.DB.prepare(`SELECT COUNT(*) AS retained,
+      COALESCE(SUM(CASE WHEN state IN ('queued','claimed') THEN 1 ELSE 0 END),0) AS active,
+      COALESCE(SUM(CASE WHEN state='unknown' THEN 1 ELSE 0 END),0) AS uncertain,
+      COALESCE(SUM(CASE WHEN mutating=0 THEN 1 ELSE 0 END),0) AS readonly_total,
+      COALESCE(SUM(CASE WHEN mutating=1 THEN 1 ELSE 0 END),0) AS mutating_total,
+      COALESCE(SUM(request_size),0) AS request_bytes,
+      COALESCE(SUM(result_size),0) AS result_bytes
+      FROM gateway_operations WHERE device_id=?`).bind(env.RDC_DEVICE_ID).first();
+    const retained=Number(counts?.retained??0);
+    const backlog=Number(counts?.active??0);
+    const unknown=Number(counts?.uncertain??0);
+    const resultBytes=Number(counts?.result_bytes??0);
+    const resultReservation=(backlog+unknown+1)*L.maxResultBytes;
+    return {ok:true,diagnostic_only:true,retained_operations:retained,
+      active_backlog_operations:backlog,unknown_operations:unknown,
+      readonly_retained:Number(counts?.readonly_total??0),
+      mutating_retained:Number(counts?.mutating_total??0),
+      operation_capacity:L.maxOperations,
+      free_operation_slots:Math.max(0,L.maxOperations-retained),
+      retention_full:retained>=L.maxOperations,
+      backlog_capacity:L.maxBacklog,backlog_full:backlog>=L.maxBacklog,
+      request_bytes_stored:Number(counts?.request_bytes??0),
+      request_bytes_capacity:L.maxStoredRequestBytes,
+      result_bytes_stored:resultBytes,
+      result_bytes_capacity:L.maxStoredResultBytes,
+      result_bytes_reserved_for_next_call:resultReservation,
+      result_capacity_blocked:resultBytes+resultReservation>L.maxStoredResultBytes};
   }
   function operationDiagnostics(op){
     const now=clock();
@@ -341,8 +375,14 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           response={contents:[{uri:params.uri,mimeType:UI_MIME,text:resourceHtml,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},
             'openai/ui':{availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'inline'},'openai/widgetDescription':'Live view of the selected RDC session. Hiding the view leaves work running.'}}]};break;
         case 'tools/call':{
-          const principal=await owner(request,env);await clean(env);
-          if(params.name==='rdc_connection_status')response=toolResult(await connection(env));
+          const principal=await owner(request,env);
+          if(params.name==='rdc_gateway_capacity_status'){
+            if(!object(params.arguments??{})||Object.keys(params.arguments??{}).length)
+              fail(400,'invalid_arguments','This diagnostic accepts no arguments.');
+            response=toolResult(await gatewayCapacityStatus(env));
+          }else{
+            await clean(env);
+            if(params.name==='rdc_connection_status')response=toolResult(await connection(env));
           else if(params.name==='rdc_operation_status'){
             if(!text(params.arguments?.operation_id,100))fail(400,'invalid_arguments','operation_id is required.');
             const diagnostics=params.arguments?.diagnostics;
@@ -351,6 +391,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
             const operation=await getOperation(params.arguments.operation_id,principal,env);
             response=diagnostics===true?toolResult(operationDiagnostics(operation)):await operationResult(operation,env);
           }else response=await dispatch(params.name,params.arguments??{},principal,env);
+          }
           break;
         }
         default:return json({jsonrpc:'2.0',id,error:{code:-32601,message:'Method not found'}},400);

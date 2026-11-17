@@ -712,3 +712,66 @@ test('v16 capacity recovery refuses to reclaim unexpired result or unknown mutat
   const saved=await s.mcp('rdc_operation_status',{operation_id:read.operation_id});
   assert.equal(saved.body.result.structuredContent.value,'retain');
 });
+
+test('v16 owner-only capacity diagnostic reports full retained journal without dispatch', async () => {
+  const s=setup({maxOperations:2,maxBacklog:2});
+  await s.poll({claim:false});
+  const savedMutation=await s.mcp('rdc_file_write',{
+    value:'PRIVATE-CAPACITY-INPUT',_rdc_request_id:'PRIVATE-CAPACITY-MUTATION'});
+  assert.equal(savedMutation.status,200);
+  const mutation=(await s.poll()).body.operation;
+  await s.complete(mutation,result('PRIVATE-CAPACITY-RESULT'));
+  const savedRead=await s.mcp('rdc_system_status',{
+    value:'PRIVATE-READ',_rdc_request_id:'PRIVATE-CAPACITY-READ'});
+  assert.equal(savedRead.status,200);
+  const observation=(await s.poll()).body.operation;
+  await s.complete(observation,result('PRIVATE-CAPACITY-OBSERVED'));
+  assert.equal((await s.mcp('rdc_connection_status')).body.result.structuredContent.pending_operations,0);
+
+  const queries=[];
+  const previous=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=sql=>{queries.push(sql);return previous(sql);};
+  const response=await s.mcp('rdc_gateway_capacity_status',{});
+  assert.equal(response.status,200);
+  const value=response.body.result.structuredContent;
+  assert.equal(value.ok,true);
+  assert.equal(value.retained_operations,2);
+  assert.equal(value.active_backlog_operations,0);
+  assert.equal(value.readonly_retained,1);
+  assert.equal(value.mutating_retained,1);
+  assert.equal(value.operation_capacity,2);
+  assert.equal(value.retention_full,true);
+  assert.equal(value.free_operation_slots,0);
+  assert.equal(value.backlog_full,false);
+  assert.equal(value.diagnostic_only,true);
+  assert.ok(value.result_bytes_stored>0);
+  assert.ok(value.result_bytes_capacity>0);
+  assert.equal(queries.filter(sql=>/^(INSERT|DELETE|UPDATE) /i.test(sql.trim())).length,0);
+  assert.equal(queries.some(sql=>/request_json|result_json|request_key|request_sha256/.test(sql)),false);
+  for(const secret of ['PRIVATE-CAPACITY-INPUT','PRIVATE-CAPACITY-RESULT',
+    'PRIVATE-READ','PRIVATE-CAPACITY-OBSERVED','PRIVATE-CAPACITY-MUTATION',
+    mutation.operation_id,observation.operation_id]){
+    assert.equal(JSON.stringify(response).includes(secret),false,secret);
+  }
+  assert.equal((await s.mcp('rdc_gateway_capacity_status',{},'different-owner')).status,403);
+  assert.equal((await s.mcp('rdc_gateway_capacity_status',{principal:'spoof'})).status,400);
+  assert.equal((await s.poll()).body.operation,null);
+});
+
+test('v16 capacity diagnostic identifies result reservation pressure with an empty queue',async()=>{
+  const s=setup({maxBacklog:2,maxOperations:4,maxStoredResultBytes:200,maxResultBytes:150});
+  await s.poll({claim:false});
+  await s.mcp('rdc_system_status',{_rdc_request_id:'v16-result-usage'});
+  const operation=(await s.poll()).body.operation;
+  const payload=result('result-saved');
+  assert.equal((await s.complete(operation,payload)).status,200);
+  const health=await s.mcp('rdc_gateway_capacity_status');
+  assert.equal(health.status,200);
+  const c=health.body.result.structuredContent;
+  assert.equal(c.active_backlog_operations,0);
+  assert.equal(c.result_bytes_stored,Buffer.byteLength(JSON.stringify(payload)));
+  assert.equal(c.result_bytes_capacity,200);
+  assert.equal(c.result_bytes_reserved_for_next_call,150);
+  assert.equal(c.result_capacity_blocked,true);
+  assert.equal(c.retention_full,false);
+});
