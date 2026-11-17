@@ -363,7 +363,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       toolResult({ok:true,preview_unavailable:true,preview_status:code,message,device_id:env.RDC_DEVICE_ID}):toolFailure(code,message);
     if(!(await deviceOnline(env)))return unavailable('device_offline','The paired device is offline. No operation was queued.');
     const id=crypto.randomUUID(),now=clock();
-    op=await env.DB.prepare(`INSERT INTO gateway_operations
+    const admit=()=>env.DB.prepare(`INSERT INTO gateway_operations
       (id,principal,device_id,request_key,tool,request_json,request_sha256,request_size,mutating,state,created_ms,expires_ms)
       SELECT ?,?,?,?,?,?,?,?,?, 'queued',?,?
       WHERE (SELECT COUNT(*) FROM gateway_operations WHERE device_id=? AND state IN ('queued','claimed'))<?
@@ -376,6 +376,26 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         env.RDC_DEVICE_ID,L.maxBacklog,env.RDC_DEVICE_ID,L.maxOperations,
         env.RDC_DEVICE_ID,requestSize,L.maxStoredRequestBytes,
         env.RDC_DEVICE_ID,env.RDC_DEVICE_ID,L.maxResultBytes,L.maxStoredResultBytes).first();
+    op=await admit();
+    if(!op){
+      // Only spend additional D1 queries if retained journal capacity is
+      // actually exhausted. A full active backlog must remain rejected.
+      const usage=await env.DB.prepare('SELECT COUNT(*) AS n FROM gateway_operations WHERE device_id=?')
+        .bind(env.RDC_DEVICE_ID).first();
+      if(Number(usage?.n??0)>=L.maxOperations){
+        // An empty active queue can still be rejected by the retained journal.
+        // Reclaim a bounded set of expired read-only records with no payload.
+        // Never remove mutations, active jobs, unexpired results or R2 objects.
+        await env.DB.prepare(`DELETE FROM gateway_operations WHERE id IN (
+          SELECT id FROM gateway_operations WHERE device_id=? AND mutating=0
+            AND result_key IS NULL AND result_inline_json IS NULL
+            AND ((state='completed' AND result_expires_ms<=?)
+              OR (state='expired' AND expires_ms<=?))
+          ORDER BY created_ms LIMIT 32)`)
+          .bind(env.RDC_DEVICE_ID,now,now).run();
+        op=await admit();
+      }
+    }
     if(!op){
       op=await env.DB.prepare('SELECT * FROM gateway_operations WHERE principal=? AND device_id=? AND request_key=?').bind(principal,env.RDC_DEVICE_ID,key).first();
       if(!op)return unavailable('gateway_busy','The relay has reached its bounded backlog or retention capacity. No operation was queued.');
