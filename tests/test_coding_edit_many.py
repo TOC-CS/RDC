@@ -21,8 +21,9 @@ class CodeEditManyTests(unittest.TestCase):
         self.project.mkdir(parents=True)
         self.first = self.project / "first.py"
         self.second = self.project / "second.py"
-        self.first.write_text("return a - b\n", encoding="utf-8")
-        self.second.write_text("return x - y\n", encoding="utf-8")
+        # Stable LF fixture bytes across macOS, Linux and Windows.
+        self.first.write_bytes(b"return a - b\n")
+        self.second.write_bytes(b"return x - y\n")
         self.engine = Engine(Settings(state_dir=self.home / "private-state",
                                       roots=[self.root], approval_mode="trusted",
                                       browser_backend="disabled", allow_exec=False))
@@ -39,6 +40,22 @@ class CodeEditManyTests(unittest.TestCase):
     def entry(path, original, replacement, expected_hash=None):
         return {"file_path": path, "old_text": original, "new_text": replacement,
                 "expected_sha256": expected_hash or sha(original), "expected_count": 1}
+
+    def test_fixture_lf_bytes_survive_windows_text_writer(self):
+        """Reproduce Windows CRLF translation without changing host OS."""
+        from unittest import mock
+
+        def windows_text_writer(path, text, encoding="utf-8", **kwargs):
+            return path.write_bytes(text.replace("\n", "\r\n").encode(encoding))
+
+        fixture = CodeEditManyTests("test_two_surgical_edits_in_one_durable_operation")
+        with mock.patch.object(Path, "write_text", windows_text_writer):
+            fixture.setUp()
+        try:
+            self.assertEqual(fixture.first.read_bytes(), b"return a - b\n")
+            self.assertEqual(fixture.second.read_bytes(), b"return x - y\n")
+        finally:
+            fixture.tearDown()
 
     def test_two_surgical_edits_in_one_durable_operation(self):
         first = self.entry("first.py", "return a - b", "return a + b",
