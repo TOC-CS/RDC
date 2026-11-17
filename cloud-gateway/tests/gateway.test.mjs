@@ -37,10 +37,10 @@ class R2 {
   async get(key){this.gets++;const body=this.objects.get(key);return body===undefined?null:{size:Buffer.byteLength(body),text:async()=>body}}
   async delete(keys){this.deletes++;for(const key of Array.isArray(keys)?keys:[keys])this.objects.delete(key)}
 }
-function setup(limits={},testCatalog=catalog,waitHook=async()=>{}) {
+function setup(limits={},testCatalog=catalog,waitHook=async()=>{},chatRouter=null) {
   let now=1700000000000;
   const env={DB:new D1(),BUCKET:new R2(),RDC_DEVICE_ID:DEVICE,RDC_DEVICE_SECRET:KEY,RDC_OWNER_BOOTSTRAP:'private-site'};
-  const gateway=createGateway({catalog:testCatalog,resourceHtml:'<!doctype html><html>Real embedded resource fixture</html>',iconDataUri:'data:image/png;base64,eA==',clock:()=>now,sleep:async ms=>{now+=ms;await waitHook()},limits:{callWaitMs:0,pollWaitMs:0,...limits}});
+  const gateway=createGateway({catalog:testCatalog,resourceHtml:'<!doctype html><html>Real embedded resource fixture</html>',iconDataUri:'data:image/png;base64,eA==',clock:()=>now,sleep:async ms=>{now+=ms;await waitHook()},limits:{callWaitMs:0,pollWaitMs:0,...limits},chatRouter});
   const request=(path,body,headers={})=>new Request('https://rdc.example'+path,{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body)});
   const mcp=async(name,args={},owner='owner-1')=>{
     const response=await gateway.mcp(request('/mcp',{jsonrpc:'2.0',id:'call',method:'tools/call',params:{name,arguments:args}}, owner?{'oai-authenticated-user-id':owner}:{}),env);
@@ -1141,4 +1141,89 @@ test('RDC chat session status fails closed if metadata or private HMAC key is un
   const incomplete=await call({'openai/subject':'user'});
   assert.equal(incomplete.value.available,false);
   assert.equal(incomplete.value.reason,'CHAT_CONTEXT_UNAVAILABLE');
+});
+
+test('ChatGPT communication tool catalog is callable but denies enrollment when bridge is missing',async()=>{
+  const s=setup();
+  const list=await s.gateway.mcp(s.request('/mcp',{jsonrpc:'2.0',id:'list-bridge',method:'tools/list'}),s.env);
+  const tools=(await list.json()).result.tools;
+  const expected=['rdc_chat_inbox','rdc_chat_send','rdc_chat_reply','rdc_chat_ack',
+    'rdc_chat_create','rdc_chat_wake','rdc_chat_cross_project_send','rdc_chat_route_status'];
+  for(const name of expected)assert.ok(tools.some(x=>x.name===name),'missing '+name);
+  const call=async(name,args)=>{
+    const response=await s.gateway.mcp(s.request('/mcp',{
+      jsonrpc:'2.0',id:'unavailable',method:'tools/call',
+      params:{name,arguments:args,_meta:{'openai/subject':'test-owner','openai/session':'synthetic-chat'}}
+    },{'oai-authenticated-user-id':'owner-1'}),s.env);
+    return {status:response.status,body:await response.json()};
+  };
+  const absent=await call('rdc_chat_inbox',{limit:4});
+  assert.equal(absent.status,200);
+  assert.equal(absent.body.result.isError,true);
+  assert.equal(absent.body.result.structuredContent.error.code,'chat_bridge_not_enrolled');
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,0);
+  const noKey=await call('rdc_chat_send',{target_session:'verified-B',text:'Hello'});
+  assert.equal(noKey.status,400);
+  const fakeSource=await call('rdc_chat_send',{target_session:'verified-B',text:'Hello',
+    source_project:'atlas',_rdc_request_id:'stable-1'});
+  assert.equal(fakeSource.status,400);
+});
+
+test('Authenticated host adapter receives exact sender metadata and stable request IDs, not model-supplied identity',async()=>{
+  const records=[];
+  const adapter={async invoke(call){
+    records.push(call);
+    return {ok:true,receipt:{message_id:'fixture-receipt-1',state:'QUEUED'}};
+  }};
+  const s=setup({},catalog,async()=>{},adapter);
+  const body={jsonrpc:'2.0',id:'host-accepted',method:'tools/call',
+    params:{name:'rdc_chat_send',arguments:{target_session:'bound-recipient',text:'Send update',
+      _rdc_request_id:'one-idempotent-request'},
+      _meta:{'openai/subject':'owner-scope','openai/session':'chat-A'}}};
+  const response=await s.gateway.mcp(s.request('/mcp',body,{'oai-authenticated-user-id':'owner-1'}),s.env);
+  const parsed=await response.json();
+  assert.equal(response.status,200);
+  assert.equal(parsed.result.structuredContent.receipt.state,'QUEUED');
+  assert.equal(records.length,1);
+  assert.equal(records[0].name,'rdc_chat_send');
+  assert.equal(records[0].request_key,'one-idempotent-request');
+  assert.equal(records[0].principal,'owner-1');
+  assert.equal(records[0].meta['openai/session'],'chat-A');
+  assert.equal(records[0].args.target_session,'bound-recipient');
+  assert.equal(records[0].args._rdc_request_id,undefined);
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,0);
+});
+
+test('Independent Atlas routing cannot be enabled by model arguments or an unavailable broker',async()=>{
+  const requested=[];
+  let independentlyApproved=false;
+  const adapter={async invoke(call){
+    requested.push(call);
+    if(call.name==='rdc_chat_cross_project_send' && !independentlyApproved){
+      return {ok:false,error:{code:'cross_project_denied',message:'Independent Atlas grant absent'}};
+    }
+    return {ok:true,receipt:{state:'QUEUED',message_id:'route-fixture-id'}};
+  }};
+  const s=setup({},catalog,async()=>{},adapter);
+  const doRoute=async(args)=>{
+    const response=await s.gateway.mcp(s.request('/mcp',{
+      jsonrpc:'2.0',id:'cross',method:'tools/call',
+      params:{name:'rdc_chat_cross_project_send',arguments:args,
+        _meta:{'openai/subject':'owner','openai/session':'session-A'}}
+    },{'oai-authenticated-user-id':'owner-1'}),s.env);
+    return {status:response.status,result:(await response.json()).result};
+  };
+  const fields={target_project:'bandmates',target_session:'bandmates-session',
+    text:'Request status',_rdc_request_id:'cross-1'};
+  const denied=await doRoute(fields);
+  assert.equal(denied.status,200);
+  assert.equal(denied.result.isError,true);
+  assert.equal(denied.result.structuredContent.error.code,'cross_project_denied');
+  const spoof=await doRoute({...fields,authorized:true});
+  assert.equal(spoof.status,400);
+  independentlyApproved=true;
+  const ready=await doRoute({...fields,_rdc_request_id:'cross-2'});
+  assert.equal(ready.result.isError,false);
+  assert.equal(ready.result.structuredContent.receipt.state,'QUEUED');
+  assert.equal(requested.length,2);
 });

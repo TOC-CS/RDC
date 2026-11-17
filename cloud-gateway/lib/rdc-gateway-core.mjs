@@ -110,7 +110,7 @@ async function readBody(request,max){
   }finally{reader.releaseLock();}
 }
 
-export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,sleep=sleepDefault,limits={}}){
+export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,sleep=sleepDefault,limits={},chatRouter=null}){
   const L={...DEFAULTS,...limits};
   const sourceTools=new Map(catalog.map(item=>[item.name,item]));
   const tools=catalog.map(item=>{
@@ -135,6 +135,36 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
   tools.push({name:'rdc_chat_session_status',description:'Check whether this authenticated ChatGPT tool call supplies a bounded conversation identity. Return a pseudonymous ID only. Does not enroll a native ChatGPT Project or create/wake other chats.',
     inputSchema:{type:'object',properties:{},additionalProperties:false},
     annotations:{readOnlyHint:true,idempotentHint:true,destructiveHint:false,openWorldHint:false}});
+  const chatOps=[
+    {name:'rdc_chat_inbox',description:'Read up to 20 pending messages for the host-authenticated, independently project-enrolled conversation. No browser takeover.',required:[],properties:{cursor:{type:'string',maxLength:200},limit:{type:'integer',minimum:1,maximum:20}}},
+    {name:'rdc_chat_send',description:'Send one durable message to an independently verified recipient in the same authorized project.',required:['target_session','text','_rdc_request_id'],properties:{target_session:{type:'string',minLength:1,maxLength:128},text:{type:'string',minLength:1,maxLength:3000}}},
+    {name:'rdc_chat_reply',description:'Reply once to an observed message, preserving causation and root conversation ID.',required:['parent_id','text','_rdc_request_id'],properties:{parent_id:{type:'string',minLength:1,maxLength:128},text:{type:'string',minLength:1,maxLength:3000}}},
+    {name:'rdc_chat_ack',description:'Acknowledge an exact recipient message only after observed delivery.',required:['message_id','_rdc_request_id'],properties:{message_id:{type:'string',minLength:1,maxLength:128}}},
+    {name:'rdc_chat_create',description:'Request a new conversation under a one-time project grant, only through an authorized host with readback.',required:['provider','_rdc_request_id'],properties:{provider:{type:'string',minLength:1,maxLength:64}}},
+    {name:'rdc_chat_wake',description:'Request an approved wake signal for a safe idle chat; never assume a model resumed.',required:['target_session','_rdc_request_id'],properties:{target_session:{type:'string',minLength:1,maxLength:128}}},
+    {name:'rdc_chat_route_status',description:'Read independently approved Atlas cross-project route capability without attempting delivery.',required:[],properties:{}},
+    {name:'rdc_chat_cross_project_send',description:'Submit a durable message through an independently approved Atlas route only; no direct BusStore bypass.',required:['target_project','target_session','text','_rdc_request_id'],properties:{target_project:{type:'string',enum:['atlas','rdc','bandmates','presentation']},target_session:{type:'string',minLength:1,maxLength:128},text:{type:'string',minLength:1,maxLength:3000}}},
+  ];
+  const chatOpsByName=new Map(chatOps.map(x=>[x.name,x]));
+  for(const op of chatOps){
+    const mutating=op.required.includes('_rdc_request_id');
+    tools.push({name:op.name,description:op.description,inputSchema:{type:'object',properties:{...op.properties,...(mutating?{_rdc_request_id:{type:'string',minLength:1,maxLength:200}}:{})},required:op.required,additionalProperties:false},annotations:{readOnlyHint:!mutating,idempotentHint:!mutating,destructiveHint:mutating,openWorldHint:true}});
+  }
+  function validateChatOp(name,args){
+    const op=chatOpsByName.get(name);
+    if(!op)return;
+    if(!object(args))fail(400,'invalid_arguments','Chat tool arguments must be a JSON object.');
+    const spec=tools.find(x=>x.name===name).inputSchema;
+    for(const field of Object.keys(args)){
+      const p=spec.properties[field];
+      if(!p)fail(400,'invalid_arguments','Unknown chat operation argument.');
+      const v=args[field];
+      if(p.type==='string'){
+        if(typeof v!=='string'||(p.minLength!==undefined&&v.length<p.minLength)||v.length>(p.maxLength??32000)||(p.enum&&!p.enum.includes(v)))fail(400,'invalid_arguments','Invalid chat operation text field.');
+      }else if(p.type==='integer'&&(!Number.isInteger(v)||v<(p.minimum??0)||v>(p.maximum??Number.MAX_SAFE_INTEGER)))fail(400,'invalid_arguments','Invalid chat operation numeric field.');
+    }
+    for(const field of op.required)if(!Object.hasOwn(args,field))fail(400,'request_id_required','Missing required chat operation field.');
+  }
   const serverInfo={name:'rdc',title:'RDC',version:'0.1.0a8',description:'Independent agent workspace with an embedded live preview.',
     ...(iconDataUri?{icons:[{src:iconDataUri,mimeType:'image/png',sizes:['192x192']}]}:{})};
   const capabilities={tools:{listChanged:false},resources:{subscribe:false,listChanged:false},extensions:{[UI_EXTENSION]:{}}};
@@ -373,6 +403,27 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
               fail(400,'invalid_arguments','diagnostics must be a boolean.');
             const operation=await getOperation(params.arguments.operation_id,principal,env);
             response=diagnostics===true?toolResult(operationDiagnostics(operation)):await operationResult(operation,env);
+          }else if(chatOpsByName.has(params.name)){
+            const args=params.arguments??{};
+            validateChatOp(params.name,args);
+            if(!chatRouter||typeof chatRouter.invoke!=='function'){
+              response=toolFailure('chat_bridge_not_enrolled','No authenticated live ChatGPT project/Atlas messenger has been installed. The request was not sent.');
+            }else{
+              const copy={...args};delete copy._rdc_request_id;
+              try{
+                // Never trust _meta as an independent project grant. The
+                // injected host broker must verify session origin, project
+                // enrollment, per-project approval, exact recipient and its
+                // own durable no-replay receipt before any side effect.
+                const outcome=await chatRouter.invoke({name:params.name,args:copy,
+                  request_key:args._rdc_request_id??null,principal,meta:params._meta??null});
+                if(!object(outcome)||typeof outcome.ok!=='boolean')
+                  response=toolFailure('chat_broker_invalid','Chat broker returned no validated delivery result.');
+                else response=toolResult(outcome,outcome.ok!==true);
+              }catch{
+                response=toolFailure('chat_broker_unavailable','Chat broker could not verify or perform this operation. No automatic replay will be attempted.');
+              }
+            }
           }else response=await dispatch(params.name,params.arguments??{},principal,env);
           break;
         }

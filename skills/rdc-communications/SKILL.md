@@ -35,6 +35,12 @@ RDC and Desktop Commander (DC) share the same project-scoped create/wake permiss
 
 The communication skill and code are intended for **public GitHub** availability and a future public ChatGPT plugin listing. **Public release remains on hold** until real in-model chat delivery, project membership, create/wake, and operational recovery have been verified. Publishing source and making the actual app discoverable are separate steps; public distribution requires review and must exclude credentials and private user data. Installation alone does not enroll an actual chat account or grant browser access.
 
+## Authenticated ChatGPT messaging and Atlas management routing
+
+The RDC candidate now includes typed, **not deployed** MCP messaging tool schemas for inbox, send, reply, acknowledgment, create, wake and routing. Read the [live chat interface](references/live-chat-interface.md). Its installed ChatGPT skill does not independently activate a new Site tool. A real authenticated project membership resolver and durable no-replay host adapter are mandatory before an actual ChatGPT conversation may receive or send. Default to denying an unenrolled route.
+
+For central Atlas management, use only the independently approved cross-project dispatcher contract described in [cross-project routing](references/cross-project-routing.md). Current Atlas Bus v1 continues returning `CROSS_PROJECT_DENIED` until the Atlas project owner accepts a specifically authorized route. Grant direction matters: manager requests and recipient replies are separately controlled. A same-project one-time message/create/wake grant never authorizes communication with all other projects. The live sender-to-recipient acknowledgement and **reply readback** test remains open. No competing bus or alternate manager is created.
+
 ## 1. Message bus
 
 Use the existing Atlas Build Communication Bus protocol `atlas.bus.message.v1` as the durable delivery contract. Never invent a second production coordination queue. Bind the source principal from authenticated client enrollment, select the exact destination and project, retain `message_id`, `correlation_id`, `causation_id` and `idempotency_key`. Queue, claim, adapter fetch, recipient acknowledgement and observed action confirmation are distinct states. Respect TTL, bounded replies, hop limits, recipient authorization and the present cross-project default deny.
