@@ -624,3 +624,54 @@ test('claimed completion probes stay bounded and never increase queued idle chec
   assert.equal(unclaimed.body.result.structuredContent.pending,true);
   assert.deepEqual(queuedIntervals,[500,500,500],'Unclaimed commands must retain all original idle poll intervals');
 });
+
+test('explicit owner-only operation diagnostics reveal transport phases without request data',async()=>{
+  const s=setup();await s.poll({claim:false});
+  const args={value:'private-argument-must-stay-hidden',_rdc_request_id:'diagnostic-owned-operation'};
+  const queued=await s.mcp('rdc_file_write',args);
+  assert.equal(queued.status,200);
+  const operation_id=queued.body.result.structuredContent.operation_id;
+  const catalogResponse=await s.gateway.mcp(s.request('/mcp',{jsonrpc:'2.0',id:1,method:'tools/list'}),s.env);
+  const advertised=(await catalogResponse.json()).result.tools.find(x=>x.name==='rdc_operation_status');
+  assert.equal(advertised.inputSchema.properties.diagnostics.type,'boolean');
+
+  s.advance(375);
+  const waiting=await s.mcp('rdc_operation_status',{operation_id,diagnostics:true});
+  assert.equal(waiting.status,200);
+  assert.deepEqual(waiting.body.result.structuredContent,{
+    ok:true,diagnostics:true,operation_id,tool:'rdc_file_write',state:'queued',
+    elapsed_ms:375,queue_age_ms:375,queue_wait_ms:null,inflight_age_ms:null,
+    claim_to_result_ms:null,completed_age_ms:null
+  });
+  assert.ok(!JSON.stringify(waiting.body).includes(args.value),'Never reveal queued request arguments');
+  assert.equal((await s.mcp('rdc_operation_status',{operation_id,diagnostics:true},'another-user')).status,403);
+
+  const op=(await s.poll()).body.operation;
+  assert.equal(op.operation_id,operation_id);
+  s.advance(80);
+  assert.equal((await s.complete(op,result('done'))).status,200);
+  s.advance(15);
+  const finished=await s.mcp('rdc_operation_status',{operation_id,diagnostics:true});
+  assert.ok(!JSON.stringify(finished.body).includes('private-argument-must-stay-hidden'));
+  assert.ok(!JSON.stringify(finished.body).includes('done'),'Diagnostic status must not fetch stored worker results');
+  assert.deepEqual(finished.body.result.structuredContent,{
+    ok:true,diagnostics:true,operation_id,tool:'rdc_file_write',state:'completed',
+    elapsed_ms:470,queue_age_ms:null,queue_wait_ms:375,inflight_age_ms:null,
+    claim_to_result_ms:80,completed_age_ms:15
+  });
+  assert.equal((await s.mcp('rdc_operation_status',{operation_id})).body.result.structuredContent.value,'done');
+});
+
+test('cloud diagnostics reject invalid switches without altering operation recovery',async()=>{
+  const s=setup();await s.poll({claim:false});
+  const queued=await s.mcp('rdc_file_write',{value:'x',_rdc_request_id:'diagnostics-validation'});
+  const operation_id=queued.body.result.structuredContent.operation_id;
+  for(const diagnostics of ['true',1,null,{},[]]){
+    const denied=await s.mcp('rdc_operation_status',{operation_id,diagnostics});
+    assert.equal(denied.status,400);
+    assert.equal(denied.body.error.data.code,'invalid_arguments');
+  }
+  const ordinary=await s.mcp('rdc_operation_status',{operation_id});
+  assert.equal(ordinary.body.result.structuredContent.pending,true);
+  assert.equal((await s.poll()).body.operation.operation_id,operation_id);
+});
