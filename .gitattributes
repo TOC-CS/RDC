@@ -1,0 +1,5 @@
+# Preserve exact embedded-resource and historical regression bytes on Windows.
+# The public source snapshots use LF, and the generated JSON embeds that HTML.
+/cloud-gateway/lib/rdc-assets.json text eol=lf
+/rdc/embedded/preview.html text eol=lf
+/cloud-gateway/tests/fixtures/rdc-gateway-core-v16.mjs text eol=lf
