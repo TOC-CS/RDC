@@ -20,9 +20,32 @@ const result = value => ({content:[{type:'text',text:value}],structuredContent:{
 class D1 {
   constructor() {
     this.sqlite = new DatabaseSync(':memory:');
+    this.batchChain=Promise.resolve();
     for(const name of readdirSync(new URL('../drizzle/', import.meta.url)).filter(x=>x.endsWith('.sql')).sort()) {
       this.sqlite.exec(readFileSync(new URL('../drizzle/'+name,import.meta.url),'utf8'));
     }
+  }
+  async batch(statements) {
+    // Serialize transactions to match the D1 batch guarantee during
+    // concurrent authenticated device polls in these contracts.
+    const run=async()=>{
+      this.sqlite.exec('BEGIN');
+      try {
+        const results=[];
+        for(const statement of statements) {
+          const data=await statement.all();
+          results.push({success:true,meta:{},results:data.results});
+        }
+        this.sqlite.exec('COMMIT');
+        return results;
+      } catch(error) {
+        this.sqlite.exec('ROLLBACK');
+        throw error;
+      }
+    };
+    const pending=this.batchChain.then(run,run);
+    this.batchChain=pending.catch(()=>{});
+    return pending;
   }
   prepare(sql) {
     const db=this.sqlite;
@@ -143,6 +166,40 @@ test('connection status omits maintenance writes and ignores expired queued item
 });
 
 
+
+test('P0 first queue pickup batches heartbeat and authoritative claim in one D1 roundtrip',async()=>{
+  const s=setup({pollWaitMs:0,callWaitMs:0});
+  await s.poll({claim:false});
+  const issued=await s.mcp('rdc_file_write',{value:'one',
+    _rdc_request_id:'p0-batched-heartbeat-claim'});
+  assert.equal(issued.status,200);
+  const actualBatch=s.env.DB.batch;
+  assert.equal(typeof actualBatch,'function','the fixture must support D1 atomic batch');
+  let batches=0;
+  s.env.DB.batch=async function(statements){
+    batches++;
+    assert.equal(statements.length,2,'one heartbeat update plus original guarded claim');
+    return actualBatch.call(s.env.DB,statements);
+  };
+  const claim=await s.poll();
+  assert.equal(claim.status,200);
+  assert.ok(claim.body.operation,'conditional D1 claim still supplies original operation');
+  assert.equal(batches,1,'heartbeat and first D1 claim must use one batch call');
+  assert.equal((await s.complete(claim.body.operation)).status,200);
+});
+
+test('P0 queue pickup retains safe two-step fallback without batch support',async()=>{
+  const s=setup({pollWaitMs:0,callWaitMs:0});
+  await s.poll({claim:false});
+  await s.mcp('rdc_file_write',{value:'same',_rdc_request_id:'p0-batch-not-supported'});
+  s.env.DB.batch=undefined;
+  const claim=await s.poll();
+  assert.equal(claim.status,200);
+  assert.ok(claim.body.operation,'D1 prepare+first fallback must still claim once');
+  assert.equal((await s.complete(claim.body.operation)).status,200);
+  assert.equal((await s.poll()).body.operation,null,'fallback never replays the original');
+});
+
 test('P0 queue pickup bypasses retention cleanup before claiming already-queued work',async()=>{
   const s=setup({pollWaitMs:0});
   await s.poll({claim:false});
@@ -199,6 +256,45 @@ test('normal cloud dispatch checks worker liveness without a status COUNT query'
 });
 
 
+
+
+test('P0 fresh dispatch needs no preliminary operation SELECT before atomic admission',async()=>{
+  const s=setup({callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  const sql=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=query=>{sql.push(query);return original(query);};
+  const issued=await s.mcp('rdc_file_write',{value:'test-once',
+    _rdc_request_id:'p0-no-prelookup-first-time'});
+  assert.equal(issued.status,200);
+  assert.equal(issued.body.result.structuredContent.pending,true);
+  assert.equal(sql.filter(q=>q.includes('SELECT * FROM gateway_operations WHERE principal=? AND device_id=? AND request_key=?')).length,0,
+    'healthy first dispatch must not wait for a separate D1 duplicate-key SELECT');
+  assert.equal(sql.filter(q=>q.includes('INSERT INTO gateway_operations')).length,1,
+    'normal new request still requires exactly one atomic D1 insertion');
+  const operation=(await s.poll()).body.operation;
+  assert.ok(operation);
+  assert.equal((await s.complete(operation)).status,200);
+});
+
+test('P0 exact duplicate recovers existing mutation when device later goes offline',async()=>{
+  const s=setup({onlineMs:1000,callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  const args={value:'retain',_rdc_request_id:'p0-duplicate-offline'};
+  const first=await s.mcp('rdc_file_write',args);
+  const id=first.body.result.structuredContent.operation_id;
+  assert.ok(id);
+  s.advance(1001);
+  const duplicate=await s.mcp('rdc_file_write',args);
+  assert.equal(duplicate.status,200);
+  assert.equal(duplicate.body.result.structuredContent.operation_id,id,
+    'offline status must not hide an already admitted original mutation');
+  assert.equal(duplicate.body.result.structuredContent.status,'queued');
+  const changed=await s.mcp('rdc_file_write',{...args,value:'different'});
+  assert.equal(changed.status,409,'different arguments must conflict on the original durable ID');
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,1,
+    'only the original durable mutation exists');
+});
 
 test('P0 healthy first-time dispatch skips maintenance writes before durable admission',async()=>{
   const s=setup({pollWaitMs:0});
@@ -1604,6 +1700,52 @@ test('P0 latency: per-request gateway binding factory wakes the private device n
   assert.equal(JSON.stringify(paths).includes('PRIVATE-CONTENT'),false);
 });
 
+
+
+test('P0 small result commits without a preliminary D1 SELECT, with claim identity checked atomically',async()=>{
+  const s=setup({callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  const pending=await s.mcp('rdc_file_write',{value:'safe result',
+    _rdc_request_id:'p0-result-one-update'});
+  const operation=(await s.poll()).body.operation;
+  const queries=[];
+  const prepare=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=sql=>{queries.push(sql);return prepare(sql)};
+  const finish=await s.complete(operation,result('fast response'));
+  assert.equal(finish.status,200);
+  assert.equal(finish.body.duplicate,false);
+  assert.equal(queries.filter(q=>q.includes('SELECT * FROM gateway_operations WHERE id=? AND device_id=?')).length,0,
+    'short successful result should not need a separate D1 lookup');
+  const update=queries.filter(q=>q.includes("UPDATE gateway_operations SET state='completed'"));
+  assert.equal(update.length,1);
+  assert.ok(update[0].includes('claim_id=?')&&update[0].includes('request_sha256=?'),
+    'atomic result update must compare exact original claim and SHA before storing the answer');
+  assert.equal(s.env.BUCKET.puts,0);
+  const recovered=await s.mcp('rdc_operation_status',{operation_id:operation.operation_id});
+  assert.equal(recovered.body.result.structuredContent.value,'fast response');
+  assert.equal(pending.status,200);
+});
+
+test('P0 forged fast-inline result cannot commit or alter valid claimed operation',async()=>{
+  const s=setup({callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  await s.mcp('rdc_file_write',{value:'original',_rdc_request_id:'p0-forged-result'});
+  const op=(await s.poll()).body.operation;
+  const forged=async(fields)=>{
+    const response=await s.gateway.result(s.request('/device/result',{
+      device_id:DEVICE,operation_id:op.operation_id,claim_id:op.claim_id,
+      request_sha256:op.request_sha256,result_json:JSON.stringify(result('forged')),
+      ...fields,
+    },{'X-RDC-Device-Key':KEY}),s.env);
+    return {status:response.status,body:await response.json()};
+  };
+  assert.equal((await forged({claim_id:'wrong-claim-id'})).body.error.code,'claim_mismatch');
+  assert.equal((await forged({request_sha256:'0'.repeat(64)})).body.error.code,'claim_mismatch');
+  assert.equal(s.env.DB.sqlite.prepare('SELECT state FROM gateway_operations WHERE id=?')
+    .get(op.operation_id).state,'claimed');
+  assert.equal((await s.complete(op,result('legitimate'))).body.duplicate,false);
+  assert.equal((await forged({})).body.error.code,'result_conflict');
+});
 
 test('P0 latency: result upload wakes the waiting original cloud tool without a 500ms sweep',async()=>{
   let registration, deliverResult, resultSignalCount=0, expectedOperation=null;

@@ -363,19 +363,26 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     if(requestSize>L.maxRequestBytes)fail(413,'arguments_too_large','Tool arguments exceed the gateway limit.');
     const digest=await sha256(requestJson);
     const key=requestKey??crypto.randomUUID();
-    let op=await env.DB.prepare('SELECT * FROM gateway_operations WHERE principal=? AND device_id=? AND request_key=?').bind(principal,env.RDC_DEVICE_ID,key).first();
-    if(op){
-      if(op.request_sha256!==digest)fail(409,'request_id_conflict','This request ID already belongs to different arguments.');
-      const dueRetirement=(op.state==='completed'&&op.result_expires_ms!==null&&
-          op.result_expires_ms!==undefined&&op.result_expires_ms<=clock())||
-        (op.state==='queued'&&op.expires_ms<=clock())||
-        (op.state==='claimed'&&op.claimed_ms!==null&&op.claimed_ms<=clock()-L.unknownMs);
+    // Successful first-time requests go straight to one durable conditional
+    // D1 INSERT. Only a refused INSERT needs the duplicate-key SELECT.
+    // The unique request key and original hash remain the idempotency guard.
+    async function recoverExisting(){
+      let existing=await env.DB.prepare('SELECT * FROM gateway_operations WHERE principal=? AND device_id=? AND request_key=?')
+        .bind(principal,env.RDC_DEVICE_ID,key).first();
+      if(!existing)return null;
+      if(existing.request_sha256!==digest)
+        fail(409,'request_id_conflict','This request ID already belongs to different arguments.');
+      const dueRetirement=(existing.state==='completed'&&existing.result_expires_ms!==null&&
+          existing.result_expires_ms!==undefined&&existing.result_expires_ms<=clock())||
+        (existing.state==='queued'&&existing.expires_ms<=clock())||
+        (existing.state==='claimed'&&existing.claimed_ms!==null&&existing.claimed_ms<=clock()-L.unknownMs);
       if(dueRetirement){
         await clean(env);
-        op=await getOperation(op.id,principal,env);
+        existing=await getOperation(existing.id,principal,env);
       }
-      return operationResult(op,env);
+      return operationResult(existing,env);
     }
+    let op=null;
     const unavailable=(code,message)=>name==='rdc_preview_open'?
       toolResult({ok:true,preview_unavailable:true,preview_status:code,message,device_id:env.RDC_DEVICE_ID}):toolFailure(code,message);
     // New admissions check liveness atomically inside the same D1 INSERT
@@ -399,6 +406,8 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         env.RDC_DEVICE_ID,env.RDC_DEVICE_ID,L.maxResultBytes,L.maxStoredResultBytes).first();
     op=await admit();
     if(!op){
+      const existing=await recoverExisting();
+      if(existing)return existing;
       // Only the failed admission pays for retention maintenance. Retry the
       // EXACT SAME durable operation once after expired queue/claim/result
       // rows are retired, without resubmitting any local worker action.
@@ -430,9 +439,9 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       try{await notifier.notify(env.RDC_DEVICE_ID)}catch{}
     }
     if(!op){
-      op=await env.DB.prepare('SELECT * FROM gateway_operations WHERE principal=? AND device_id=? AND request_key=?').bind(principal,env.RDC_DEVICE_ID,key).first();
-      if(!op)return unavailable('gateway_busy','The relay has reached its bounded backlog or retention capacity. No operation was queued.');
-      if(op.request_sha256!==digest)fail(409,'request_id_conflict','This request ID already belongs to different arguments.');
+      const existing=await recoverExisting();
+      if(existing)return existing;
+      return unavailable('gateway_busy','The relay has reached its bounded backlog or retention capacity. No operation was queued.');
     }
     // Bootstrap the UI immediately after durable admission. Its existing
     // operation-status polling recovers this same observation without replay.
@@ -556,22 +565,39 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       if(body.claim!==undefined&&typeof body.claim!=='boolean')fail(400,'invalid_request','claim must be a boolean.');
       if(body.observation_only!==undefined&&typeof body.observation_only!=='boolean')fail(400,'invalid_request','observation_only must be a boolean.');
       if(body.observation_only===true&&body.claim===false)fail(400,'invalid_request','An observer poll must claim an activity observation.');
-      await env.DB.prepare('INSERT INTO gateway_device(id,last_seen_ms) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET last_seen_ms=excluded.last_seen_ms').bind(env.RDC_DEVICE_ID,clock()).run();
+      const heartbeat=env.DB.prepare('INSERT INTO gateway_device(id,last_seen_ms) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET last_seen_ms=excluded.last_seen_ms').bind(env.RDC_DEVICE_ID,clock());
       // The original D1 claim is safe without a cleanup sweep: expired queue
       // rows are excluded by expires_ms. Complete work FIRST when it exists.
       // Heartbeat-only polls update liveness but never claim or retire work.
       // A primary empty poll performs bounded retention maintenance below.
       const stop=clock()+(body.claim===false||body.observation_only===true?0:L.pollWaitMs);
       let op=null, wakeHintCount=0;
+      if(body.claim===false)await heartbeat.run();
+      let firstClaim=true;
       if(body.claim!==false){
         do{
           const now=clock();
           // UUID order is random; the rowid table preserves admission order
           // when multiple queued operations share the same timestamp.
-          op=await env.DB.prepare(`UPDATE gateway_operations SET state='claimed',claim_id=?,claimed_ms=?
+          const claimStatement=env.DB.prepare(`UPDATE gateway_operations SET state='claimed',claim_id=?,claimed_ms=?
             WHERE id=(SELECT id FROM gateway_operations WHERE device_id=? AND state='queued' AND expires_ms>?
               AND (?=0 OR (mutating=0 AND tool='rdc_preview_activity')) ORDER BY created_ms,rowid LIMIT 1)
-              AND state='queued' RETURNING *`).bind(crypto.randomUUID(),now,env.RDC_DEVICE_ID,now,body.observation_only===true?1:0).first();
+              AND state='queued' RETURNING *`).bind(crypto.randomUUID(),now,env.RDC_DEVICE_ID,now,body.observation_only===true?1:0);
+          if(firstClaim){
+            firstClaim=false;
+            if(typeof env.DB.batch==='function'){
+              // D1 batches heartbeat and claim in one transaction and network
+              // request. The conditional D1 claim remains authoritative.
+              const results=await env.DB.batch([heartbeat,claimStatement]);
+              if(!Array.isArray(results)||results.length!==2||!Array.isArray(results[1]?.results))
+                fail(503,'gateway_unavailable','The D1 claim batch returned an invalid result.');
+              op=results[1].results[0]??null;
+            }else{
+              // Older test/dev D1 adapters may lack batch support.
+              await heartbeat.run();
+              op=await claimStatement.first();
+            }
+          }else op=await claimStatement.first();
           if(op||clock()>=stop)break;
           const interval=Math.min(L.pollStepMs,stop-clock());
           const notifier=notifierFor(env);
@@ -610,20 +636,50 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       if(body.device_id!==env.RDC_DEVICE_ID)fail(403,'device_mismatch','This credential belongs to another device.');
       if(!text(body.operation_id,100)||!text(body.claim_id,100)||!text(body.request_sha256,64)||typeof body.result_json!=='string')
         fail(400,'invalid_result','An operation, claim, request hash and result_json are required.');
+      const digest=await sha256(body.result_json);
+      function validateMcpResult(){
+        let value;
+        try{value=JSON.parse(body.result_json)}
+        catch{fail(400,'invalid_result','result_json must contain valid JSON.')}
+        if(!object(value)||!Array.isArray(value.content)||value.content.length>1000||
+          (value.isError!==undefined&&typeof value.isError!=='boolean'))
+          fail(400,'invalid_result','A standard MCP CallToolResult is required.');
+      }
+      // Short results commit through one authoritative D1 statement.
+      // The claim ID and request digest are checked by the UPDATE itself,
+      // before ANY response bytes enter persistent storage. If refused, the
+      // original lookup below still distinguishes duplicate and forged uploads.
+      if(resultBytes<=L.maxInlineResultBytes){
+        validateMcpResult();
+        const now=clock();
+        const committed=await env.DB.prepare(
+          "UPDATE gateway_operations SET state='completed',completed_ms=?,result_key=NULL,"+
+          "result_inline_json=?,result_sha256=?,result_size=?,"+
+          "result_expires_ms=CASE WHEN tool IN ('rdc_preview_frame','rdc_preview_activity') THEN ? ELSE ? END,"+
+          "request_json=NULL,request_size=0 "+
+          "WHERE id=? AND device_id=? AND claim_id=? AND request_sha256=? "+
+          "AND result_sha256 IS NULL AND state IN ('claimed','unknown') RETURNING id"
+        ).bind(now,body.result_json,digest,resultBytes,
+          now+L.frameTtlMs,now+L.resultTtlMs,body.operation_id,env.RDC_DEVICE_ID,
+          body.claim_id,body.request_sha256).first();
+        if(committed){
+          const notifier=notifierFor(env);
+          if(notifier&&typeof notifier.notifyResult==='function'){
+            try{await notifier.notifyResult(env.RDC_DEVICE_ID,body.operation_id)}catch{}
+          }
+          return json({ok:true,operation_id:body.operation_id,status:'completed',duplicate:false});
+        }
+      }
       const op=await env.DB.prepare('SELECT * FROM gateway_operations WHERE id=? AND device_id=?').bind(body.operation_id,env.RDC_DEVICE_ID).first();
       if(!op)fail(404,'operation_not_found','The operation was not found.');
       if(op.claim_id!==body.claim_id||op.request_sha256!==body.request_sha256)
         fail(409,'claim_mismatch','The result does not match this claimed operation.');
-      const digest=await sha256(body.result_json);
       if(op.result_sha256){
         if(op.result_sha256!==digest)fail(409,'result_conflict','A different result is already recorded for this operation.');
         return json({ok:true,operation_id:op.id,status:'completed',duplicate:true});
       }
       if(!['claimed','unknown'].includes(op.state))fail(409,'operation_not_claimed','Only a claimed operation can receive a result.');
-      let value;try{value=JSON.parse(body.result_json)}catch{fail(400,'invalid_result','result_json must contain valid JSON.');}
-      if(!object(value)||!Array.isArray(value.content)||value.content.length>1000||
-        (value.isError!==undefined&&typeof value.isError!=='boolean'))
-        fail(400,'invalid_result','A standard MCP CallToolResult is required.');
+      validateMcpResult();
       const inline=resultBytes<=L.maxInlineResultBytes?body.result_json:null;
       const key=inline===null?`rdc-results/${env.RDC_DEVICE_ID}/${op.id}/${digest}.json`:null;
       // At most 8 KiB remains inline in the same committed D1 operation record.
