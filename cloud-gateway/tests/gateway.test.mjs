@@ -8,6 +8,8 @@ import * as GatewayCore from '../lib/rdc-gateway-core.mjs';
 import {makeBoundWakeChannel, RDCWakeSignal} from '../lib/rdc-wake.mjs';
 // Existing CI executes this file; load the DO unit contracts without changing workflows.
 import './wake-signal.test.mjs';
+// The existing CI contract runner also qualifies the opt-in private DO release config.
+import './wake-bindings-config.test.mjs';
 // Owner speed gates run on the existing three-platform CI, without modifying workflows.
 import '../../benchmarks/rdc_speed_acceptance.test.mjs';
 

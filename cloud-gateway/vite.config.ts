@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 import { readExecutionProfile } from "./scripts/execution-profile.mjs";
 import { configureToolEnvironment } from "./scripts/tool-environment.mjs";
+import { wakeBindingConfig } from "./scripts/wake-bindings.mjs";
 import { sites } from "./scripts/vite/sites-vite-plugin";
 import { connectorPreview } from "./scripts/vite/connector-preview-plugin.mjs";
 
@@ -18,6 +19,9 @@ const managedLinux = readExecutionProfile() === "managed-linux";
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
+  // Source-only, fail-closed default. The private Site owner must explicitly
+  // provision and confirm compatible rollback before enabling this build.
+  ...wakeBindingConfig({enabled:process.env.RDC_ENABLE_WAKE_BINDING==="1"}),
   d1_databases: d1
     ? [
         {
