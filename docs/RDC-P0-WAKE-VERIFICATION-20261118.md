@@ -19,7 +19,7 @@ Earlier 30 matched ChatGPT shell roundtrips: RDC v16 p50 3178ms and Desktop Comm
 - Env binding factory: red then green.
 - Completion notification: red then green.
 - New DO module: module missing red; five green, then operation-specific red followed by seven green.
-- **Node gateway suite:** 68 passed, zero failures/skips, ~0.3 seconds.
+- **Node gateway suite (latest revision):** 70 passed, zero failures/skips, 442.296 ms. Two new red-first cases exposed unbounded D1 claim/result queries under repeated spurious wake hints. Both initially failed and turned green after capping trusted wake-triggered probes at three per original gateway operation, then reverting to the existing timed D1 sweep. No new event may authorize execution or repeat a mutation.
 - **Python worker suite:** 485 tests run, 43 skipped, zero failures in 138.053 seconds (ran before the last skill wording change; updated skill-specific 4/4 passed separately).
 - **Isolated Site production build:** succeeded via the source-matching npm lockfile dependency clone.
 - **TypeScript `tsc --noEmit`:** initial error on optional wakeChannel inference, corrected to explicit WakeChannel JSDoc type, then passed.

@@ -5,9 +5,12 @@
   "result_scope": "isolated source, no private Site deployment and no live RDC/DC performance improvement claim",
   "results": {
     "gateway_tests": {
-      "passed": 68,
+      "passed": 70,
       "failed": 0,
-      "skipped": 0
+      "skipped": 0,
+      "spurious_wake_regressions": 2,
+      "spurious_wake_red_before_fix": true,
+      "wake_hint_attempt_limit_per_operation": 3
     },
     "python_suite": {
       "run": 485,

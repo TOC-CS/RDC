@@ -398,7 +398,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     // operation-status polling recovers this same observation without replay.
     if(name==='rdc_preview_open'||name==='rdc_preview_activity')return operationResult(op,env);
     const stop=clock()+Math.min(L.callWaitMs,name.startsWith('rdc_preview_')?L.previewWaitMs:L.callWaitMs);
-    let claimedFastProbes=0;
+    let claimedFastProbes=0, resultHintCount=0;
     while(op.state!=='completed'&&op.state!=='expired'&&op.state!=='unknown'&&clock()<stop){
       // Once the relay claims this operation, make at most three brief checks
       // for a fast result upload. Do not accelerate queued/idle work, and fall
@@ -407,10 +407,11 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       const interval=fastClaim?Math.min(100,L.pollStepMs):L.pollStepMs;
       if(fastClaim)claimedFastProbes++;
       const remaining=Math.min(interval,stop-clock());
-      if(notifier&&typeof notifier.waitResult==='function'){
+      if(notifier&&typeof notifier.waitResult==='function'&&resultHintCount<3){
         const started=clock();let signaled=false;
         try{signaled=(await notifier.waitResult(env.RDC_DEVICE_ID,op.id,remaining))===true}
         catch{ /* Durable result polling remains available. */ }
+        if(signaled)resultHintCount++;
         if(!signaled){
           const idle=Math.max(0,remaining-(clock()-started));
           if(idle>0)await sleep(idle);
@@ -518,7 +519,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       await env.DB.prepare('INSERT INTO gateway_device(id,last_seen_ms) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET last_seen_ms=excluded.last_seen_ms').bind(env.RDC_DEVICE_ID,clock()).run();
       await clean(env);
       const stop=clock()+(body.claim===false||body.observation_only===true?0:L.pollWaitMs);
-      let op=null;
+      let op=null, wakeHintCount=0;
       if(body.claim!==false){
         do{
           const now=clock();
@@ -531,13 +532,14 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           if(op||clock()>=stop)break;
           const interval=Math.min(L.pollStepMs,stop-clock());
           const notifier=notifierFor(env);
-          if(notifier&&typeof notifier.wait==='function'){
+          if(notifier&&typeof notifier.wait==='function'&&wakeHintCount<3){
             // Wake signals are optional hints only. The durable D1 claim
             // remains authoritative, and a missed signal still falls back
             // to the normal bounded sweep instead of losing queued work.
             const started=clock();let signaled=false;
             try{signaled=(await notifier.wait(env.RDC_DEVICE_ID,interval))===true}
             catch{ /* A disconnected notifier must not interrupt the relay. */ }
+            if(signaled)wakeHintCount++;
             if(!signaled){
               const remaining=Math.max(0,interval-(clock()-started));
               if(remaining>0)await sleep(remaining);

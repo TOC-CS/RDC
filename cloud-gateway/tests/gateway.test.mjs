@@ -1523,3 +1523,46 @@ test('P0 latency: result upload wakes the waiting original cloud tool without a 
   assert.equal((await s.complete(claim.body.operation,result('RESULT_OK'))).body.duplicate,true);
   assert.equal(resultSignalCount,1,'duplicate result uploads never generate new notifications');
 });
+
+
+test('P0 hardening: repeated empty wake signals cannot spin unbounded D1 claims',async()=>{
+  let wakeCalls=0,claimProbes=0;
+  const wakeChannel={
+    async wait(){
+      wakeCalls++;
+      return wakeCalls<=18;
+    },
+    async notify(){}
+  };
+  const s=setup({pollWaitMs:1000,pollStepMs:500},catalog,async()=>{},null,wakeChannel);
+  await s.poll({claim:false});
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=sql=>{
+    if(/UPDATE gateway_operations SET state='claimed'/.test(sql))claimProbes++;
+    return original(sql);
+  };
+  const idle=await s.poll();
+  assert.equal(idle.status,200);
+  assert.equal(idle.body.operation,null);
+  assert.ok(wakeCalls<=3,'spurious signals must be capped per long poll');
+  assert.ok(claimProbes<=7,'wake spam must not produce unbounded D1 claims');
+  assert.equal(s.now(),1700000001000,'fallback eventually honors the existing poll deadline');
+});
+
+test('P0 hardening: repeated false result hints cannot spin result queries',async()=>{
+  let notifications=0;
+  const wakeChannel={
+    async notify(){},
+    async waitResult(){
+      notifications++;
+      return notifications<=18;
+    }
+  };
+  const s=setup({callWaitMs:1000,pollStepMs:500,pollWaitMs:0},catalog,async()=>{},null,wakeChannel);
+  await s.poll({claim:false});
+  const pending=await s.mcp('rdc_file_write',{value:'not claimed yet',_rdc_request_id:'p0-spurious-result'});
+  assert.equal(pending.status,200);
+  assert.equal(pending.body.result.structuredContent.pending,true);
+  assert.ok(notifications<=3,'spurious completion hints must be capped');
+  assert.equal(s.now(),1700000001000,'gateway deadline still stops waiting');
+});
