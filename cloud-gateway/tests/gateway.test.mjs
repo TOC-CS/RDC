@@ -291,9 +291,89 @@ test('normal cloud dispatch checks worker liveness without a status COUNT query'
 
 
 
+
+test('P0 owner-authorized new work performs no standalone D1 owner lookup',async()=>{
+  const s=setup({callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  const enrolled=await s.mcp('rdc_connection_status'); // existing owner pin
+  assert.equal(enrolled.status,200);
+  const sql=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=q=>{sql.push(q);return original(q);};
+  const result=await s.mcp('rdc_file_write',{value:'fast owner',
+    _rdc_request_id:'fast-owner-admitted'});
+  assert.equal(result.status,200);
+  assert.equal(result.body.result.structuredContent.pending,true);
+  assert.equal(sql.filter(q=>q.includes('SELECT principal FROM gateway_owner')).length,0,
+    'successful fresh tool dispatch must not pay an additional remote owner read');
+  const insert=sql.find(q=>q.includes('INSERT INTO gateway_operations'));
+  assert.ok(insert&&insert.includes('gateway_owner')&&insert.includes('principal=?'),
+    'atomic D1 admission must compare the EXACT pinned owner before persisting the operation');
+  assert.ok((await s.poll()).body.operation);
+});
+
+
+
+test('P0 gateway-only status stays owner-verified even if future catalog duplicates its name',async()=>{
+  // A future source catalog must never override the owner-only identity
+  // boundary of the built-in cloud connection/status tools.
+  const catalogWithDuplicate=[...catalog,plainTool('rdc_connection_status')];
+  const s=setup({callWaitMs:0,pollWaitMs:0},catalogWithDuplicate);
+  await s.poll({claim:false});
+  assert.equal((await s.mcp('rdc_recent_operation_metrics',{limit:1})).status,200);
+  const rejected=await s.mcp('rdc_connection_status',{},'other-user');
+  assert.equal(rejected.status,403);
+  assert.equal((await s.mcp('rdc_connection_status')).status,200);
+});
+
+test('P0 unauthorized malformed tool inputs are denied before request validation details',async()=>{
+  const s=setup({callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  await s.mcp('rdc_connection_status'); // Pin the actual owner.
+  const bad=await s.mcp('rdc_file_write',{value:'untrusted',_rdc_request_id:''},
+    'malicious-visitor');
+  assert.equal(bad.status,403,
+    'private owner isolation must retain its historical priority over malformed arguments');
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,0);
+});
+
+test('P0 an unrecognized account cannot store operation when fast owner path is enabled',async()=>{
+  const s=setup({callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  assert.equal((await s.mcp('rdc_connection_status')).status,200);
+  const attempt=await s.mcp('rdc_file_write',{value:'blocked',
+    _rdc_request_id:'not-the-owner'},'unrecognized-owner');
+  assert.equal(attempt.status,403);
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,0);
+  const allowed=await s.mcp('rdc_file_write',{value:'allowed',
+    _rdc_request_id:'actual-owner'});
+  assert.equal(allowed.body.result.structuredContent.pending,true);
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,1);
+});
+
+test('P0 initial owner bootstrap and a lost-response duplicate still resolve identically',async()=>{
+  const s=setup({callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  const args={value:'bootstrap',_rdc_request_id:'owner-first-enrollment'};
+  const first=await s.mcp('rdc_file_write',args);
+  assert.equal(first.status,200);
+  assert.equal(first.body.result.structuredContent.pending,true);
+  const pinned=s.env.DB.sqlite.prepare('SELECT principal FROM gateway_owner WHERE id=1').get();
+  assert.equal(pinned.principal,'owner-1');
+  const again=await s.mcp('rdc_file_write',args);
+  assert.equal(again.status,200);
+  assert.equal(again.body.result.structuredContent.operation_id,
+    first.body.result.structuredContent.operation_id);
+  assert.equal((await s.mcp('rdc_file_write',{...args,value:'different'})).status,409);
+  assert.equal((await s.mcp('rdc_file_write',args,'other-user')).status,403);
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,1);
+});
 test('P0 fresh dispatch needs no preliminary operation SELECT before atomic admission',async()=>{
   const s=setup({callWaitMs:0,pollWaitMs:0});
   await s.poll({claim:false});
+  // Warm owner enrollment is the normal already paired live Site state.
+  // First-ever enrollment remains a separate security/compatibility test.
+  assert.equal((await s.mcp('rdc_connection_status')).status,200);
   const sql=[];
   const original=s.env.DB.prepare.bind(s.env.DB);
   s.env.DB.prepare=query=>{sql.push(query);return original(query);};
