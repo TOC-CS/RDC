@@ -15,7 +15,7 @@ from mcp import types
 from rdc.relay import (
     Gateway, Journal, Operation, RelayConfig, RelayError, RelayMissingOperation, RelayPermanentError,
     RelayPump, RelayTransientError, error_result, validate_gateway_url,
-    validate_worker_url, run_relay, _worker_session,
+    validate_worker_url, run_relay, _worker_session, _idle_poll_sleep,
 )
 
 
@@ -598,11 +598,25 @@ class RelayTransportTests(unittest.TestCase):
             anyio.run(run)
             self.assertEqual(scheduled_waits[:8], [.25, .5, 1, 2, 4, 5, 5, 5])
             self.assertGreaterEqual(poll_times[8], 22, 'Eight idle polls must not remain a four-per-second loop')
-            self.assertEqual(scheduled_waits[8:10], [.25, 1.5], 'Long polls must not add the full five-second backoff, but must honor the server minimum')
-            self.assertEqual(poll_times[9] - poll_times[8], 10.25)
+            self.assertEqual(poll_times[9] - poll_times[8], 10,
+                'A ten-second gateway wait must not incur an extra quarter second')
+            self.assertEqual(poll_times[10] - poll_times[9], 10,
+                'Repeated long-poll completions must immediately re-arm the next claim')
             self.assertEqual(poll_times[11], poll_times[10], 'After work, the next claim must have no idle delay')
-            self.assertEqual(scheduled_waits[10:], [.25, 1.5, .25], 'Activity resets local delay while preserving the server minimum')
+            self.assertEqual(scheduled_waits[8:], [.25, 1.5, .25],
+                'Immediate empty replies still back off, but genuine long polls introduce no extra gap')
             self.assertEqual(worker.calls, [('rdc_fixture_write', {'text': 'hello'})] * 2)
+
+
+    def test_p0_long_poll_credits_wait_without_extra_250ms_gap(self):
+        # A server that held the connection for >= poll_after_ms has already
+        # throttled the loop. Another 250ms of local sleep delays the very
+        # next queue claim, even with a healthy worker.
+        self.assertEqual(_idle_poll_sleep(.25, .25, 10), 0)
+        self.assertEqual(_idle_poll_sleep(.25, 5, 10), 0)
+        self.assertEqual(_idle_poll_sleep(.25, 5, .15), 4.85)
+        self.assertEqual(_idle_poll_sleep(.25, 1, .01), .99)
+        self.assertEqual(_idle_poll_sleep(.25, 1, 0), 1)
 
     def test_legacy_session_delete_has_a_finite_socket_read_deadline(self):
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
