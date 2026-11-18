@@ -125,6 +125,19 @@ Do not change production transport protocols on the strength of this A/B.
 - 800ms terminal, 50ms queue pickup, 150ms claim-to-result, 1ms notification,
   one-request/800ms coding remain **all open** for live acceptance.
 
+## Real Cloudflare D1-compatible local runtime test
+
+An isolated Miniflare/workerd instance with a NEW disposable D1 database
+verified that D1 batch can atomically run a device heartbeat UPSERT and
+conditional original queue UPDATE with RETURNING. The test observed exactly
+one original operation row, the claimed state persisted and no duplicate
+claim. It was executed through the actual connected RDC tool and exited 0.
+The locally installed workerd binary supports compatibility dates only
+through 2026-05-22, so the disposable fixture used that date. It was never
+used for the real Site or source deployment; this is a local runtime contract
+test, NOT a live speed measurement. No production credentials or data
+entered this isolated D1 database.
+
 ## Additional validation and rejected experiment
 
 - Latest source-only worker gateway contract suite: **100/100 passed** via
