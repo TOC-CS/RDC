@@ -198,6 +198,35 @@ test('normal cloud dispatch checks worker liveness without a status COUNT query'
   assert.equal(queueCounts(),1,'the public status tool still reports pending_operations');
 });
 
+
+test('P0 successful dispatch folds device liveness into atomic D1 admission',async()=>{
+  const s=setup();
+  await s.poll({claim:false});
+  const sql=[];
+  const prepare=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=query=>{sql.push(query);return prepare(query);};
+  const result=await s.mcp('rdc_system_status',{_rdc_request_id:'fold-online-success'});
+  assert.equal(result.status,200);
+  assert.equal(result.body.result.structuredContent.pending,true);
+  assert.equal(sql.filter(q=>q.includes('SELECT last_seen_ms FROM gateway_device')).length,0,
+    'successful admission must avoid the standalone liveness roundtrip');
+  const insert=sql.find(q=>q.includes('INSERT INTO gateway_operations'));
+  assert.ok(insert&&insert.includes('gateway_device')&&insert.includes('last_seen_ms'),
+    'atomic INSERT must reject stale devices before durable enqueue');
+  assert.ok((await s.poll()).body.operation);
+});
+
+test('P0 atomic liveness admission rejects offline devices without queued mutations',async()=>{
+  const s=setup({onlineMs:1000});
+  await s.poll({claim:false});
+  s.advance(1001);
+  const result=await s.mcp('rdc_file_write',{value:'must not run',
+    _rdc_request_id:'fold-online-expired'});
+  assert.equal(result.status,200);
+  assert.equal(result.body.result.structuredContent.error.code,'device_offline');
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,0);
+});
+
 test('synced one-call browser startup advertises durable session setup safely',async()=>{
   const assets=JSON.parse(readFileSync(new URL('../lib/rdc-assets.json',import.meta.url),'utf8'));
   const selected=assets.catalog.find(item=>item.name==='rdc_browser_start_navigate_observe');

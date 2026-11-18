@@ -368,23 +368,29 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     }
     const unavailable=(code,message)=>name==='rdc_preview_open'?
       toolResult({ok:true,preview_unavailable:true,preview_status:code,message,device_id:env.RDC_DEVICE_ID}):toolFailure(code,message);
-    if(!(await deviceOnline(env)))return unavailable('device_offline','The paired device is offline. No operation was queued.');
+    // New admissions check liveness atomically inside the same D1 INSERT
+    // used to enforce durable backlog and byte limits. Only a failed
+    // admission needs a separate liveness query to explain why it failed.
     const id=crypto.randomUUID(),now=clock();
     const admit=()=>env.DB.prepare(`INSERT INTO gateway_operations
       (id,principal,device_id,request_key,tool,request_json,request_sha256,request_size,mutating,state,created_ms,expires_ms)
       SELECT ?,?,?,?,?,?,?,?,?, 'queued',?,?
-      WHERE (SELECT COUNT(*) FROM gateway_operations WHERE device_id=? AND state IN ('queued','claimed'))<?
+      WHERE EXISTS(SELECT 1 FROM gateway_device WHERE id=? AND last_seen_ms>=?)
+        AND (SELECT COUNT(*) FROM gateway_operations WHERE device_id=? AND state IN ('queued','claimed'))<?
         AND (SELECT COUNT(*) FROM gateway_operations WHERE device_id=?)<?
         AND (SELECT COALESCE(SUM(request_size),0) FROM gateway_operations WHERE device_id=?)+?<=?
         AND (SELECT COALESCE(SUM(result_size),0) FROM gateway_operations WHERE device_id=?)
           +((SELECT COUNT(*) FROM gateway_operations WHERE device_id=? AND state IN ('queued','claimed','unknown'))+1)*?<=?
       ON CONFLICT(principal,device_id,request_key) DO NOTHING RETURNING *`)
       .bind(id,principal,env.RDC_DEVICE_ID,key,name,requestJson,digest,requestSize,mutating?1:0,now,now+L.queueTtlMs,
+        env.RDC_DEVICE_ID,now-L.onlineMs,
         env.RDC_DEVICE_ID,L.maxBacklog,env.RDC_DEVICE_ID,L.maxOperations,
         env.RDC_DEVICE_ID,requestSize,L.maxStoredRequestBytes,
         env.RDC_DEVICE_ID,env.RDC_DEVICE_ID,L.maxResultBytes,L.maxStoredResultBytes).first();
     op=await admit();
     if(!op){
+      if(!(await deviceOnline(env)))
+        return unavailable('device_offline','The paired device is offline. No operation was queued.');
       // Capacity recovery is bounded and runs only after admission refusal.
       // Preserve every mutation, unknown execution, active job and live result.
       const usage=await env.DB.prepare('SELECT COUNT(*) AS n FROM gateway_operations WHERE device_id=?')
