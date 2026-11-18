@@ -49,3 +49,7 @@ Repeat on Claude using its own connection and model. A successful ChatGPT run do
 ## Replacement decision
 
 Use the current connector for workflows whose RDC acceptance check has not passed. RDC can replace the tested workflow once its actual device, client, browser, recovery and permission paths work reliably. Record success rate and end-to-end time on equivalent tasks before claiming a speed or reliability advantage over another product. Hosting and AI-provider costs remain separate from RDC's MIT-licensed source.
+
+## Owner-locked RDC speed qualification, November 18, 2026
+
+The five mandatory speed targets and fail-closed, live-only evidence gate are in RDC-MANDATORY-OWNER-SPEED-GATES-20261118.md. The owner requires a real median at or below 800 ms for terminal end-to-end (not merely under 900 ms), 50 ms gateway pickup, 150 ms claim-to-result, 1 ms notification, and one-request coding discovery plus selected file read within 800 ms. All are required for a 100% speed-complete result. CI policy tests do not waive live evidence requirements.

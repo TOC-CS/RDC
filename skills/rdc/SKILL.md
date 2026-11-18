@@ -9,6 +9,32 @@ Use the existing connected RDC App and its current tool schemas. Keep the user's
 
 ## Speed first: verified RDC versus Desktop Commander qualification
 
+### Locked owner acceptance, November 18, 2026
+
+RDC is **100% PERFORMANCE INCOMPLETE** until every one of these numerical
+targets passes at least 30 correct individual LIVE observations in the
+connected ChatGPT-to-RDC deployment, with matching deployed versions and
+an independently verified protected rollback. Do not claim source unit tests,
+simulations, unpublished code, or local benchmarks satisfy this rule.
+
+| Gate | Historical RDC | Hard live median goal | Reference reduction | Reference speedup |
+| --- | ---: | ---: | ---: | ---: |
+| Terminal end-to-end | ~3,400 ms | <=800 ms | 76.5% | 4.25x |
+| Gateway queue pickup | 311 ms | <=50 ms | 83.9% | 6.22x |
+| Claim-to-result | 678 ms | <=150 ms | 77.9% | 4.52x |
+| Local notification | 501.591 ms | <=1 ms | 99.8% | 501.6x |
+| Coding discovery plus selected file read | 2 cloud requests | 1 request AND <=800 ms | 50% fewer calls | Measure live time |
+
+For terminal, 800 ms is the non-negotiable acceptance target. Under 900 ms
+alone is insufficient. Store p50, p95, p99, original evidence, identical outputs,
+error counts, source SHA, worker/Site readback, and Cloudflare binding status.
+**Any missing, wrong, stale, unmatched, or failed gate blocks completion.**
+The executable gate is node benchmarks/rdc_speed_acceptance.mjs LIVE-RECEIPT.json,
+described in docs/RDC-MANDATORY-OWNER-SPEED-GATES-20261118.md. Missing receipt
+exits nonzero. Continue active engineering without any scheduled task,
+reminder, alert, or timer automation.
+
+
 The owner priority order is **speed first**, then hardening/security, then added capability, and finally a task-bound floating preview that must **auto-clear** after task completion. The floating preview may be outside ChatGPT when supported, but it must preserve the user's foreground and require an explicit exact task/session binding. This is a requirement, not a verified available viewing mode.
 
 Current connected production RDC v0.1.0a8 and private Site v16 historically run slower than Desktop Commander on matched shell calls: 30 paired correct echoes, RDC median 3178 ms, DC median 1820 ms. Any 2x RDC superiority claim requires at least 30 matching live host roundtrips per route, alternating order, p50/p95 and correctness. Local unit/engine timing does not establish that target.
