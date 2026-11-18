@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-18",
+  "scope": "Isolated source integration, production RDC private Site and worker unchanged",
+  "base_commit": "18d7992384730f0bf2bf45bcbed75cf722d60a25",
+  "integrated_capacity_source_commit": "7145b06f6479a54bd6775ca3d0c85935ee7afd2b",
+  "checks": {
+    "gateway": {
+      "pass": 73,
+      "fail": 0,
+      "skip": 0,
+      "includes": "queue wake, result completion, spurious signal caps, expiry-only journal capacity, merged admission wake"
+    },
+    "full_python": {
+      "run": 486,
+      "skipped": 43,
+      "failed": 0,
+      "duration_s": 135.001,
+      "resourceWarnings": "SQLite warnings observed",
+      "simulatedRelayWarnings": true
+    },
+    "production_build": {
+      "pass": true
+    },
+    "typecheck": {
+      "command": "tsc --noEmit",
+      "pass": true
+    },
+    "lint": {
+      "errors": 0,
+      "warnings": 1,
+      "existing_warning": "next/no-img-element"
+    },
+    "node_syntax": {
+      "pass": true
+    },
+    "live_rdc_app_smoke": {
+      "pass": true,
+      "exitCode": 0,
+      "duration_ms": 3690,
+      "kind": "ran isolated integration test through connected RDC tool; not deployed code"
+    }
+  },
+  "safety": {
+    "d1_authoritative": true,
+    "only_expired_nonmutating_payload_free_records_reclaimed": true,
+    "max_cleanup_rows": 32,
+    "identical_original_request_retried_at_most_once": true,
+    "protected_mutation_ids_retained": true,
+    "spurious_wake_cap_per_request": 3,
+    "no_signals_without_successful_admission": true,
+    "no_hosted_sso_or_site_mutation": true
+  },
+  "rollout": {
+    "live_site": "v16 held",
+    "deployed_wake_binding": false,
+    "private_rollback_version": "not verified",
+    "real_30_pair_per_workload_speed_comparison": "required after deployment",
+    "stronger_than_desktop_commander": "unproven",
+    "floating_preview_external_auto_close": "fourth priority, not implemented"
+  }
+}

@@ -370,7 +370,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       toolResult({ok:true,preview_unavailable:true,preview_status:code,message,device_id:env.RDC_DEVICE_ID}):toolFailure(code,message);
     if(!(await deviceOnline(env)))return unavailable('device_offline','The paired device is offline. No operation was queued.');
     const id=crypto.randomUUID(),now=clock();
-    op=await env.DB.prepare(`INSERT INTO gateway_operations
+    const admit=()=>env.DB.prepare(`INSERT INTO gateway_operations
       (id,principal,device_id,request_key,tool,request_json,request_sha256,request_size,mutating,state,created_ms,expires_ms)
       SELECT ?,?,?,?,?,?,?,?,?, 'queued',?,?
       WHERE (SELECT COUNT(*) FROM gateway_operations WHERE device_id=? AND state IN ('queued','claimed'))<?
@@ -383,11 +383,28 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         env.RDC_DEVICE_ID,L.maxBacklog,env.RDC_DEVICE_ID,L.maxOperations,
         env.RDC_DEVICE_ID,requestSize,L.maxStoredRequestBytes,
         env.RDC_DEVICE_ID,env.RDC_DEVICE_ID,L.maxResultBytes,L.maxStoredResultBytes).first();
+    op=await admit();
+    if(!op){
+      // Capacity recovery is bounded and runs only after admission refusal.
+      // Preserve every mutation, unknown execution, active job and live result.
+      const usage=await env.DB.prepare('SELECT COUNT(*) AS n FROM gateway_operations WHERE device_id=?')
+        .bind(env.RDC_DEVICE_ID).first();
+      if(Number(usage?.n??0)>=L.maxOperations){
+        await env.DB.prepare(`DELETE FROM gateway_operations WHERE id IN (
+          SELECT id FROM gateway_operations WHERE device_id=? AND mutating=0
+            AND result_key IS NULL AND result_inline_json IS NULL
+            AND ((state='completed' AND result_expires_ms<=?)
+              OR (state='expired' AND expires_ms<=?))
+          ORDER BY created_ms LIMIT 32)`)
+          .bind(env.RDC_DEVICE_ID,now,now).run();
+        op=await admit();
+      }
+    }
     const notifier=notifierFor(env);
     if(op&&notifier&&typeof notifier.notify==='function'){
-      // Never signal an unadmitted request or send its arguments. The D1
-      // operation record, rather than the notification, authorizes execution.
-      try{await notifier.notify(env.RDC_DEVICE_ID)}catch{ /* D1 polling remains available. */ }
+      // Signal only an actually admitted operation, including one admitted
+      // through a safe capacity retry. D1 remains the claim authority.
+      try{await notifier.notify(env.RDC_DEVICE_ID)}catch{}
     }
     if(!op){
       op=await env.DB.prepare('SELECT * FROM gateway_operations WHERE principal=? AND device_id=? AND request_key=?').bind(principal,env.RDC_DEVICE_ID,key).first();

@@ -1566,3 +1566,79 @@ test('P0 hardening: repeated false result hints cannot spin result queries',asyn
   assert.ok(notifications<=3,'spurious completion hints must be capped');
   assert.equal(s.now(),1700000001000,'gateway deadline still stops waiting');
 });
+
+test('saturated retained read-only journal recovers at admission without erasing mutation identity',async()=>{
+  const s=setup({maxOperations:2,resultTtlMs:1000,frameOperationTtlMs:5000});
+  await s.poll({claim:false});
+  const mutation=await s.mcp('rdc_file_write',{value:'preserve',_rdc_request_id:'capacity-mutation'});
+  const first=(await s.poll()).body.operation;
+  await s.complete(first,result('write completed'));
+  const observation=await s.mcp('rdc_system_status',{_rdc_request_id:'capacity-observation'});
+  const read=(await s.poll()).body.operation;
+  await s.complete(read,result('read completed'));
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,2);
+  s.advance(1001);
+  const next=await s.mcp('rdc_system_status',{_rdc_request_id:'capacity-new-read'});
+  assert.equal(next.status,200);
+  assert.equal(next.body.result.structuredContent.pending,true);
+  assert.ok((await s.poll()).body.operation);
+  const original=await s.mcp('rdc_file_write',{value:'preserve',_rdc_request_id:'capacity-mutation'});
+  assert.equal(original.body.result.structuredContent.error.code,'result_expired');
+  assert.equal(original.body.result.structuredContent.operation_id,first.operation_id);
+  assert.equal(s.env.DB.sqlite.prepare("SELECT COUNT(*) n FROM gateway_operations WHERE mutating=1").get().n,1);
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,2);
+  assert.equal(observation.status,200);
+  assert.equal(mutation.status,200);
+});
+
+test('capacity recovery preserves unexpired read-only results and unknown mutations',async()=>{
+  const s=setup({maxOperations:1,resultTtlMs:60000});
+  await s.poll({claim:false});
+  const first=await s.mcp('rdc_system_status',{_rdc_request_id:'fresh-read'});
+  const op=(await s.poll()).body.operation;
+  await s.complete(op,result('retain recent read'));
+  const busy=await s.mcp('rdc_system_status',{_rdc_request_id:'blocked-read'});
+  assert.equal(busy.body.result.structuredContent.error.code,'gateway_busy');
+  assert.equal((await s.mcp('rdc_operation_status',{operation_id:op.operation_id})).body.result.structuredContent.value,'retain recent read');
+  assert.equal(first.status,200);
+});
+
+
+test('integrated capacity retry notifies once after durable admission and keeps protected mutation',async()=>{
+  const notifications=[];
+  const wakeChannel={async notify(deviceId){notifications.push(deviceId)}};
+  const s=setup({maxOperations:2,resultTtlMs:1000,callWaitMs:0},
+    catalog,async()=>{},null,wakeChannel);
+  await s.poll({claim:false});
+  const firstRead=await s.mcp('rdc_system_status',{_rdc_request_id:'integrated-old-read'});
+  const oldReadOp=(await s.poll()).body.operation;
+  assert.ok(oldReadOp);
+  assert.equal((await s.complete(oldReadOp,result('old read'))).status,200);
+  const protectedMutation=await s.mcp('rdc_file_write',{
+    value:'retain identity',_rdc_request_id:'integrated-protected-mutation'});
+  const mutationOp=(await s.poll()).body.operation;
+  assert.ok(mutationOp);
+  assert.equal((await s.complete(mutationOp,result('mutation already applied'))).status,200);
+  assert.equal(notifications.length,2);
+  notifications.length=0;
+  s.advance(1001);
+  const newRead=await s.mcp('rdc_system_status',{_rdc_request_id:'integrated-new-read'});
+  assert.equal(newRead.status,200);
+  assert.equal(newRead.body.result.structuredContent.pending,true);
+  assert.deepEqual(notifications,[DEVICE],
+    'the recovered admission, and no other event, wakes the paired relay');
+  const recoveredAgain=await s.mcp('rdc_system_status',{_rdc_request_id:'integrated-new-read'});
+  assert.equal(recoveredAgain.body.result.structuredContent.operation_id,
+    newRead.body.result.structuredContent.operation_id);
+  assert.equal(notifications.length,1,'idempotent recovery cannot generate a second wake');
+  const claim=(await s.poll()).body.operation;
+  assert.ok(claim);
+  assert.equal((await s.complete(claim,result('fresh read'))).status,200);
+  const originalMutation=await s.mcp('rdc_file_write',{
+    value:'retain identity',_rdc_request_id:'integrated-protected-mutation'});
+  assert.equal(originalMutation.body.result.structuredContent.operation_id,mutationOp.operation_id);
+  assert.equal(originalMutation.body.result.structuredContent.error.code,'result_expired');
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) AS n FROM gateway_operations WHERE mutating=1').get().n,1);
+  assert.equal(firstRead.status,200);
+  assert.equal(protectedMutation.status,200);
+});
