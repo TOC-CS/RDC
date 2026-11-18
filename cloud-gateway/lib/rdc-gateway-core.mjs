@@ -265,29 +265,29 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     const row=await env.DB.prepare('SELECT last_seen_ms FROM gateway_device WHERE id=?').bind(env.RDC_DEVICE_ID).first();
     return !!row&&clock()-row.last_seen_ms<=L.onlineMs;
   }
-  async function connection(env){
-    // Keep status read-only. Expired queue rows and stale claimed operations
-    // are excluded without mutating the durable journal on every status call.
+  async function connection(request,env,principal){
+    // Once enrolled, private ownership, online state and pending queue count
+    // share one D1 statement and network roundtrip. The owner predicate
+    // prevents a different Site principal from observing device state.
+    // Expired queue rows are excluded without changing retained records.
     const now=clock();
-    const onlineQuery=env.DB.prepare('SELECT last_seen_ms FROM gateway_device WHERE id=?').bind(env.RDC_DEVICE_ID);
-    const pendingQuery=env.DB.prepare("SELECT COUNT(*) AS count FROM gateway_operations WHERE device_id=? AND ((state='queued' AND expires_ms>?) OR (state='claimed' AND claimed_ms>?))").bind(env.RDC_DEVICE_ID,now,now-L.unknownMs);
-    let row,counts;
-    if(typeof env.DB.batch==='function'){
-      // Both authorization-scoped reads share one Cloudflare D1 network
-      // request, while still using the original liveness and TTL predicates.
-      const results=await env.DB.batch([onlineQuery,pendingQuery]);
-      if(!Array.isArray(results)||results.length!==2||
-          !Array.isArray(results[0]?.results)||!Array.isArray(results[1]?.results)||
-          results[1].results.length!==1)
-        fail(503,'gateway_unavailable','The D1 status batch returned an invalid result.');
-      row=results[0].results[0]??null;
-      counts=results[1].results[0];
-    }else{
-      row=await onlineQuery.first();
-      counts=await pendingQuery.first();
+    const read=()=>env.DB.prepare(`
+      SELECT d.last_seen_ms,
+        (SELECT COUNT(*) FROM gateway_operations WHERE device_id=?
+          AND ((state='queued' AND expires_ms>?) OR (state='claimed' AND claimed_ms>?))) AS count
+      FROM gateway_owner AS o LEFT JOIN gateway_device AS d ON d.id=?
+      WHERE o.id=1 AND o.principal=? LIMIT 1
+    `).bind(env.RDC_DEVICE_ID,now,now-L.unknownMs,env.RDC_DEVICE_ID,principal).first();
+    let row=await read();
+    if(!row){
+      // Preserve explicit bootstrap and historical 403-before-disclosure on
+      // first use, absent owner pin, and nonowner calls. No state is leaked.
+      await owner(request,env);
+      row=await read();
+      if(!row)fail(503,'owner_not_bound','Private owner enrollment is unavailable.');
     }
-    return {ok:true,device_id:env.RDC_DEVICE_ID,online:!!row&&now-row.last_seen_ms<=L.onlineMs,
-      last_seen_ms:row?.last_seen_ms??null,pending_operations:counts.count,
+    return {ok:true,device_id:env.RDC_DEVICE_ID,online:row.last_seen_ms!==null&&now-row.last_seen_ms<=L.onlineMs,
+      last_seen_ms:row.last_seen_ms??null,pending_operations:Number(row.count),
       server_time_ms:now,preview_tool:'rdc_preview_open'};
   }
   async function recentMetrics(args,principal,env){
@@ -538,10 +538,13 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           // the SAME D1 INSERT as capacity and device liveness. Every other
           // owner-only route keeps its historical explicit D1 owner check.
           const fastWorkerTool=sourceTools.has(params.name)&&!gatewayOnlyTools.has(params.name);
-          const principal=fastWorkerTool?authenticatedPrincipal(request,env):await owner(request,env);
-          if(params.name==='rdc_connection_status'){
-            // Fast owner-only read, without queued mutation cleanup.
-            response=toolResult(await connection(env));
+          const fastStatusTool=params.name==='rdc_connection_status';
+          const principal=fastWorkerTool||fastStatusTool?
+            authenticatedPrincipal(request,env):await owner(request,env);
+          if(fastStatusTool){
+            // Pinned-owner authorization and both status values are checked
+            // within one read. First enrollment and denial still use owner().
+            response=toolResult(await connection(request,env,principal));
           }else if(params.name==='rdc_recent_operation_metrics'){
             response=toolResult(await recentMetrics(params.arguments??{},principal,env));
           }else if(params.name==='rdc_chat_session_status'){

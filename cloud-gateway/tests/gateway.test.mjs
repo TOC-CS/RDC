@@ -138,21 +138,39 @@ test('owner-only gateway metrics expose completion phase times without payloads'
 });
 
 
-test('P0 connection status batches liveness and queue count reads in one D1 request',async()=>{
+test('P0 already-enrolled owner connection status uses exactly one authoritative D1 query',async()=>{
   const s=setup({onlineMs:35000});
   await s.poll({claim:false});
-  const actualBatch=s.env.DB.batch;
-  let batches=0;
-  s.env.DB.batch=async statements=>{
-    batches++;
-    assert.equal(statements.length,2,'liveness and pending COUNT belong in one transaction');
-    return actualBatch.call(s.env.DB,statements);
-  };
+  assert.equal((await s.mcp('rdc_connection_status')).status,200); // Owner bootstrap is a separate operation.
+  const queries=[];
+  const prepare=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=query=>{queries.push(query);return prepare(query)};
   const status=await s.mcp('rdc_connection_status');
   assert.equal(status.status,200);
   assert.equal(status.body.result.structuredContent.online,true);
   assert.equal(status.body.result.structuredContent.pending_operations,0);
-  assert.equal(batches,1,'status should avoid two independent D1 roundtrips');
+  assert.equal(queries.length,1,'warm status must have only one D1 network roundtrip');
+  assert.match(queries[0],/gateway_owner/,'status must verify the pinned principal in that same read');
+  assert.match(queries[0],/gateway_device/,'liveness must be read in that same query');
+  assert.match(queries[0],/COUNT\(\*\)/,'pending queue total must be read in that same query');
+  assert.equal((await s.mcp('rdc_connection_status',{},'other-user')).status,403);
+});
+
+test('P0 single-query status preserves first owner enrollment and offline privacy',async()=>{
+  const s=setup();
+  const first=await s.mcp('rdc_connection_status');
+  assert.equal(first.status,200,'first authorized owner must be enrolled');
+  assert.equal(first.body.result.structuredContent.online,false,'no heartbeat means offline');
+  assert.equal(first.body.result.structuredContent.last_seen_ms,null);
+  assert.equal(first.body.result.structuredContent.pending_operations,0);
+  assert.equal(s.env.DB.sqlite.prepare('SELECT principal FROM gateway_owner WHERE id=1').get().principal,'owner-1');
+  const denied=await s.mcp('rdc_connection_status',{},'different-owner');
+  assert.equal(denied.status,403);
+  assert.ok(!JSON.stringify(denied.body).includes('last_seen_ms'));
+  await s.poll({claim:false});
+  const online=await s.mcp('rdc_connection_status');
+  assert.equal(online.status,200);
+  assert.equal(online.body.result.structuredContent.online,true);
 });
 
 test('P0 connection status works if batch is unavailable and excludes expired queues',async()=>{
@@ -279,7 +297,7 @@ test('normal cloud dispatch checks worker liveness without a status COUNT query'
   s.env.DB.prepare=sql=>{queries.push(sql);return original(sql);};
   const sent=await s.mcp('rdc_file_write',{value:'harmless',_rdc_request_id:'perf-online-only-20261117'});
   assert.equal(sent.status,200);
-  const queueCounts=()=>queries.filter(sql=>sql.includes("SELECT COUNT(*) AS count FROM gateway_operations")).length;
+  const queueCounts=()=>queries.filter(sql=>/SELECT COUNT\(\*\) FROM gateway_operations WHERE device_id=\?\s+AND \(\(/.test(sql)).length;
   assert.equal(queueCounts(),0,
     'dispatch only uses online state; it need not issue a separate status COUNT');
   queries.length=0;
