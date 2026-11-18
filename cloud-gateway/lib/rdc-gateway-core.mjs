@@ -259,8 +259,23 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     // Keep status read-only. Expired queue rows and stale claimed operations
     // are excluded without mutating the durable journal on every status call.
     const now=clock();
-    const row=await env.DB.prepare('SELECT last_seen_ms FROM gateway_device WHERE id=?').bind(env.RDC_DEVICE_ID).first();
-    const counts=await env.DB.prepare("SELECT COUNT(*) AS count FROM gateway_operations WHERE device_id=? AND ((state='queued' AND expires_ms>?) OR (state='claimed' AND claimed_ms>?))").bind(env.RDC_DEVICE_ID,now,now-L.unknownMs).first();
+    const onlineQuery=env.DB.prepare('SELECT last_seen_ms FROM gateway_device WHERE id=?').bind(env.RDC_DEVICE_ID);
+    const pendingQuery=env.DB.prepare("SELECT COUNT(*) AS count FROM gateway_operations WHERE device_id=? AND ((state='queued' AND expires_ms>?) OR (state='claimed' AND claimed_ms>?))").bind(env.RDC_DEVICE_ID,now,now-L.unknownMs);
+    let row,counts;
+    if(typeof env.DB.batch==='function'){
+      // Both authorization-scoped reads share one Cloudflare D1 network
+      // request, while still using the original liveness and TTL predicates.
+      const results=await env.DB.batch([onlineQuery,pendingQuery]);
+      if(!Array.isArray(results)||results.length!==2||
+          !Array.isArray(results[0]?.results)||!Array.isArray(results[1]?.results)||
+          results[1].results.length!==1)
+        fail(503,'gateway_unavailable','The D1 status batch returned an invalid result.');
+      row=results[0].results[0]??null;
+      counts=results[1].results[0];
+    }else{
+      row=await onlineQuery.first();
+      counts=await pendingQuery.first();
+    }
     return {ok:true,device_id:env.RDC_DEVICE_ID,online:!!row&&now-row.last_seen_ms<=L.onlineMs,
       last_seen_ms:row?.last_seen_ms??null,pending_operations:counts.count,
       server_time_ms:now,preview_tool:'rdc_preview_open'};

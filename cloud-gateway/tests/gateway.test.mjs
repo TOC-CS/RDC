@@ -135,6 +135,37 @@ test('owner-only gateway metrics expose completion phase times without payloads'
   assert.equal((await s.mcp('rdc_recent_operation_metrics',{limit:5,request_id:'inject'})).status,400);
 });
 
+
+test('P0 connection status batches liveness and queue count reads in one D1 request',async()=>{
+  const s=setup({onlineMs:35000});
+  await s.poll({claim:false});
+  const actualBatch=s.env.DB.batch;
+  let batches=0;
+  s.env.DB.batch=async statements=>{
+    batches++;
+    assert.equal(statements.length,2,'liveness and pending COUNT belong in one transaction');
+    return actualBatch.call(s.env.DB,statements);
+  };
+  const status=await s.mcp('rdc_connection_status');
+  assert.equal(status.status,200);
+  assert.equal(status.body.result.structuredContent.online,true);
+  assert.equal(status.body.result.structuredContent.pending_operations,0);
+  assert.equal(batches,1,'status should avoid two independent D1 roundtrips');
+});
+
+test('P0 connection status works if batch is unavailable and excludes expired queues',async()=>{
+  const s=setup();
+  await s.poll({claim:false});
+  await s.mcp('rdc_file_write',{value:'an expired queue',
+    _rdc_request_id:'status-batch-unavailable'});
+  s.advance(30_001);
+  s.env.DB.batch=undefined;
+  const status=await s.mcp('rdc_connection_status');
+  assert.equal(status.status,200);
+  assert.equal(status.body.result.structuredContent.pending_operations,0);
+  assert.equal(status.body.result.structuredContent.online,true);
+});
+
 test('connection status omits maintenance writes and ignores expired queued items',async()=>{
   const s=setup();
   await s.poll({claim:false});

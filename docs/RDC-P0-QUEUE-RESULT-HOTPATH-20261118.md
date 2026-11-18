@@ -66,6 +66,18 @@ without printing or sending them to the AI host.
   arguments or source are placed in this cache; original D1 record remains
   authoritative. Lost/expired hints still have the normal timer fallback.
 
+## Authenticated transport protocol comparison
+
+A 30-pair authenticated heartbeat-only comparison from the paired iMac to the
+old private Site v16 used separate curl processes with alternating HTTP/1.1 and
+HTTP/2 requests (two warmups per mode, zero claims, 30/30 valid responses
+each). Median: **HTTP/1.1 354.346ms**, **HTTP/2 358.192ms**. Nearest-rank
+p95: **508.534ms** and **454.329ms** respectively. The HTTP/2 median
+did not improve. These fresh connection per-call timings are distinct from
+the preexisting persistent httpx2 client's 310.744ms authenticated heartbeat
+p50. Neither measures ChatGPT tool completion or the undeployed new Site.
+Do not change production transport protocols on the strength of this A/B.
+
 ## Further P0 transport savings in this source revision
 
 - **One-step new admission:** the original protected D1 conditional INSERT
@@ -85,6 +97,10 @@ without printing or sending them to the AI host.
   writers retain their prior guarded flow. Completion hint only follows
   a successfully committed original result. This removes the preliminary
   original-row SELECT from successful small result uploads.
+- **Batched connection read:** the authenticated connection-status tool
+  combines last-seen device liveness and TTL-filtered pending queue count
+  into one D1 batch rather than two remote SELECT roundtrips. Older
+  bindings without batch retain the same independent guarded reads.
 - **Batched first queue pickup:** on a real claim poll, supported D1
   bindings batch device heartbeat and first conditional D1 claim into a
   single atomic database request, with the same authoritative result row.
@@ -99,7 +115,7 @@ without printing or sending them to the AI host.
 - Queue/completion pre-registration race tests failed before the fix.
 - Queue fast-claim/heartbeat tests failed before the fix.
 - All were independently checked via the actual connected RDC worker.
-- 100 gateway/acceptance tests passed, zero failures after the changes.
+- 102 gateway/acceptance tests passed, zero failures after the changes.
 - Existing retention/TTL/rollback test checks are explicitly performed on
   the idle PRIMARY claiming lane rather than a heartbeat-only no-work lane.
 - Source-only changes have **not** reduced the measured 2,726 ms current v16
