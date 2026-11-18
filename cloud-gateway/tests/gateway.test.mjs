@@ -199,6 +199,55 @@ test('normal cloud dispatch checks worker liveness without a status COUNT query'
 });
 
 
+
+test('P0 healthy first-time dispatch skips maintenance writes before durable admission',async()=>{
+  const s=setup({pollWaitMs:0});
+  await s.poll({claim:false});
+  const sql=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=query=>{sql.push(query);return original(query);};
+  const accepted=await s.mcp('rdc_system_status',{_rdc_request_id:'no-clean-on-fast-path'});
+  assert.equal(accepted.status,200);
+  assert.equal(accepted.body.result.structuredContent.pending,true);
+  assert.equal(sql.filter(q=>/UPDATE gateway_operations SET state='expired'|UPDATE gateway_operations SET state='unknown'|DELETE FROM gateway_operations/.test(q)).length,0,
+    'healthy first-time dispatch should avoid four or more retention sweeps');
+  const op=(await s.poll()).body.operation;
+  assert.ok(op);
+  assert.equal((await s.complete(op)).status,200);
+});
+
+test('P0 unblocked expired duplicate never discloses its expired result or replays mutation',async()=>{
+  const s=setup({resultTtlMs:1000,maxOperations:10});
+  await s.poll({claim:false});
+  const args={value:'secret-ttl-retry',_rdc_request_id:'old-completed-mutation'};
+  const sent=await s.mcp('rdc_file_write',args);
+  const op=(await s.poll()).body.operation;
+  assert.ok(op);
+  assert.equal((await s.complete(op,result('old secret content'))).status,200);
+  s.advance(1001);
+  const again=await s.mcp('rdc_file_write',args);
+  assert.equal(again.status,200);
+  assert.equal(again.body.result.structuredContent.error.code,'result_expired');
+  assert.ok(!JSON.stringify(again.body).includes('old secret content'));
+  assert.equal((await s.poll()).body.operation,null);
+  assert.equal(sent.status,200);
+});
+
+test('P0 offline dispatch preserves payload expiry cleanup without queuing any action',async()=>{
+  const s=setup({onlineMs:1000,resultTtlMs:1000});
+  await s.poll({claim:false});
+  const prior=await s.mcp('rdc_file_write',{value:'old',_rdc_request_id:'old-offline'});
+  const claimed=(await s.poll()).body.operation;
+  assert.equal((await s.complete(claimed,result('data must expire'))).status,200);
+  s.advance(1500);
+  const rejected=await s.mcp('rdc_file_write',{value:'new',_rdc_request_id:'new-offline'});
+  assert.equal(rejected.body.result.structuredContent.error.code,'device_offline');
+  assert.equal(s.env.DB.sqlite.prepare("SELECT COUNT(*) n FROM gateway_operations WHERE request_key='new-offline'").get().n,0);
+  assert.equal(s.env.DB.sqlite.prepare("SELECT result_inline_json FROM gateway_operations WHERE request_key='old-offline'").get().result_inline_json,null,
+    'an offline fast failure still retires expired data');
+  assert.equal(prior.status,200);
+});
+
 test('P0 successful dispatch folds device liveness into atomic D1 admission',async()=>{
   const s=setup();
   await s.poll({claim:false});

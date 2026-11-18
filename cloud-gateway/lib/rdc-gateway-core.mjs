@@ -318,6 +318,8 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         toolFailure(reason,reason==='result_expired'?
           'The operation completed, but its retained response expired. Inspect the device state before repeating a mutation.':
           'The stored response is unavailable. The operation will not be repeated.',{operation_id:op.id,completed:true});
+      if(op.result_expires_ms!==null&&op.result_expires_ms!==undefined&&
+          op.result_expires_ms<=clock())return missingResult('result_expired');
       if(!op.result_key&&!op.result_inline_json)return missingResult('result_expired');
       // For small results the same authorized operation record is the durable
       // result store. Larger payloads keep the existing R2 readback path.
@@ -364,6 +366,14 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     let op=await env.DB.prepare('SELECT * FROM gateway_operations WHERE principal=? AND device_id=? AND request_key=?').bind(principal,env.RDC_DEVICE_ID,key).first();
     if(op){
       if(op.request_sha256!==digest)fail(409,'request_id_conflict','This request ID already belongs to different arguments.');
+      const dueRetirement=(op.state==='completed'&&op.result_expires_ms!==null&&
+          op.result_expires_ms!==undefined&&op.result_expires_ms<=clock())||
+        (op.state==='queued'&&op.expires_ms<=clock())||
+        (op.state==='claimed'&&op.claimed_ms!==null&&op.claimed_ms<=clock()-L.unknownMs);
+      if(dueRetirement){
+        await clean(env);
+        op=await getOperation(op.id,principal,env);
+      }
       return operationResult(op,env);
     }
     const unavailable=(code,message)=>name==='rdc_preview_open'?
@@ -388,6 +398,13 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         env.RDC_DEVICE_ID,requestSize,L.maxStoredRequestBytes,
         env.RDC_DEVICE_ID,env.RDC_DEVICE_ID,L.maxResultBytes,L.maxStoredResultBytes).first();
     op=await admit();
+    if(!op){
+      // Only the failed admission pays for retention maintenance. Retry the
+      // EXACT SAME durable operation once after expired queue/claim/result
+      // rows are retired, without resubmitting any local worker action.
+      await clean(env);
+      op=await admit();
+    }
     if(!op){
       if(!(await deviceOnline(env)))
         return unavailable('device_offline','The paired device is offline. No operation was queued.');
@@ -485,9 +502,9 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
               fail(400,'invalid_arguments','This read-only tool accepts no model-supplied identity or project.');
             response=toolResult(await chatSessionStatus(params._meta,principal,env));
           }else{
-            // Mutation recovery and dispatch retain the durable cleanup policy.
-            await clean(env);
-  if(params.name==='rdc_operation_status'){
+            if(params.name==='rdc_operation_status'){
+              // Exact recovery still performs the original cleanup first.
+              await clean(env);
               if(!text(params.arguments?.operation_id,100))fail(400,'invalid_arguments','operation_id is required.');
               const diagnostics=params.arguments?.diagnostics;
               if(diagnostics!==undefined&&typeof diagnostics!=='boolean')

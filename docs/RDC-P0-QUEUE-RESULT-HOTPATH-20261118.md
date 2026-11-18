@@ -35,6 +35,15 @@ without printing or sending them to the AI host.
   If admission fails, a separate read distinguishes device_offline from
   gateway_busy before any bounded recovery. The device state and mutation
   identity are checked atomically at the original D1 admission boundary.
+- **Healthy first-time MCP dispatch:** retain the original D1 admission with
+  atomic worker liveness, backlog, size and mutation identity checks, but skip
+  periodic retention cleanup before a successful admission. On a failed
+  admission, run the original bounded cleanup and retry the exact SAME
+  operation ID/arguments. Offline failures still run cleanup. Duplicate
+  operations with overdue queued/claimed/completed TTL run cleanup before
+  returning their original outcome. Completed result readback refuses
+  expired data even if asynchronous retirement has not yet purged its bytes.
+  No repeated local worker invocation occurs.
 - **Bounded retention:** on an empty primary claiming poll, run the original
   clean(env) before returning. Ordinary authorized tool dispatch and
   on-demand recovery still perform their existing cleanup. Expired rows
@@ -54,7 +63,7 @@ without printing or sending them to the AI host.
 - Queue/completion pre-registration race tests failed before the fix.
 - Queue fast-claim/heartbeat tests failed before the fix.
 - All were independently checked via the actual connected RDC worker.
-- 91 gateway/acceptance tests passed, zero failures after the changes.
+- 94 gateway/acceptance tests passed, zero failures after the changes.
 - Existing retention/TTL/rollback test checks are explicitly performed on
   the idle PRIMARY claiming lane rather than a heartbeat-only no-work lane.
 - Source-only changes have **not** reduced the measured 2,726 ms current v16
