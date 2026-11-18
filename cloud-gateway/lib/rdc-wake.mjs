@@ -54,9 +54,30 @@ export function makeBoundWakeChannel(env) {
 }
 
 export class RDCWakeSignal {
-  constructor() {
+  constructor(state) {
     this.waiters=new Set();
     this.resultWaiters=new Map();
+    // A committed result may notify the DO in the small gap between a D1
+    // completion probe and waiter registration. Keep only bounded, short-lived
+    // operation identifiers so that a late waiter can recheck the ORIGINAL
+    // durable D1 result without waiting for the next timer sweep.
+    this.clock=typeof state?.clock==='function'?state.clock:Date.now;
+    this.recentCompletions=new Map();
+    this.completionHintTtlMs=5000;
+    this.maxCompletionHints=256;
+    // Hold one recent queue hint only when no listener was registered.
+    // This closes the D1-check-to-wait registration gap without replaying a
+    // durable claim or repeatedly waking idle relay polls.
+    this.lastDeviceNoticeAt=null;
+    this.deviceNoticeTtlMs=750;
+  }
+  pruneCompletionHints(now=this.clock()) {
+    for(const [id,recordedAt] of this.recentCompletions) {
+      if(now-recordedAt>this.completionHintTtlMs)
+        this.recentCompletions.delete(id);
+    }
+    while(this.recentCompletions.size>this.maxCompletionHints)
+      this.recentCompletions.delete(this.recentCompletions.keys().next().value);
   }
   async fetch(request) {
     const address=new URL(request.url);
@@ -66,12 +87,20 @@ export class RDCWakeSignal {
       const operationId=address.searchParams.get('operation_id');
       if(!operationIdPattern.test(operationId??''))return body({ok:false},400);
       if(address.pathname==='/notify-result'){
+        // Cache only the immutable UUID, never a result or its arguments.
+        this.recentCompletions.delete(operationId);
+        this.recentCompletions.set(operationId,this.clock());
+        this.pruneCompletionHints();
         for(const finish of [...(this.resultWaiters.get(operationId)??[])])finish(true);
         return body({ok:true});
       }
       const value=address.searchParams.get('ms');
       if(!value||!/^[1-9][0-9]*$/.test(value)||Number(value)>5000)
         return body({ok:false},400);
+      const now=this.clock();
+      this.pruneCompletionHints(now);
+      if(this.recentCompletions.has(operationId))
+        return body({ok:true,signaled:true});
       let group=this.resultWaiters.get(operationId);
       if(!group){group=new Set();this.resultWaiters.set(operationId,group)}
       const active=group;
@@ -94,6 +123,9 @@ export class RDCWakeSignal {
       });
     }
     if(address.pathname==='/notify') {
+      // No listener means D1 admission may have raced with waiter startup.
+      // Preserve only an ephemeral, one-shot hint, never an action or payload.
+      this.lastDeviceNoticeAt=this.waiters.size===0?this.clock():null;
       for (const finish of [...this.waiters])finish(true);
       return body({ok:true});
     }
@@ -102,6 +134,10 @@ export class RDCWakeSignal {
       if(!value||!/^[1-9][0-9]*$/.test(value)||Number(value)>5000)
         return body({ok:false},400);
       const interval=Number(value);
+      const notice=this.lastDeviceNoticeAt;
+      this.lastDeviceNoticeAt=null;
+      if(notice!==null&&this.clock()-notice<=this.deviceNoticeTtlMs)
+        return body({ok:true,signaled:true});
       return new Promise(resolve=>{
         let finished=false, timer;
         const cancel=()=>finish(false);

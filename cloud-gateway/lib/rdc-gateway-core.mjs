@@ -534,7 +534,10 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       if(body.observation_only!==undefined&&typeof body.observation_only!=='boolean')fail(400,'invalid_request','observation_only must be a boolean.');
       if(body.observation_only===true&&body.claim===false)fail(400,'invalid_request','An observer poll must claim an activity observation.');
       await env.DB.prepare('INSERT INTO gateway_device(id,last_seen_ms) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET last_seen_ms=excluded.last_seen_ms').bind(env.RDC_DEVICE_ID,clock()).run();
-      await clean(env);
+      // The original D1 claim is safe without a cleanup sweep: expired queue
+      // rows are excluded by expires_ms. Complete work FIRST when it exists.
+      // Heartbeat-only polls update liveness but never claim or retire work.
+      // A primary empty poll performs bounded retention maintenance below.
       const stop=clock()+(body.claim===false||body.observation_only===true?0:L.pollWaitMs);
       let op=null, wakeHintCount=0;
       if(body.claim!==false){
@@ -564,6 +567,11 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           }else await sleep(interval);
         }while(clock()<=stop);
       }
+      // Remove four or more D1 housekeeping probes from the critical queue
+      // pickup and heartbeat paths. An idle primary poll still retires expired
+      // operations and payloads; ordinary authenticated tool dispatch also
+      // preserves its existing cleanup policy.
+      if(body.claim!==false&&!op)await clean(env);
       return json({ok:true,device_id:env.RDC_DEVICE_ID,server_time_ms:clock(),poll_after_ms:250,
         observation_tools:['rdc_preview_activity'],observation_only:body.observation_only===true,
         operation:op?{operation_id:op.id,claim_id:op.claim_id,request_json:op.request_json,

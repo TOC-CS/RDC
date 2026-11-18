@@ -137,9 +137,48 @@ test('connection status omits maintenance writes and ignores expired queued item
   const still=s.env.DB.sqlite.prepare("SELECT state FROM gateway_operations WHERE request_key=?")
     .get('health-queued-002');
   assert.equal(still.state,'queued','status does not perform maintenance');
-  await s.poll({claim:false});
+  await s.poll();
   assert.equal(s.env.DB.sqlite.prepare("SELECT state FROM gateway_operations WHERE request_key=?")
-    .get('health-queued-002').state,'expired','ordinary worker poll still cleans up due items');
+    .get('health-queued-002').state,'expired','idle worker claim poll still cleans up due items');
+});
+
+
+test('P0 queue pickup bypasses retention cleanup before claiming already-queued work',async()=>{
+  const s=setup({pollWaitMs:0});
+  await s.poll({claim:false});
+  const pending=await s.mcp('rdc_system_status',{_rdc_request_id:'claim-hot-path'});
+  assert.equal(pending.status,200);
+  const sql=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=query=>{sql.push(query);return original(query);};
+  const claim=await s.poll();
+  assert.equal(claim.status,200);
+  assert.ok(claim.body.operation,'the original D1 claim must remain authoritative');
+  assert.equal(sql.filter(q=>/UPDATE gateway_operations SET state='expired'|UPDATE gateway_operations SET state='unknown'|DELETE FROM gateway_operations/.test(q)).length,0,
+    'an already queued claim must not pay a retention cleanup before pickup');
+  const finished=await s.complete(claim.body.operation);
+  assert.equal(finished.status,200);
+});
+
+test('P0 heartbeat-only poll avoids expensive maintenance; idle claim sweep still retires TTL',async()=>{
+  const s=setup({pollWaitMs:0});
+  await s.poll({claim:false});
+  const pending=await s.mcp('rdc_system_status',{_rdc_request_id:'heartbeat-retention'});
+  assert.equal(pending.status,200);
+  s.advance(30_001);
+  const sql=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=query=>{sql.push(query);return original(query);};
+  const ping=await s.poll({claim:false});
+  assert.equal(ping.status,200);
+  assert.equal(ping.body.operation,null);
+  assert.equal(sql.filter(q=>/UPDATE gateway_operations|DELETE FROM gateway_operations/.test(q)).length,0,
+    'heartbeat must not mutate the retention journal');
+  assert.equal(s.env.DB.sqlite.prepare("SELECT state FROM gateway_operations WHERE request_key=?")
+    .get('heartbeat-retention').state,'queued');
+  await s.poll();
+  assert.equal(s.env.DB.sqlite.prepare("SELECT state FROM gateway_operations WHERE request_key=?")
+    .get('heartbeat-retention').state,'expired');
 });
 
 test('normal cloud dispatch checks worker liveness without a status COUNT query',async()=>{
@@ -476,7 +515,7 @@ test('retired preview frames release operation capacity while mutation identitie
     frames.push(frame);await s.complete(frame);
   }
   assert.equal((await s.mcp('rdc_preview_frame',{value:'blocked'})).body.result.structuredContent.error.code,'gateway_busy');
-  s.advance(2001);await s.poll({claim:false});
+  s.advance(2001);await s.poll();
   assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) AS n FROM gateway_operations').get().n,1);
   assert.equal((await s.mcp('rdc_preview_frame',{value:'new observation'})).body.result.structuredContent.pending,true);
   const original=await s.mcp('rdc_file_write',mutationArgs);
@@ -536,7 +575,7 @@ test('activity result and identity retention stay bounded while mutations remain
     const observed=(await s.poll({observation_only:true})).body.operation;
     first??=observed;
     await s.complete(observed,result('current-'+i));
-    s.advance(2001);await s.poll({claim:false});
+    s.advance(2001);await s.poll();
     assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) AS n FROM gateway_operations').get().n,1);
   }
   assert.equal((await s.mcp('rdc_file_write',args)).body.result.structuredContent.value,'actual completed mutation');
@@ -943,10 +982,10 @@ test('bounded small terminal results complete and recover entirely in D1 without
   assert.equal(s.env.BUCKET.gets,0);
   assert.equal(s.env.BUCKET.puts,0);
   assert.equal((await s.poll()).body.operation,null,'Completed mutation must not be claimed again');
-  s.advance(900);await s.poll({claim:false});
+  s.advance(900);await s.poll();
   assert.equal(s.env.DB.sqlite.prepare('SELECT result_inline_json FROM gateway_operations WHERE id=?').get(id).result_inline_json,raw,
     'Inline data must remain until the original TTL');
-  s.advance(101);await s.poll({claim:false});
+  s.advance(101);await s.poll();
   const retired=s.env.DB.sqlite.prepare('SELECT * FROM gateway_operations WHERE id=?').get(id);
   assert.equal(retired.result_inline_json,null,'Expired inline payload must be purged');
   assert.equal(retired.result_key,null);
@@ -1159,7 +1198,7 @@ test('rollback-compatible reader preserves v17 inline and v16 R2 results and TTL
   assert.ok(overdue.result_inline_json,'The old v16 key-only cleanup would leave this overdue inline response');
   assert.equal(overdue.result_key!==null&&overdue.result_expires_ms<=s.now(),false,
     'Actual v16 key-only cleanup predicate fails even after inline TTL');
-  await compatiblePoll();
+  await compatiblePoll({claim:true});
   const retired=s.env.DB.sqlite.prepare('SELECT state,result_inline_json,result_key FROM gateway_operations WHERE id=?').get(original.operation_id);
   assert.equal(retired.state,'completed');
   assert.equal(retired.result_inline_json,null,'Compatible cleanup purges expired inline content');
@@ -1187,7 +1226,7 @@ test('rollback-compatible reader preserves v17 inline and v16 R2 results and TTL
   assert.equal((await compatibleComplete(newOp,resultBody)).body.duplicate,true);
   assert.equal((await compatiblePoll({claim:true})).body.operation,null);
   s.advance(1001);
-  await compatiblePoll();
+  await compatiblePoll({claim:true});
   assert.equal(s.env.BUCKET.deletes,1,'R2 payload TTL is enforced under compatible rollback');
   const expiredR2=await compatibleCall('rdc_operation_status',{operation_id:newOp.operation_id});
   assert.equal(expiredR2.body.result.structuredContent.error.code,'result_expired');
@@ -1240,7 +1279,7 @@ test('historical v16 gateway executable reproduces the real inline rollback fail
     'Actual historical v16 cleanup skips expired inline-only results');
 
   const safe=GatewayCore.createRollbackCompatibleGateway(options);
-  const safePoll=await safe.poll(s.request('/device/poll',{device_id:DEVICE,claim:false},
+  const safePoll=await safe.poll(s.request('/device/poll',{device_id:DEVICE,claim:true},
     {'X-RDC-Device-Key':KEY}),s.env);
   assert.equal(safePoll.status,200);
   const cleaned=s.env.DB.sqlite.prepare('SELECT state,result_inline_json FROM gateway_operations WHERE id=?').get(op.operation_id);
