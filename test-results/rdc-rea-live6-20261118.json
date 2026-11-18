@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-18",
+  "scope": "real connected ChatGPT MCP tool wall-clock spot check; small sample, not 30-pair acceptance",
+  "environment": {
+    "rdc": "RDC worker 0.1.0a8, Site v16",
+    "dc": "Desktop Commander 0.3.1",
+    "device": "same authorized iMac"
+  },
+  "method": "6 balanced AB/BA pairs via live connected tools; response wall times measured via functions.exec Date.now. RDC /bin/sh -c command, DC remote default shell command; identical output required. Not an exact process-shell equivalence.",
+  "output": "RDC_DC_BENCH_OK\\n",
+  "pairs": [
+    {
+      "round": 1,
+      "rdc_ms": 3307,
+      "dc_ms": 1771,
+      "rdc_ok": true,
+      "dc_ok": true
+    },
+    {
+      "round": 2,
+      "rdc_ms": 2637,
+      "dc_ms": 1606,
+      "rdc_ok": true,
+      "dc_ok": true
+    },
+    {
+      "round": 3,
+      "rdc_ms": 3247,
+      "dc_ms": 1728,
+      "rdc_ok": true,
+      "dc_ok": true
+    },
+    {
+      "round": 4,
+      "rdc_ms": 3328,
+      "dc_ms": 1462,
+      "rdc_ok": true,
+      "dc_ok": true
+    },
+    {
+      "round": 5,
+      "rdc_ms": 3789,
+      "dc_ms": 1772,
+      "rdc_ok": true,
+      "dc_ok": true
+    },
+    {
+      "round": 6,
+      "rdc_ms": 3015,
+      "dc_ms": 1639,
+      "rdc_ok": true,
+      "dc_ok": true
+    }
+  ],
+  "summary": {
+    "pairs": 6,
+    "rdc_correct": 6,
+    "dc_correct": 6,
+    "rdc_p50_ms": 3277,
+    "dc_p50_ms": 1683.5,
+    "rdc_vs_dc_median_ratio": 1.95
+  },
+  "conclusion": "RDC still slower. Local source candidate not deployed. Preserve earlier matched 30-pair baseline as stronger acceptance evidence."
+}
