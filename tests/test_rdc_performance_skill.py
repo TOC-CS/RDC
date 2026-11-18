@@ -22,6 +22,12 @@ class RDCPerformanceSkillContracts(unittest.TestCase):
                      "query", "fallback", "read_limit_per_file", "live tool catalog"):
             self.assertIn(term, text)
 
+    def test_p0_speed_first_transport_and_preview_completion_gates(self):
+        root = MAIN.read_text(encoding="utf-8").lower()
+        for term in ("speed first", "rdc_wake_channel", "durable object", "gateway_busy",
+                     "separate release", "floating preview", "auto-clear", "desktop commander"):
+            self.assertIn(term, root)
+
     def test_single_call_browser_actions_are_documented_without_claiming_live_deployment(self):
         root = MAIN.read_text(encoding="utf-8")
         for name in ("rdc_browser_start_navigate_observe",

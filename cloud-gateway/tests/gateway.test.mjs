@@ -5,6 +5,9 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createGateway } from '../lib/rdc-gateway-core.mjs';
 import * as GatewayCore from '../lib/rdc-gateway-core.mjs';
+import {makeBoundWakeChannel, RDCWakeSignal} from '../lib/rdc-wake.mjs';
+// Existing CI executes this file; load the DO unit contracts without changing workflows.
+import './wake-signal.test.mjs';
 
 const DEVICE = '00000000-0000-4000-8000-000000000001';
 const KEY = 'test-device-key-with-at-least-thirty-two-bytes';
@@ -37,10 +40,10 @@ class R2 {
   async get(key){this.gets++;const body=this.objects.get(key);return body===undefined?null:{size:Buffer.byteLength(body),text:async()=>body}}
   async delete(keys){this.deletes++;for(const key of Array.isArray(keys)?keys:[keys])this.objects.delete(key)}
 }
-function setup(limits={},testCatalog=catalog,waitHook=async()=>{},chatRouter=null) {
+function setup(limits={},testCatalog=catalog,waitHook=async()=>{},chatRouter=null,wakeChannel=null) {
   let now=1700000000000;
   const env={DB:new D1(),BUCKET:new R2(),RDC_DEVICE_ID:DEVICE,RDC_DEVICE_SECRET:KEY,RDC_OWNER_BOOTSTRAP:'private-site'};
-  const gateway=createGateway({catalog:testCatalog,resourceHtml:'<!doctype html><html>Real embedded resource fixture</html>',iconDataUri:'data:image/png;base64,eA==',clock:()=>now,sleep:async ms=>{now+=ms;await waitHook()},limits:{callWaitMs:0,pollWaitMs:0,...limits},chatRouter});
+  const gateway=createGateway({catalog:testCatalog,resourceHtml:'<!doctype html><html>Real embedded resource fixture</html>',iconDataUri:'data:image/png;base64,eA==',clock:()=>now,sleep:async ms=>{now+=ms;await waitHook()},limits:{callWaitMs:0,pollWaitMs:0,...limits},chatRouter,wakeChannel});
   const request=(path,body,headers={})=>new Request('https://rdc.example'+path,{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body)});
   const mcp=async(name,args={},owner='owner-1')=>{
     const response=await gateway.mcp(request('/mcp',{jsonrpc:'2.0',id:'call',method:'tools/call',params:{name,arguments:args}}, owner?{'oai-authenticated-user-id':owner}:{}),env);
@@ -1386,4 +1389,180 @@ test('Independent Atlas routing cannot be enabled by model arguments or an unava
   assert.equal(ready.result.isError,false);
   assert.equal(ready.result.structuredContent.receipt.state,'QUEUED');
   assert.equal(requested.length,2);
+});
+
+
+test('P0 latency: a durable enqueue wakes the waiting claim without the 500ms sweep',async()=>{
+  let waiting, notifyWaiter=null, wakeCount=0, signalDelivered=false;
+  const waitEntered=new Promise(resolve=>{waiting=resolve});
+  const wakeChannel={
+    async wait(deviceId,ms){
+      assert.equal(deviceId,DEVICE);
+      assert.equal(ms,500);
+      if(signalDelivered)return false;
+      waiting();
+      return new Promise(resolve=>{notifyWaiter=()=>resolve(true)});
+    },
+    async notify(deviceId){
+      assert.equal(deviceId,DEVICE);
+      wakeCount++;
+      signalDelivered=true;
+      notifyWaiter?.();
+    }
+  };
+  const s=setup({callWaitMs:0,pollWaitMs:1000,pollStepMs:500},catalog,async()=>{},null,wakeChannel);
+  await s.poll({claim:false});
+  const pendingPoll=s.poll();
+  const observed=await Promise.race([waitEntered.then(()=>true),pendingPoll.then(()=>false)]);
+  assert.equal(observed,true,'poll must register a wake waiter before the idle timeout');
+  const admitted=await s.mcp('rdc_file_write',{value:'private-payload',_rdc_request_id:'p0-wake-one'});
+  assert.equal(admitted.status,200);
+  const claimed=await pendingPoll;
+  assert.equal(claimed.status,200);
+  assert.ok(claimed.body.operation,'the signal must trigger the original durable claim');
+  assert.equal(wakeCount,1);
+  assert.equal(s.now(),1700000000000,'no simulated 500ms sweep elapsed');
+  assert.equal((await s.complete(claimed.body.operation)).status,200);
+  assert.equal((await s.poll()).body.operation,null,'already claimed work is never replayed');
+});
+
+test('P0 latency: best-effort wake failures preserve admitted work and fall back to bounded polls',async()=>{
+  let notified=0,waited=0;
+  const wakeChannel={
+    async notify(){notified++;throw new Error('synthetic wake backend offline')},
+    async wait(){waited++;throw new Error('synthetic wake listener offline')}
+  };
+  const s=setup({callWaitMs:0,pollWaitMs:500,pollStepMs:500},catalog,async()=>{},null,wakeChannel);
+  await s.poll({claim:false});
+  const idle=await s.poll();
+  assert.equal(idle.status,200);
+  assert.equal(idle.body.operation,null);
+  assert.equal(waited,1,'wake backend was actually attempted');
+  assert.equal(s.now(),1700000000500,'failed wake reverted to the regular bounded sweep');
+  const admitted=await s.mcp('rdc_file_write',{value:'must-survive',_rdc_request_id:'p0-wake-failure'});
+  assert.equal(admitted.status,200,'notification failure must not reject already queued operations');
+  assert.equal(notified,1);
+  const claim=await s.poll();
+  assert.ok(claim.body.operation);
+  assert.equal((await s.complete(claim.body.operation)).status,200);
+});
+
+test('P0 latency: new admissions notify once without leaking arguments or awakening rejected work',async()=>{
+  const calls=[];
+  const wakeChannel={async notify(...args){calls.push(args)},async wait(){throw new Error('unexpected wait')}};
+  const s=setup({callWaitMs:0},catalog,async()=>{},null,wakeChannel);
+  await s.poll({claim:false});
+  const first=await s.mcp('rdc_file_write',{value:'DO_NOT_SEND_TO_WAKE',_rdc_request_id:'p0-notify-once'});
+  assert.equal(first.status,200);
+  const again=await s.mcp('rdc_file_write',{value:'DO_NOT_SEND_TO_WAKE',_rdc_request_id:'p0-notify-once'});
+  assert.equal(again.status,200);
+  assert.deepEqual(calls,[[DEVICE]],'only the paired device ID is passed to the notifier, never source/keys');
+  const full=setup({callWaitMs:0,maxBacklog:0},catalog,async()=>{},null,wakeChannel);
+  await full.poll({claim:false});
+  const rejected=await full.mcp('rdc_file_write',{value:'DO_NOT_NOTIFY',_rdc_request_id:'p0-reject'});
+  assert.equal(rejected.body.result.structuredContent.error.code,'gateway_busy');
+  assert.deepEqual(calls,[[DEVICE]],'rejected, unqueued operations never signal');
+});
+
+
+test('P0 latency: per-request gateway binding factory wakes the private device namespace',async()=>{
+  const signal=new RDCWakeSignal();
+  const paths=[];
+  const namespace={
+    idFromName(name){assert.equal(name,DEVICE);return name},
+    get(){return {fetch(request){paths.push(new URL(request.url).pathname);return signal.fetch(request)}}}
+  };
+  const s=setup({callWaitMs:0,pollWaitMs:0},catalog,async()=>{},null,env=>makeBoundWakeChannel(env));
+  s.env.RDC_WAKE_CHANNEL=namespace;
+  await s.poll({claim:false});
+  const accepted=await s.mcp('rdc_file_write',{value:'PRIVATE-CONTENT',_rdc_request_id:'p0-bound-object'});
+  assert.equal(accepted.status,200);
+  assert.deepEqual(paths,['/notify'],'binding must be resolved per authorized request');
+  const claimed=await s.poll();
+  assert.equal(claimed.status,200);
+  assert.ok(claimed.body.operation);
+  assert.equal((await s.complete(claimed.body.operation)).status,200);
+  assert.equal(JSON.stringify(paths).includes('PRIVATE-CONTENT'),false);
+});
+
+
+test('P0 latency: result upload wakes the waiting original cloud tool without a 500ms sweep',async()=>{
+  let registration, deliverResult, resultSignalCount=0, expectedOperation=null;
+  const ready=new Promise(resolve=>{registration=resolve});
+  const wakeChannel={
+    async notify(){},
+    async waitResult(deviceId,operationId,interval){
+      assert.equal(deviceId,DEVICE);
+      assert.equal(interval,500);
+      expectedOperation=operationId;
+      registration();
+      return new Promise(resolve=>{deliverResult=()=>resolve(true)});
+    },
+    async notifyResult(deviceId,operationId){
+      assert.equal(deviceId,DEVICE);
+      assert.equal(operationId,expectedOperation,'only the authenticated original durable operation can notify');
+      resultSignalCount++;
+      deliverResult?.();
+    }
+  };
+  const s=setup({callWaitMs:1500,pollStepMs:500,pollWaitMs:0},catalog,async()=>{},null,wakeChannel);
+  await s.poll({claim:false});
+  const original=s.mcp('rdc_file_write',{value:'PRIVATE-RESULT',_rdc_request_id:'p0-result-wakeup'});
+  const hasListener=await Promise.race([ready.then(()=>true),original.then(()=>false)]);
+  assert.equal(hasListener,true,'cloud dispatch must register a completion listener before timed polling');
+  const claim=await s.poll();
+  assert.ok(claim.body.operation);
+  assert.equal(claim.body.operation.operation_id,expectedOperation);
+  const accepted=await s.complete(claim.body.operation,result('RESULT_OK'));
+  assert.equal(accepted.status,200);
+  const resultReply=await original;
+  assert.equal(resultReply.status,200);
+  assert.equal(resultReply.body.result.structuredContent.value,'RESULT_OK');
+  assert.equal(resultSignalCount,1);
+  assert.equal(s.now(),1700000000000,'no simulated 500ms result sweep elapsed');
+  assert.equal((await s.complete(claim.body.operation,result('RESULT_OK'))).body.duplicate,true);
+  assert.equal(resultSignalCount,1,'duplicate result uploads never generate new notifications');
+});
+
+
+test('P0 hardening: repeated empty wake signals cannot spin unbounded D1 claims',async()=>{
+  let wakeCalls=0,claimProbes=0;
+  const wakeChannel={
+    async wait(){
+      wakeCalls++;
+      return wakeCalls<=18;
+    },
+    async notify(){}
+  };
+  const s=setup({pollWaitMs:1000,pollStepMs:500},catalog,async()=>{},null,wakeChannel);
+  await s.poll({claim:false});
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=sql=>{
+    if(/UPDATE gateway_operations SET state='claimed'/.test(sql))claimProbes++;
+    return original(sql);
+  };
+  const idle=await s.poll();
+  assert.equal(idle.status,200);
+  assert.equal(idle.body.operation,null);
+  assert.ok(wakeCalls<=3,'spurious signals must be capped per long poll');
+  assert.ok(claimProbes<=7,'wake spam must not produce unbounded D1 claims');
+  assert.equal(s.now(),1700000001000,'fallback eventually honors the existing poll deadline');
+});
+
+test('P0 hardening: repeated false result hints cannot spin result queries',async()=>{
+  let notifications=0;
+  const wakeChannel={
+    async notify(){},
+    async waitResult(){
+      notifications++;
+      return notifications<=18;
+    }
+  };
+  const s=setup({callWaitMs:1000,pollStepMs:500,pollWaitMs:0},catalog,async()=>{},null,wakeChannel);
+  await s.poll({claim:false});
+  const pending=await s.mcp('rdc_file_write',{value:'not claimed yet',_rdc_request_id:'p0-spurious-result'});
+  assert.equal(pending.status,200);
+  assert.equal(pending.body.result.structuredContent.pending,true);
+  assert.ok(notifications<=3,'spurious completion hints must be capped');
+  assert.equal(s.now(),1700000001000,'gateway deadline still stops waiting');
 });

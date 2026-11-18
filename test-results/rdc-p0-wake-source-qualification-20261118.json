@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-18",
+  "branch": "perf/rdc-speed-wake-20261118",
+  "base_commit": "b63fa4d0a0bccde8fbf80d81a74fcdca14b944f3",
+  "result_scope": "isolated source, no private Site deployment and no live RDC/DC performance improvement claim",
+  "results": {
+    "gateway_tests": {
+      "passed": 70,
+      "failed": 0,
+      "skipped": 0,
+      "spurious_wake_regressions": 2,
+      "spurious_wake_red_before_fix": true,
+      "wake_hint_attempt_limit_per_operation": 3
+    },
+    "python_suite": {
+      "run": 485,
+      "failed": 0,
+      "skipped": 43,
+      "resource_warnings": true,
+      "seconds": 138.053
+    },
+    "skill_tests": {
+      "passed": 4,
+      "failed": 0
+    },
+    "site_build": "passed",
+    "typescript_no_emit": "passed",
+    "lint": {
+      "errors": 0,
+      "warnings": 1
+    },
+    "git_diff_check": "passed",
+    "in_process_wake_benchmark": {
+      "trials_per_variant": 30,
+      "balanced_order": true,
+      "event_p50_ms": 0.247,
+      "event_p95_ms": 0.485,
+      "timer_fallback_p50_ms": 501.591,
+      "timer_fallback_p95_ms": 501.89,
+      "cloudflare_network_or_d1": "not measured"
+    }
+  },
+  "production": {
+    "worker": "0.1.0a8",
+    "site": "v16 held",
+    "durable_object_binding": "unverified and not installed",
+    "gateway_busy_capacity_fix": "separate source candidate PR #3, not activated",
+    "live_superiority_over_desktop_commander": false
+  },
+  "future_priorities": [
+    "actual >=30 matched live RDC/DC latency and correctness qualification",
+    "separate gateway_busy repair/hardening",
+    "enhanced coding/browser capabilities",
+    "task-bound floating preview auto-clear"
+  ]
+}

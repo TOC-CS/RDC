@@ -110,8 +110,15 @@ async function readBody(request,max){
   }finally{reader.releaseLock();}
 }
 
-export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,sleep=sleepDefault,limits={},chatRouter=null}){
+/** @typedef {{notify?: (deviceId:string)=>Promise<void>, wait?: (deviceId:string,ms:number)=>Promise<boolean>, notifyResult?: (deviceId:string,operationId:string)=>Promise<void>, waitResult?: (deviceId:string,operationId:string,ms:number)=>Promise<boolean>}} WakeChannel */
+export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,sleep=sleepDefault,limits={},chatRouter=null,wakeChannel=/** @type {WakeChannel | ((env:any)=>WakeChannel|null) | null} */ (null)}){
   const L={...DEFAULTS,...limits};
+  function notifierFor(env){
+    try{
+      const bound=typeof wakeChannel==='function'?wakeChannel(env):wakeChannel;
+      return bound&&typeof bound==='object'?bound:null;
+    }catch{ return null; } // Missing optional binding cannot disable D1 claims.
+  }
   const sourceTools=new Map(catalog.map(item=>[item.name,item]));
   const tools=catalog.map(item=>{
     const descriptor=structuredClone(item);
@@ -376,6 +383,12 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         env.RDC_DEVICE_ID,L.maxBacklog,env.RDC_DEVICE_ID,L.maxOperations,
         env.RDC_DEVICE_ID,requestSize,L.maxStoredRequestBytes,
         env.RDC_DEVICE_ID,env.RDC_DEVICE_ID,L.maxResultBytes,L.maxStoredResultBytes).first();
+    const notifier=notifierFor(env);
+    if(op&&notifier&&typeof notifier.notify==='function'){
+      // Never signal an unadmitted request or send its arguments. The D1
+      // operation record, rather than the notification, authorizes execution.
+      try{await notifier.notify(env.RDC_DEVICE_ID)}catch{ /* D1 polling remains available. */ }
+    }
     if(!op){
       op=await env.DB.prepare('SELECT * FROM gateway_operations WHERE principal=? AND device_id=? AND request_key=?').bind(principal,env.RDC_DEVICE_ID,key).first();
       if(!op)return unavailable('gateway_busy','The relay has reached its bounded backlog or retention capacity. No operation was queued.');
@@ -385,7 +398,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     // operation-status polling recovers this same observation without replay.
     if(name==='rdc_preview_open'||name==='rdc_preview_activity')return operationResult(op,env);
     const stop=clock()+Math.min(L.callWaitMs,name.startsWith('rdc_preview_')?L.previewWaitMs:L.callWaitMs);
-    let claimedFastProbes=0;
+    let claimedFastProbes=0, resultHintCount=0;
     while(op.state!=='completed'&&op.state!=='expired'&&op.state!=='unknown'&&clock()<stop){
       // Once the relay claims this operation, make at most three brief checks
       // for a fast result upload. Do not accelerate queued/idle work, and fall
@@ -393,7 +406,19 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       const fastClaim=op.state==='claimed'&&claimedFastProbes<3;
       const interval=fastClaim?Math.min(100,L.pollStepMs):L.pollStepMs;
       if(fastClaim)claimedFastProbes++;
-      await sleep(Math.min(interval,stop-clock()));
+      const remaining=Math.min(interval,stop-clock());
+      if(notifier&&typeof notifier.waitResult==='function'&&resultHintCount<3){
+        const started=clock();let signaled=false;
+        try{signaled=(await notifier.waitResult(env.RDC_DEVICE_ID,op.id,remaining))===true}
+        catch{ /* Durable result polling remains available. */ }
+        if(signaled)resultHintCount++;
+        if(!signaled){
+          const idle=Math.max(0,remaining-(clock()-started));
+          if(idle>0)await sleep(idle);
+        }
+      }else await sleep(remaining);
+      // Notifications carry no result bytes and never authorize execution.
+      // Read the original committed operation before replying to ChatGPT.
       op=await getOperation(op.id,principal,env);
     }
     return operationResult(op,env);
@@ -494,7 +519,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       await env.DB.prepare('INSERT INTO gateway_device(id,last_seen_ms) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET last_seen_ms=excluded.last_seen_ms').bind(env.RDC_DEVICE_ID,clock()).run();
       await clean(env);
       const stop=clock()+(body.claim===false||body.observation_only===true?0:L.pollWaitMs);
-      let op=null;
+      let op=null, wakeHintCount=0;
       if(body.claim!==false){
         do{
           const now=clock();
@@ -505,7 +530,21 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
               AND (?=0 OR (mutating=0 AND tool='rdc_preview_activity')) ORDER BY created_ms,rowid LIMIT 1)
               AND state='queued' RETURNING *`).bind(crypto.randomUUID(),now,env.RDC_DEVICE_ID,now,body.observation_only===true?1:0).first();
           if(op||clock()>=stop)break;
-          await sleep(Math.min(L.pollStepMs,stop-clock()));
+          const interval=Math.min(L.pollStepMs,stop-clock());
+          const notifier=notifierFor(env);
+          if(notifier&&typeof notifier.wait==='function'&&wakeHintCount<3){
+            // Wake signals are optional hints only. The durable D1 claim
+            // remains authoritative, and a missed signal still falls back
+            // to the normal bounded sweep instead of losing queued work.
+            const started=clock();let signaled=false;
+            try{signaled=(await notifier.wait(env.RDC_DEVICE_ID,interval))===true}
+            catch{ /* A disconnected notifier must not interrupt the relay. */ }
+            if(signaled)wakeHintCount++;
+            if(!signaled){
+              const remaining=Math.max(0,interval-(clock()-started));
+              if(remaining>0)await sleep(remaining);
+            }
+          }else await sleep(interval);
         }while(clock()<=stop);
       }
       return json({ok:true,device_id:env.RDC_DEVICE_ID,server_time_ms:clock(),poll_after_ms:250,
@@ -552,6 +591,13 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
         if(current?.result_sha256!==digest){
           if(key!==null)await env.BUCKET.delete(key);
           fail(409,'result_conflict','A different result won the completion race.');
+        }
+      }else{
+        // Notify only after the D1 result is committed. A dropped hint must
+        // never discard the durable answer or cause a tool replay.
+        const notifier=notifierFor(env);
+        if(notifier&&typeof notifier.notifyResult==='function'){
+          try{await notifier.notifyResult(env.RDC_DEVICE_ID,op.id)}catch{}
         }
       }
       return json({ok:true,operation_id:op.id,status:'completed',duplicate:!completed});
