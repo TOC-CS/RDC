@@ -98,3 +98,66 @@ test('different operations cannot wake each other and stale completion hints tim
     assert.equal(bad.status,400,path);
   }
 });
+
+
+test('completion delivered before listener registration is replayed as a bounded wake hint',async()=>{
+  let now=100_000;
+  const signal=new RDCWakeSignal({clock:()=>now});
+  await signal.fetch(url('/notify-result?operation_id='+OPERATION));
+  const started=performance.now();
+  const response=await signal.fetch(url('/wait-result?operation_id='+OPERATION+'&ms=120'));
+  assert.equal((await response.json()).signaled,true,
+    'a recent committed completion must wake a later-arriving gateway waiter');
+  assert.ok(performance.now()-started<80,'must not pay the old 120ms fallback interval');
+  assert.equal(signal.resultWaiters.size,0);
+  assert.ok(signal.recentCompletions.size<=256);
+  now+=5001;
+  const expired=await signal.fetch(url('/wait-result?operation_id='+OPERATION+'&ms=10'));
+  assert.equal((await expired.json()).signaled,false,
+    'stale completion hints must not remain in memory or repeat forever');
+});
+
+test('recent completion cache is device-local, bounded, and never carries result payload',async()=>{
+  let now=150_000;
+  const signal=new RDCWakeSignal({clock:()=>now});
+  for(let i=0;i<270;i++){
+    const id='00000000-0000-4000-8000-'+i.toString(16).padStart(12,'0');
+    assert.equal((await signal.fetch(url('/notify-result?operation_id='+id))).status,200);
+  }
+  assert.ok(signal.recentCompletions.size<=256,'no unbounded cache growth');
+  assert.ok(!JSON.stringify([...signal.recentCompletions]).includes('result_json'));
+  now+=5001;
+  const unrelated='00000000-0000-4000-8000-000000000800';
+  const timed=await signal.fetch(url('/wait-result?operation_id='+unrelated+'&ms=10'));
+  assert.equal((await timed.json()).signaled,false);
+  assert.equal(signal.recentCompletions.size,0,'expired entries must be pruned');
+});
+
+
+test('queue hint arriving before listener is consumed once rather than lost',async()=>{
+  let now=200_000;
+  const signal=new RDCWakeSignal({clock:()=>now});
+  await signal.fetch(url('/notify')); // D1 operation was admitted; waiter not registered yet.
+  const started=performance.now();
+  const first=await signal.fetch(url('/wait?ms=120'));
+  assert.equal((await first.json()).signaled,true);
+  assert.ok(performance.now()-started<80,'must not pay the 120ms fallback delay');
+  assert.equal(signal.lastDeviceNoticeAt,null,'queued pre-listener wake is one-shot');
+  const second=await signal.fetch(url('/wait?ms=10'));
+  assert.equal((await second.json()).signaled,false,
+    'an old wake must not trigger repeated empty D1 claim queries');
+  await signal.fetch(url('/notify'));
+  now+=751;
+  const stale=await signal.fetch(url('/wait?ms=10'));
+  assert.equal((await stale.json()).signaled,false,'stale queue hints expire');
+});
+
+test('queue hint reaches existing listeners without leaving a stale cached wake',async()=>{
+  const signal=new RDCWakeSignal();
+  const pending=signal.fetch(url('/wait?ms=200'));
+  await signal.fetch(url('/notify'));
+  assert.equal((await (await pending).json()).signaled,true);
+  assert.equal(signal.lastDeviceNoticeAt,null);
+  const after=await signal.fetch(url('/wait?ms=10'));
+  assert.equal((await after.json()).signaled,false);
+});

@@ -8,6 +8,8 @@ import * as GatewayCore from '../lib/rdc-gateway-core.mjs';
 import {makeBoundWakeChannel, RDCWakeSignal} from '../lib/rdc-wake.mjs';
 // Existing CI executes this file; load the DO unit contracts without changing workflows.
 import './wake-signal.test.mjs';
+// Owner speed gates run on the existing three-platform CI, without modifying workflows.
+import '../../benchmarks/rdc_speed_acceptance.test.mjs';
 
 const DEVICE = '00000000-0000-4000-8000-000000000001';
 const KEY = 'test-device-key-with-at-least-thirty-two-bytes';
@@ -18,9 +20,32 @@ const result = value => ({content:[{type:'text',text:value}],structuredContent:{
 class D1 {
   constructor() {
     this.sqlite = new DatabaseSync(':memory:');
+    this.batchChain=Promise.resolve();
     for(const name of readdirSync(new URL('../drizzle/', import.meta.url)).filter(x=>x.endsWith('.sql')).sort()) {
       this.sqlite.exec(readFileSync(new URL('../drizzle/'+name,import.meta.url),'utf8'));
     }
+  }
+  async batch(statements) {
+    // Serialize transactions to match the D1 batch guarantee during
+    // concurrent authenticated device polls in these contracts.
+    const run=async()=>{
+      this.sqlite.exec('BEGIN');
+      try {
+        const results=[];
+        for(const statement of statements) {
+          const data=await statement.all();
+          results.push({success:true,meta:{},results:data.results});
+        }
+        this.sqlite.exec('COMMIT');
+        return results;
+      } catch(error) {
+        this.sqlite.exec('ROLLBACK');
+        throw error;
+      }
+    };
+    const pending=this.batchChain.then(run,run);
+    this.batchChain=pending.catch(()=>{});
+    return pending;
   }
   prepare(sql) {
     const db=this.sqlite;
@@ -110,6 +135,37 @@ test('owner-only gateway metrics expose completion phase times without payloads'
   assert.equal((await s.mcp('rdc_recent_operation_metrics',{limit:5,request_id:'inject'})).status,400);
 });
 
+
+test('P0 connection status batches liveness and queue count reads in one D1 request',async()=>{
+  const s=setup({onlineMs:35000});
+  await s.poll({claim:false});
+  const actualBatch=s.env.DB.batch;
+  let batches=0;
+  s.env.DB.batch=async statements=>{
+    batches++;
+    assert.equal(statements.length,2,'liveness and pending COUNT belong in one transaction');
+    return actualBatch.call(s.env.DB,statements);
+  };
+  const status=await s.mcp('rdc_connection_status');
+  assert.equal(status.status,200);
+  assert.equal(status.body.result.structuredContent.online,true);
+  assert.equal(status.body.result.structuredContent.pending_operations,0);
+  assert.equal(batches,1,'status should avoid two independent D1 roundtrips');
+});
+
+test('P0 connection status works if batch is unavailable and excludes expired queues',async()=>{
+  const s=setup();
+  await s.poll({claim:false});
+  await s.mcp('rdc_file_write',{value:'an expired queue',
+    _rdc_request_id:'status-batch-unavailable'});
+  s.advance(30_001);
+  s.env.DB.batch=undefined;
+  const status=await s.mcp('rdc_connection_status');
+  assert.equal(status.status,200);
+  assert.equal(status.body.result.structuredContent.pending_operations,0);
+  assert.equal(status.body.result.structuredContent.online,true);
+});
+
 test('connection status omits maintenance writes and ignores expired queued items',async()=>{
   const s=setup();
   await s.poll({claim:false});
@@ -135,9 +191,82 @@ test('connection status omits maintenance writes and ignores expired queued item
   const still=s.env.DB.sqlite.prepare("SELECT state FROM gateway_operations WHERE request_key=?")
     .get('health-queued-002');
   assert.equal(still.state,'queued','status does not perform maintenance');
-  await s.poll({claim:false});
+  await s.poll();
   assert.equal(s.env.DB.sqlite.prepare("SELECT state FROM gateway_operations WHERE request_key=?")
-    .get('health-queued-002').state,'expired','ordinary worker poll still cleans up due items');
+    .get('health-queued-002').state,'expired','idle worker claim poll still cleans up due items');
+});
+
+
+
+test('P0 first queue pickup batches heartbeat and authoritative claim in one D1 roundtrip',async()=>{
+  const s=setup({pollWaitMs:0,callWaitMs:0});
+  await s.poll({claim:false});
+  const issued=await s.mcp('rdc_file_write',{value:'one',
+    _rdc_request_id:'p0-batched-heartbeat-claim'});
+  assert.equal(issued.status,200);
+  const actualBatch=s.env.DB.batch;
+  assert.equal(typeof actualBatch,'function','the fixture must support D1 atomic batch');
+  let batches=0;
+  s.env.DB.batch=async function(statements){
+    batches++;
+    assert.equal(statements.length,2,'one heartbeat update plus original guarded claim');
+    return actualBatch.call(s.env.DB,statements);
+  };
+  const claim=await s.poll();
+  assert.equal(claim.status,200);
+  assert.ok(claim.body.operation,'conditional D1 claim still supplies original operation');
+  assert.equal(batches,1,'heartbeat and first D1 claim must use one batch call');
+  assert.equal((await s.complete(claim.body.operation)).status,200);
+});
+
+test('P0 queue pickup retains safe two-step fallback without batch support',async()=>{
+  const s=setup({pollWaitMs:0,callWaitMs:0});
+  await s.poll({claim:false});
+  await s.mcp('rdc_file_write',{value:'same',_rdc_request_id:'p0-batch-not-supported'});
+  s.env.DB.batch=undefined;
+  const claim=await s.poll();
+  assert.equal(claim.status,200);
+  assert.ok(claim.body.operation,'D1 prepare+first fallback must still claim once');
+  assert.equal((await s.complete(claim.body.operation)).status,200);
+  assert.equal((await s.poll()).body.operation,null,'fallback never replays the original');
+});
+
+test('P0 queue pickup bypasses retention cleanup before claiming already-queued work',async()=>{
+  const s=setup({pollWaitMs:0});
+  await s.poll({claim:false});
+  const pending=await s.mcp('rdc_system_status',{_rdc_request_id:'claim-hot-path'});
+  assert.equal(pending.status,200);
+  const sql=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=query=>{sql.push(query);return original(query);};
+  const claim=await s.poll();
+  assert.equal(claim.status,200);
+  assert.ok(claim.body.operation,'the original D1 claim must remain authoritative');
+  assert.equal(sql.filter(q=>/UPDATE gateway_operations SET state='expired'|UPDATE gateway_operations SET state='unknown'|DELETE FROM gateway_operations/.test(q)).length,0,
+    'an already queued claim must not pay a retention cleanup before pickup');
+  const finished=await s.complete(claim.body.operation);
+  assert.equal(finished.status,200);
+});
+
+test('P0 heartbeat-only poll avoids expensive maintenance; idle claim sweep still retires TTL',async()=>{
+  const s=setup({pollWaitMs:0});
+  await s.poll({claim:false});
+  const pending=await s.mcp('rdc_system_status',{_rdc_request_id:'heartbeat-retention'});
+  assert.equal(pending.status,200);
+  s.advance(30_001);
+  const sql=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=query=>{sql.push(query);return original(query);};
+  const ping=await s.poll({claim:false});
+  assert.equal(ping.status,200);
+  assert.equal(ping.body.operation,null);
+  assert.equal(sql.filter(q=>/UPDATE gateway_operations|DELETE FROM gateway_operations/.test(q)).length,0,
+    'heartbeat must not mutate the retention journal');
+  assert.equal(s.env.DB.sqlite.prepare("SELECT state FROM gateway_operations WHERE request_key=?")
+    .get('heartbeat-retention').state,'queued');
+  await s.poll();
+  assert.equal(s.env.DB.sqlite.prepare("SELECT state FROM gateway_operations WHERE request_key=?")
+    .get('heartbeat-retention').state,'expired');
 });
 
 test('normal cloud dispatch checks worker liveness without a status COUNT query',async()=>{
@@ -155,6 +284,123 @@ test('normal cloud dispatch checks worker liveness without a status COUNT query'
   const status=await s.mcp('rdc_connection_status');
   assert.equal(status.status,200);
   assert.equal(queueCounts(),1,'the public status tool still reports pending_operations');
+});
+
+
+
+
+test('P0 fresh dispatch needs no preliminary operation SELECT before atomic admission',async()=>{
+  const s=setup({callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  const sql=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=query=>{sql.push(query);return original(query);};
+  const issued=await s.mcp('rdc_file_write',{value:'test-once',
+    _rdc_request_id:'p0-no-prelookup-first-time'});
+  assert.equal(issued.status,200);
+  assert.equal(issued.body.result.structuredContent.pending,true);
+  assert.equal(sql.filter(q=>q.includes('SELECT * FROM gateway_operations WHERE principal=? AND device_id=? AND request_key=?')).length,0,
+    'healthy first dispatch must not wait for a separate D1 duplicate-key SELECT');
+  assert.equal(sql.filter(q=>q.includes('INSERT INTO gateway_operations')).length,1,
+    'normal new request still requires exactly one atomic D1 insertion');
+  const operation=(await s.poll()).body.operation;
+  assert.ok(operation);
+  assert.equal((await s.complete(operation)).status,200);
+});
+
+test('P0 exact duplicate recovers existing mutation when device later goes offline',async()=>{
+  const s=setup({onlineMs:1000,callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  const args={value:'retain',_rdc_request_id:'p0-duplicate-offline'};
+  const first=await s.mcp('rdc_file_write',args);
+  const id=first.body.result.structuredContent.operation_id;
+  assert.ok(id);
+  s.advance(1001);
+  const duplicate=await s.mcp('rdc_file_write',args);
+  assert.equal(duplicate.status,200);
+  assert.equal(duplicate.body.result.structuredContent.operation_id,id,
+    'offline status must not hide an already admitted original mutation');
+  assert.equal(duplicate.body.result.structuredContent.status,'queued');
+  const changed=await s.mcp('rdc_file_write',{...args,value:'different'});
+  assert.equal(changed.status,409,'different arguments must conflict on the original durable ID');
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,1,
+    'only the original durable mutation exists');
+});
+
+test('P0 healthy first-time dispatch skips maintenance writes before durable admission',async()=>{
+  const s=setup({pollWaitMs:0});
+  await s.poll({claim:false});
+  const sql=[];
+  const original=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=query=>{sql.push(query);return original(query);};
+  const accepted=await s.mcp('rdc_system_status',{_rdc_request_id:'no-clean-on-fast-path'});
+  assert.equal(accepted.status,200);
+  assert.equal(accepted.body.result.structuredContent.pending,true);
+  assert.equal(sql.filter(q=>/UPDATE gateway_operations SET state='expired'|UPDATE gateway_operations SET state='unknown'|DELETE FROM gateway_operations/.test(q)).length,0,
+    'healthy first-time dispatch should avoid four or more retention sweeps');
+  const op=(await s.poll()).body.operation;
+  assert.ok(op);
+  assert.equal((await s.complete(op)).status,200);
+});
+
+test('P0 unblocked expired duplicate never discloses its expired result or replays mutation',async()=>{
+  const s=setup({resultTtlMs:1000,maxOperations:10});
+  await s.poll({claim:false});
+  const args={value:'secret-ttl-retry',_rdc_request_id:'old-completed-mutation'};
+  const sent=await s.mcp('rdc_file_write',args);
+  const op=(await s.poll()).body.operation;
+  assert.ok(op);
+  assert.equal((await s.complete(op,result('old secret content'))).status,200);
+  s.advance(1001);
+  const again=await s.mcp('rdc_file_write',args);
+  assert.equal(again.status,200);
+  assert.equal(again.body.result.structuredContent.error.code,'result_expired');
+  assert.ok(!JSON.stringify(again.body).includes('old secret content'));
+  assert.equal((await s.poll()).body.operation,null);
+  assert.equal(sent.status,200);
+});
+
+test('P0 offline dispatch preserves payload expiry cleanup without queuing any action',async()=>{
+  const s=setup({onlineMs:1000,resultTtlMs:1000});
+  await s.poll({claim:false});
+  const prior=await s.mcp('rdc_file_write',{value:'old',_rdc_request_id:'old-offline'});
+  const claimed=(await s.poll()).body.operation;
+  assert.equal((await s.complete(claimed,result('data must expire'))).status,200);
+  s.advance(1500);
+  const rejected=await s.mcp('rdc_file_write',{value:'new',_rdc_request_id:'new-offline'});
+  assert.equal(rejected.body.result.structuredContent.error.code,'device_offline');
+  assert.equal(s.env.DB.sqlite.prepare("SELECT COUNT(*) n FROM gateway_operations WHERE request_key='new-offline'").get().n,0);
+  assert.equal(s.env.DB.sqlite.prepare("SELECT result_inline_json FROM gateway_operations WHERE request_key='old-offline'").get().result_inline_json,null,
+    'an offline fast failure still retires expired data');
+  assert.equal(prior.status,200);
+});
+
+test('P0 successful dispatch folds device liveness into atomic D1 admission',async()=>{
+  const s=setup();
+  await s.poll({claim:false});
+  const sql=[];
+  const prepare=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=query=>{sql.push(query);return prepare(query);};
+  const result=await s.mcp('rdc_system_status',{_rdc_request_id:'fold-online-success'});
+  assert.equal(result.status,200);
+  assert.equal(result.body.result.structuredContent.pending,true);
+  assert.equal(sql.filter(q=>q.includes('SELECT last_seen_ms FROM gateway_device')).length,0,
+    'successful admission must avoid the standalone liveness roundtrip');
+  const insert=sql.find(q=>q.includes('INSERT INTO gateway_operations'));
+  assert.ok(insert&&insert.includes('gateway_device')&&insert.includes('last_seen_ms'),
+    'atomic INSERT must reject stale devices before durable enqueue');
+  assert.ok((await s.poll()).body.operation);
+});
+
+test('P0 atomic liveness admission rejects offline devices without queued mutations',async()=>{
+  const s=setup({onlineMs:1000});
+  await s.poll({claim:false});
+  s.advance(1001);
+  const result=await s.mcp('rdc_file_write',{value:'must not run',
+    _rdc_request_id:'fold-online-expired'});
+  assert.equal(result.status,200);
+  assert.equal(result.body.result.structuredContent.error.code,'device_offline');
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,0);
 });
 
 test('synced one-call browser startup advertises durable session setup safely',async()=>{
@@ -474,7 +720,7 @@ test('retired preview frames release operation capacity while mutation identitie
     frames.push(frame);await s.complete(frame);
   }
   assert.equal((await s.mcp('rdc_preview_frame',{value:'blocked'})).body.result.structuredContent.error.code,'gateway_busy');
-  s.advance(2001);await s.poll({claim:false});
+  s.advance(2001);await s.poll();
   assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) AS n FROM gateway_operations').get().n,1);
   assert.equal((await s.mcp('rdc_preview_frame',{value:'new observation'})).body.result.structuredContent.pending,true);
   const original=await s.mcp('rdc_file_write',mutationArgs);
@@ -534,7 +780,7 @@ test('activity result and identity retention stay bounded while mutations remain
     const observed=(await s.poll({observation_only:true})).body.operation;
     first??=observed;
     await s.complete(observed,result('current-'+i));
-    s.advance(2001);await s.poll({claim:false});
+    s.advance(2001);await s.poll();
     assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) AS n FROM gateway_operations').get().n,1);
   }
   assert.equal((await s.mcp('rdc_file_write',args)).body.result.structuredContent.value,'actual completed mutation');
@@ -941,10 +1187,10 @@ test('bounded small terminal results complete and recover entirely in D1 without
   assert.equal(s.env.BUCKET.gets,0);
   assert.equal(s.env.BUCKET.puts,0);
   assert.equal((await s.poll()).body.operation,null,'Completed mutation must not be claimed again');
-  s.advance(900);await s.poll({claim:false});
+  s.advance(900);await s.poll();
   assert.equal(s.env.DB.sqlite.prepare('SELECT result_inline_json FROM gateway_operations WHERE id=?').get(id).result_inline_json,raw,
     'Inline data must remain until the original TTL');
-  s.advance(101);await s.poll({claim:false});
+  s.advance(101);await s.poll();
   const retired=s.env.DB.sqlite.prepare('SELECT * FROM gateway_operations WHERE id=?').get(id);
   assert.equal(retired.result_inline_json,null,'Expired inline payload must be purged');
   assert.equal(retired.result_key,null);
@@ -1157,7 +1403,7 @@ test('rollback-compatible reader preserves v17 inline and v16 R2 results and TTL
   assert.ok(overdue.result_inline_json,'The old v16 key-only cleanup would leave this overdue inline response');
   assert.equal(overdue.result_key!==null&&overdue.result_expires_ms<=s.now(),false,
     'Actual v16 key-only cleanup predicate fails even after inline TTL');
-  await compatiblePoll();
+  await compatiblePoll({claim:true});
   const retired=s.env.DB.sqlite.prepare('SELECT state,result_inline_json,result_key FROM gateway_operations WHERE id=?').get(original.operation_id);
   assert.equal(retired.state,'completed');
   assert.equal(retired.result_inline_json,null,'Compatible cleanup purges expired inline content');
@@ -1185,7 +1431,7 @@ test('rollback-compatible reader preserves v17 inline and v16 R2 results and TTL
   assert.equal((await compatibleComplete(newOp,resultBody)).body.duplicate,true);
   assert.equal((await compatiblePoll({claim:true})).body.operation,null);
   s.advance(1001);
-  await compatiblePoll();
+  await compatiblePoll({claim:true});
   assert.equal(s.env.BUCKET.deletes,1,'R2 payload TTL is enforced under compatible rollback');
   const expiredR2=await compatibleCall('rdc_operation_status',{operation_id:newOp.operation_id});
   assert.equal(expiredR2.body.result.structuredContent.error.code,'result_expired');
@@ -1238,7 +1484,7 @@ test('historical v16 gateway executable reproduces the real inline rollback fail
     'Actual historical v16 cleanup skips expired inline-only results');
 
   const safe=GatewayCore.createRollbackCompatibleGateway(options);
-  const safePoll=await safe.poll(s.request('/device/poll',{device_id:DEVICE,claim:false},
+  const safePoll=await safe.poll(s.request('/device/poll',{device_id:DEVICE,claim:true},
     {'X-RDC-Device-Key':KEY}),s.env);
   assert.equal(safePoll.status,200);
   const cleaned=s.env.DB.sqlite.prepare('SELECT state,result_inline_json FROM gateway_operations WHERE id=?').get(op.operation_id);
@@ -1486,6 +1732,52 @@ test('P0 latency: per-request gateway binding factory wakes the private device n
 });
 
 
+
+test('P0 small result commits without a preliminary D1 SELECT, with claim identity checked atomically',async()=>{
+  const s=setup({callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  const pending=await s.mcp('rdc_file_write',{value:'safe result',
+    _rdc_request_id:'p0-result-one-update'});
+  const operation=(await s.poll()).body.operation;
+  const queries=[];
+  const prepare=s.env.DB.prepare.bind(s.env.DB);
+  s.env.DB.prepare=sql=>{queries.push(sql);return prepare(sql)};
+  const finish=await s.complete(operation,result('fast response'));
+  assert.equal(finish.status,200);
+  assert.equal(finish.body.duplicate,false);
+  assert.equal(queries.filter(q=>q.includes('SELECT * FROM gateway_operations WHERE id=? AND device_id=?')).length,0,
+    'short successful result should not need a separate D1 lookup');
+  const update=queries.filter(q=>q.includes("UPDATE gateway_operations SET state='completed'"));
+  assert.equal(update.length,1);
+  assert.ok(update[0].includes('claim_id=?')&&update[0].includes('request_sha256=?'),
+    'atomic result update must compare exact original claim and SHA before storing the answer');
+  assert.equal(s.env.BUCKET.puts,0);
+  const recovered=await s.mcp('rdc_operation_status',{operation_id:operation.operation_id});
+  assert.equal(recovered.body.result.structuredContent.value,'fast response');
+  assert.equal(pending.status,200);
+});
+
+test('P0 forged fast-inline result cannot commit or alter valid claimed operation',async()=>{
+  const s=setup({callWaitMs:0,pollWaitMs:0});
+  await s.poll({claim:false});
+  await s.mcp('rdc_file_write',{value:'original',_rdc_request_id:'p0-forged-result'});
+  const op=(await s.poll()).body.operation;
+  const forged=async(fields)=>{
+    const response=await s.gateway.result(s.request('/device/result',{
+      device_id:DEVICE,operation_id:op.operation_id,claim_id:op.claim_id,
+      request_sha256:op.request_sha256,result_json:JSON.stringify(result('forged')),
+      ...fields,
+    },{'X-RDC-Device-Key':KEY}),s.env);
+    return {status:response.status,body:await response.json()};
+  };
+  assert.equal((await forged({claim_id:'wrong-claim-id'})).body.error.code,'claim_mismatch');
+  assert.equal((await forged({request_sha256:'0'.repeat(64)})).body.error.code,'claim_mismatch');
+  assert.equal(s.env.DB.sqlite.prepare('SELECT state FROM gateway_operations WHERE id=?')
+    .get(op.operation_id).state,'claimed');
+  assert.equal((await s.complete(op,result('legitimate'))).body.duplicate,false);
+  assert.equal((await forged({})).body.error.code,'result_conflict');
+});
+
 test('P0 latency: result upload wakes the waiting original cloud tool without a 500ms sweep',async()=>{
   let registration, deliverResult, resultSignalCount=0, expectedOperation=null;
   const ready=new Promise(resolve=>{registration=resolve});
@@ -1565,4 +1857,80 @@ test('P0 hardening: repeated false result hints cannot spin result queries',asyn
   assert.equal(pending.body.result.structuredContent.pending,true);
   assert.ok(notifications<=3,'spurious completion hints must be capped');
   assert.equal(s.now(),1700000001000,'gateway deadline still stops waiting');
+});
+
+test('saturated retained read-only journal recovers at admission without erasing mutation identity',async()=>{
+  const s=setup({maxOperations:2,resultTtlMs:1000,frameOperationTtlMs:5000});
+  await s.poll({claim:false});
+  const mutation=await s.mcp('rdc_file_write',{value:'preserve',_rdc_request_id:'capacity-mutation'});
+  const first=(await s.poll()).body.operation;
+  await s.complete(first,result('write completed'));
+  const observation=await s.mcp('rdc_system_status',{_rdc_request_id:'capacity-observation'});
+  const read=(await s.poll()).body.operation;
+  await s.complete(read,result('read completed'));
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,2);
+  s.advance(1001);
+  const next=await s.mcp('rdc_system_status',{_rdc_request_id:'capacity-new-read'});
+  assert.equal(next.status,200);
+  assert.equal(next.body.result.structuredContent.pending,true);
+  assert.ok((await s.poll()).body.operation);
+  const original=await s.mcp('rdc_file_write',{value:'preserve',_rdc_request_id:'capacity-mutation'});
+  assert.equal(original.body.result.structuredContent.error.code,'result_expired');
+  assert.equal(original.body.result.structuredContent.operation_id,first.operation_id);
+  assert.equal(s.env.DB.sqlite.prepare("SELECT COUNT(*) n FROM gateway_operations WHERE mutating=1").get().n,1);
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) n FROM gateway_operations').get().n,2);
+  assert.equal(observation.status,200);
+  assert.equal(mutation.status,200);
+});
+
+test('capacity recovery preserves unexpired read-only results and unknown mutations',async()=>{
+  const s=setup({maxOperations:1,resultTtlMs:60000});
+  await s.poll({claim:false});
+  const first=await s.mcp('rdc_system_status',{_rdc_request_id:'fresh-read'});
+  const op=(await s.poll()).body.operation;
+  await s.complete(op,result('retain recent read'));
+  const busy=await s.mcp('rdc_system_status',{_rdc_request_id:'blocked-read'});
+  assert.equal(busy.body.result.structuredContent.error.code,'gateway_busy');
+  assert.equal((await s.mcp('rdc_operation_status',{operation_id:op.operation_id})).body.result.structuredContent.value,'retain recent read');
+  assert.equal(first.status,200);
+});
+
+
+test('integrated capacity retry notifies once after durable admission and keeps protected mutation',async()=>{
+  const notifications=[];
+  const wakeChannel={async notify(deviceId){notifications.push(deviceId)}};
+  const s=setup({maxOperations:2,resultTtlMs:1000,callWaitMs:0},
+    catalog,async()=>{},null,wakeChannel);
+  await s.poll({claim:false});
+  const firstRead=await s.mcp('rdc_system_status',{_rdc_request_id:'integrated-old-read'});
+  const oldReadOp=(await s.poll()).body.operation;
+  assert.ok(oldReadOp);
+  assert.equal((await s.complete(oldReadOp,result('old read'))).status,200);
+  const protectedMutation=await s.mcp('rdc_file_write',{
+    value:'retain identity',_rdc_request_id:'integrated-protected-mutation'});
+  const mutationOp=(await s.poll()).body.operation;
+  assert.ok(mutationOp);
+  assert.equal((await s.complete(mutationOp,result('mutation already applied'))).status,200);
+  assert.equal(notifications.length,2);
+  notifications.length=0;
+  s.advance(1001);
+  const newRead=await s.mcp('rdc_system_status',{_rdc_request_id:'integrated-new-read'});
+  assert.equal(newRead.status,200);
+  assert.equal(newRead.body.result.structuredContent.pending,true);
+  assert.deepEqual(notifications,[DEVICE],
+    'the recovered admission, and no other event, wakes the paired relay');
+  const recoveredAgain=await s.mcp('rdc_system_status',{_rdc_request_id:'integrated-new-read'});
+  assert.equal(recoveredAgain.body.result.structuredContent.operation_id,
+    newRead.body.result.structuredContent.operation_id);
+  assert.equal(notifications.length,1,'idempotent recovery cannot generate a second wake');
+  const claim=(await s.poll()).body.operation;
+  assert.ok(claim);
+  assert.equal((await s.complete(claim,result('fresh read'))).status,200);
+  const originalMutation=await s.mcp('rdc_file_write',{
+    value:'retain identity',_rdc_request_id:'integrated-protected-mutation'});
+  assert.equal(originalMutation.body.result.structuredContent.operation_id,mutationOp.operation_id);
+  assert.equal(originalMutation.body.result.structuredContent.error.code,'result_expired');
+  assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) AS n FROM gateway_operations WHERE mutating=1').get().n,1);
+  assert.equal(firstRead.status,200);
+  assert.equal(protectedMutation.status,200);
 });
