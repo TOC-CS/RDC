@@ -120,6 +120,12 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     }catch{ return null; } // Missing optional binding cannot disable D1 claims.
   }
   const sourceTools=new Map(catalog.map(item=>[item.name,item]));
+  // Gateway-local methods are owner-only regardless of future worker
+  // catalog collisions; never route them through atomic worker admission.
+  const gatewayOnlyTools=new Set([
+    'rdc_connection_status','rdc_recent_operation_metrics',
+    'rdc_chat_session_status','rdc_operation_status'
+  ]);
   const tools=catalog.map(item=>{
     const descriptor=structuredClone(item);
     const mutating=item['x-rdc-mutating']===true;
@@ -202,10 +208,14 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       session_metadata_present:true,chat_project_verified:false,
       chat_project_status:'PROJECT_UNVERIFIED',can_create:false,can_wake:false,can_send:false};
   }
-  async function owner(request,env){
+  function authenticatedPrincipal(request,env){
     configured(env);
     const principal=request.headers.get('oai-authenticated-user-id');
     if(!text(principal,256))fail(401,'sign_in_required','Sign in with ChatGPT to use this RDC connection.');
+    return principal;
+  }
+  async function owner(request,env){
+    const principal=authenticatedPrincipal(request,env);
     let row=await env.DB.prepare('SELECT principal FROM gateway_owner WHERE id=1').bind().first();
     if(!row){
       if(env.RDC_OWNER_BOOTSTRAP!=='private-site')fail(503,'owner_not_bound','Private owner enrollment has not been enabled.');
@@ -255,29 +265,29 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     const row=await env.DB.prepare('SELECT last_seen_ms FROM gateway_device WHERE id=?').bind(env.RDC_DEVICE_ID).first();
     return !!row&&clock()-row.last_seen_ms<=L.onlineMs;
   }
-  async function connection(env){
-    // Keep status read-only. Expired queue rows and stale claimed operations
-    // are excluded without mutating the durable journal on every status call.
+  async function connection(request,env,principal){
+    // Once enrolled, private ownership, online state and pending queue count
+    // share one D1 statement and network roundtrip. The owner predicate
+    // prevents a different Site principal from observing device state.
+    // Expired queue rows are excluded without changing retained records.
     const now=clock();
-    const onlineQuery=env.DB.prepare('SELECT last_seen_ms FROM gateway_device WHERE id=?').bind(env.RDC_DEVICE_ID);
-    const pendingQuery=env.DB.prepare("SELECT COUNT(*) AS count FROM gateway_operations WHERE device_id=? AND ((state='queued' AND expires_ms>?) OR (state='claimed' AND claimed_ms>?))").bind(env.RDC_DEVICE_ID,now,now-L.unknownMs);
-    let row,counts;
-    if(typeof env.DB.batch==='function'){
-      // Both authorization-scoped reads share one Cloudflare D1 network
-      // request, while still using the original liveness and TTL predicates.
-      const results=await env.DB.batch([onlineQuery,pendingQuery]);
-      if(!Array.isArray(results)||results.length!==2||
-          !Array.isArray(results[0]?.results)||!Array.isArray(results[1]?.results)||
-          results[1].results.length!==1)
-        fail(503,'gateway_unavailable','The D1 status batch returned an invalid result.');
-      row=results[0].results[0]??null;
-      counts=results[1].results[0];
-    }else{
-      row=await onlineQuery.first();
-      counts=await pendingQuery.first();
+    const read=()=>env.DB.prepare(`
+      SELECT d.last_seen_ms,
+        (SELECT COUNT(*) FROM gateway_operations WHERE device_id=?
+          AND ((state='queued' AND expires_ms>?) OR (state='claimed' AND claimed_ms>?))) AS count
+      FROM gateway_owner AS o LEFT JOIN gateway_device AS d ON d.id=?
+      WHERE o.id=1 AND o.principal=? LIMIT 1
+    `).bind(env.RDC_DEVICE_ID,now,now-L.unknownMs,env.RDC_DEVICE_ID,principal).first();
+    let row=await read();
+    if(!row){
+      // Preserve explicit bootstrap and historical 403-before-disclosure on
+      // first use, absent owner pin, and nonowner calls. No state is leaked.
+      await owner(request,env);
+      row=await read();
+      if(!row)fail(503,'owner_not_bound','Private owner enrollment is unavailable.');
     }
-    return {ok:true,device_id:env.RDC_DEVICE_ID,online:!!row&&now-row.last_seen_ms<=L.onlineMs,
-      last_seen_ms:row?.last_seen_ms??null,pending_operations:counts.count,
+    return {ok:true,device_id:env.RDC_DEVICE_ID,online:row.last_seen_ms!==null&&now-row.last_seen_ms<=L.onlineMs,
+      last_seen_ms:row.last_seen_ms??null,pending_operations:Number(row.count),
       server_time_ms:now,preview_tool:'rdc_preview_open'};
   }
   async function recentMetrics(args,principal,env){
@@ -364,7 +374,7 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     if(!op)fail(404,'operation_not_found','The operation was not found for this connection.');
     return op;
   }
-  async function dispatch(name,args,principal,env){
+  async function dispatch(name,args,principal,env,ownerRequest=null){
     const descriptor=sourceTools.get(name);
     if(!descriptor)fail(400,'unknown_tool','Unknown RDC tool.');
     if(!object(args))fail(400,'invalid_arguments','Tool arguments must be an object.');
@@ -407,7 +417,8 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
     const admit=()=>env.DB.prepare(`INSERT INTO gateway_operations
       (id,principal,device_id,request_key,tool,request_json,request_sha256,request_size,mutating,state,created_ms,expires_ms)
       SELECT ?,?,?,?,?,?,?,?,?, 'queued',?,?
-      WHERE EXISTS(SELECT 1 FROM gateway_device WHERE id=? AND last_seen_ms>=?)
+      WHERE EXISTS(SELECT 1 FROM gateway_owner WHERE id=1 AND principal=?)
+        AND EXISTS(SELECT 1 FROM gateway_device WHERE id=? AND last_seen_ms>=?)
         AND (SELECT COUNT(*) FROM gateway_operations WHERE device_id=? AND state IN ('queued','claimed'))<?
         AND (SELECT COUNT(*) FROM gateway_operations WHERE device_id=?)<?
         AND (SELECT COALESCE(SUM(request_size),0) FROM gateway_operations WHERE device_id=?)+?<=?
@@ -415,14 +426,22 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           +((SELECT COUNT(*) FROM gateway_operations WHERE device_id=? AND state IN ('queued','claimed','unknown'))+1)*?<=?
       ON CONFLICT(principal,device_id,request_key) DO NOTHING RETURNING *`)
       .bind(id,principal,env.RDC_DEVICE_ID,key,name,requestJson,digest,requestSize,mutating?1:0,now,now+L.queueTtlMs,
-        env.RDC_DEVICE_ID,now-L.onlineMs,
+        principal,env.RDC_DEVICE_ID,now-L.onlineMs,
         env.RDC_DEVICE_ID,L.maxBacklog,env.RDC_DEVICE_ID,L.maxOperations,
         env.RDC_DEVICE_ID,requestSize,L.maxStoredRequestBytes,
         env.RDC_DEVICE_ID,env.RDC_DEVICE_ID,L.maxResultBytes,L.maxStoredResultBytes).first();
     op=await admit();
     if(!op){
+      // On the fast path a refused INSERT must pass the original D1 owner
+      // check BEFORE any recovery or housekeeping. This handles initial
+      // private enrollment and denies other visitors without side effects.
+      if(ownerRequest)await owner(ownerRequest,env);
       const existing=await recoverExisting();
       if(existing)return existing;
+      // A first-ever owner enrollment needs a fresh admission after pinning.
+      if(ownerRequest)op=await admit();
+    }
+    if(!op){
       // Only the failed admission pays for retention maintenance. Retry the
       // EXACT SAME durable operation once after expired queue/claim/result
       // rows are retired, without resubmitting any local worker action.
@@ -515,10 +534,17 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           response={contents:[{uri:params.uri,mimeType:UI_MIME,text:resourceHtml,_meta:{ui:{prefersBorder:false,csp:{connectDomains:[],resourceDomains:[],frameDomains:[]}},
             'openai/ui':{availableDisplayModes:['inline','fullscreen'],preferredDisplayMode:'inline'},'openai/widgetDescription':'Live view of the selected RDC session. Hiding the view leaves work running.'}}]};break;
         case 'tools/call':{
-          const principal=await owner(request,env);
-          if(params.name==='rdc_connection_status'){
-            // Fast owner-only read, without queued mutation cleanup.
-            response=toolResult(await connection(env));
+          // The normal authorized worker route validates owner identity in
+          // the SAME D1 INSERT as capacity and device liveness. Every other
+          // owner-only route keeps its historical explicit D1 owner check.
+          const fastWorkerTool=sourceTools.has(params.name)&&!gatewayOnlyTools.has(params.name);
+          const fastStatusTool=params.name==='rdc_connection_status';
+          const principal=fastWorkerTool||fastStatusTool?
+            authenticatedPrincipal(request,env):await owner(request,env);
+          if(fastStatusTool){
+            // Pinned-owner authorization and both status values are checked
+            // within one read. First enrollment and denial still use owner().
+            response=toolResult(await connection(request,env,principal));
           }else if(params.name==='rdc_recent_operation_metrics'){
             response=toolResult(await recentMetrics(params.arguments??{},principal,env));
           }else if(params.name==='rdc_chat_session_status'){
@@ -556,7 +582,19 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
                   response=toolFailure('chat_broker_unavailable','Chat broker could not verify or perform this operation. No automatic replay will be attempted.');
                 }
               }
-            }else response=await dispatch(params.name,params.arguments??{},principal,env);
+            }else{
+              try{
+                response=await dispatch(params.name,params.arguments??{},principal,env,
+                  fastWorkerTool?request:null);
+              }catch(error){
+                // The old transport checked the pinned owner before reporting
+                // ANY malformed argument or worker error. Keep that privacy
+                // guarantee on failed fast operations while skipping the
+                // redundant D1 owner read on healthy successful admissions.
+                if(fastWorkerTool)await owner(request,env);
+                throw error;
+              }
+            }
           }
           break;
         }
