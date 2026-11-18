@@ -27,4 +27,8 @@ const worker = {
   },
 };
 
+// Exported for an optional owner-provisioned private Durable Object binding.
+// It is not publicly routed or enabled merely by this source export.
+export { RDCWakeSignal } from "../lib/rdc-wake.mjs";
+
 export default worker;
