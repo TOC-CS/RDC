@@ -719,6 +719,17 @@ async def _worker_session(config, token):
                 yield session, catalog
 
 
+def _idle_poll_sleep(poll_delay, idle_delay, elapsed):
+    """Credit genuine gateway long-poll time against BOTH idle minimums.
+
+    If a bounded server wait already consumed the maximum idle backoff,
+    immediately issue the next authenticated claim. Immediate/short empty
+    results still obey the remote minimum and local exponential backoff.
+    No device operation is reissued by this scheduling decision.
+    """
+    return max(0.0, max(poll_delay, idle_delay) - elapsed)
+
+
 def _permanent(exc):
     if isinstance(exc, RelayPermanentError):
         return exc
@@ -778,10 +789,13 @@ async def _run_relay(config_path, state_dir, *, stop_event=None, diagnostics=Non
                                     idle_delay = .25
                                     await pump.handle(operation)
                                 else:
-                                    # Credit the gateway's long-poll wait toward
-                                    # local idle backoff. Immediate empty replies
-                                    # still back off; the server minimum remains.
-                                    await anyio.sleep(max(poll_delay, idle_delay - poll_elapsed))
+                                    # A genuine long poll has already provided
+                                    # backoff. Do not impose another 250ms gap
+                                    # before the next claim. Immediate/short
+                                    # empty responses retain bounded throttling.
+                                    gap = _idle_poll_sleep(poll_delay, idle_delay, poll_elapsed)
+                                    if gap > 0:
+                                        await anyio.sleep(gap)
                                     idle_delay = min(5, idle_delay * 2)
                     except Exception as exc:
                         fatal = _permanent(exc)
