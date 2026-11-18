@@ -16,6 +16,12 @@ class RDCPerformanceSkillContracts(unittest.TestCase):
                      "Desktop Commander", "partial", "no replay"):
             self.assertIn(term.lower(), text.lower())
 
+    def test_search_to_source_skill_is_bounded_and_live_gated(self):
+        text = CODING.read_text(encoding="utf-8").lower()
+        for term in ("read_matches", "0 to 5", "first distinct", "auto_read_count",
+                     "query", "fallback", "read_limit_per_file", "live tool catalog"):
+            self.assertIn(term, text)
+
     def test_single_call_browser_actions_are_documented_without_claiming_live_deployment(self):
         root = MAIN.read_text(encoding="utf-8")
         for name in ("rdc_browser_start_navigate_observe",

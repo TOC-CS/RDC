@@ -13,6 +13,14 @@ When the current tool catalog actually exposes `rdc_code_context`, use it for a 
 
 Review each returned per-file `ok`, `error`, `truncated`, `offset`, `next_offset`, and `sha256` before editing. Search results may be truncated or skip binary, large, unreadable, or disallowed files. If `rdc_code_context` is missing, use the existing `rdc_file_list`, `rdc_file_search`, and `rdc_file_read_many` tools instead. Never simulate an unavailable tool or claim the feature was activated from a pending source commit.
 
+## One-call search-to-source matched reads (isolated source candidate)
+
+When the **live tool catalog** advertises the optional `read_matches` schema field on `rdc_code_context`, select a single authorized `path`, supply a literal `query`, and set `read_matches` to a number from **0 to 5**. This reads the first distinct matching files returned by the bounded source search during the same request. Explicit `file_paths` stay first, and duplicate matched paths are omitted. The combined call never requests more than 20 files. Example: `rdc_code_context({"path": "/authorized/project", "query": "def load", "read_matches": 3, "search_mode": "source"})`.
+
+Check `auto_read_count` (number of automatically selected paths), `read_limit_per_file`, each read's `ok`, `sha256`, `truncated`, `offset` and `next_offset`, and the search's `files_scanned`/`files_skipped`. A match may become unavailable or resolve outside the project before the read; the affected read must return a per-file error and must not reveal another project's content. Content excerpts are capped at 16 KiB per read. Nonzero `read_matches` requires `query`.
+
+**Fallback:** the current v16 connected RDC does not advertise `rdc_code_context` or `read_matches` yet. Use available live `rdc_file_search` and `rdc_file_read_many` in that environment. No source tests or generated assets constitute production activation. After authorized gateway and worker deployment, recheck the exact live tool catalog before invoking this option; run a real end-to-end comparison against Desktop Commander.
+
 The integrated RDC performance candidate is in the isolated `integration/rdc-performance-20261117` branch. Its project-boundary repairs and batched source search/edit code remain offline. Local integration verification recorded 475 Python tests (26 skipped) and 56 gateway tests with zero failures, plus a successful gateway build. These results describe source tests, not a deployed ChatGPT tool. Hosted Windows/Linux/macOS CI, independent reviewer authority and live deployment remain OPEN.
 
 ## High-speed coding and browser operations (candidate only)

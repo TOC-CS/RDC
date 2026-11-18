@@ -89,7 +89,8 @@ class Engine:
                   'list_limit':{'type':'integer','minimum':1,'maximum':200},
                   'search_limit':{'type':'integer','minimum':1,'maximum':100},
                   'max_files':{'type':'integer','minimum':1,'maximum':1000},
-                  'search_mode':{'type':'string','enum':['source','all']}},['path']),
+                  'search_mode':{'type':'string','enum':['source','all']},
+                  'read_matches':{'type':'integer','minimum':0,'maximum':5}},['path']),
             tool('rdc_code_edit_many','Apply up to 10 independent SHA-256-guarded exact edits inside one selected project in one approved cloud operation. Results and partial failures are explicit. Never automatically retry an uncertain batch.',
                  {'path':STRING,
                   'edits':{'type':'array','minItems':1,'maxItems':10,'items':{
@@ -175,6 +176,8 @@ class Engine:
         if name.startswith('rdc_file_') and 'file_path' in arguments:
             self.files.resolve(arguments['file_path'])
         if name == 'rdc_code_context':
+            if arguments.get('read_matches',0) and 'query' not in arguments:
+                raise RDCError('invalid_arguments','read_matches requires a search query.')
             selected = self.files.resolve(arguments['path'],directory=True)
             for candidate in arguments.get('file_paths',[]):
                 # Relative coding paths belong to this selected project, never
@@ -364,7 +367,7 @@ class Engine:
             return {**result,'device_id':self.store.device_id}
         if name == 'rdc_code_context':
             project = self.files.resolve(args['path'],directory=True)
-            paths = args.get('file_paths',[])
+            paths = list(args.get('file_paths',[]))
             # Combined output remains bounded for cloud result transport. Files
             # keep their independent hash and truncated/offset fields.
             listing = self.files.list(str(project),limit=args.get('list_limit',120))
@@ -380,6 +383,25 @@ class Engine:
                        max_files=args.get('max_files',1000),
                        exclude_dirs=excluded)
                        if 'query' in args else None)
+            auto_read_count = 0
+            if matches is not None and args.get('read_matches',0):
+                # The first distinct search hits can be read during this same
+                # request, saving a separate remote discovery-to-read hop.
+                # Normalize without resolving aliases: revalidate at read time.
+                def path_key(value):
+                    return os.path.normpath(value if os.path.isabs(value)
+                                            else str(project / value))
+                seen = {path_key(path) for path in paths}
+                for match in matches['matches']:
+                    if auto_read_count >= args['read_matches'] or len(paths) >= 20:
+                        break
+                    match_path = match['file_path']
+                    key = path_key(match_path)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    paths.append(match_path)
+                    auto_read_count += 1
             reads = []
             if paths:
                 read_limit = min(16384,max(1024,self.settings.max_read_bytes//len(paths)))
@@ -399,7 +421,8 @@ class Engine:
                     reads = list(pool.map(read_one,paths))
             return {'path':str(project),'listing':listing,'search':matches,
                     'search_mode':mode,'excluded_directories':list(excluded) if matches is not None else [],
-                    'reads':reads,'read_limit_per_file':min(16384,
+                    'reads':reads,'auto_read_count':auto_read_count,
+                    'read_limit_per_file':min(16384,
                         max(1024,self.settings.max_read_bytes//len(paths))) if paths else 0}
         if name == 'rdc_code_edit_many':
             project = self.files.resolve(args['path'],directory=True)
