@@ -57,6 +57,17 @@
 - [ ] Run macOS, Ubuntu and Windows CI on exact source commit.
 - [ ] Rehearse offline relay, blocked queue, timed-out result, invalid input and rollback mismatch in detached synthetic fixtures.
 
+### Task 4B: Host-owned floating preview and verified task lifecycle
+- [x] Inspect existing PiP controls and preserve source-bound no-focus behavior.
+- [x] Write failing worker tests for job binding and exact terminal-only completion.
+- [x] Add optional job ID to open/frame without adding another cloud status request.
+- [x] Run MCP host regression tests for PiP accepted/unavailable, running/finished/uncertain task, wrong job and new-job binding.
+- [x] Build and sync embedded renderer and schemas into gateway assets.
+- [x] Run external 407-case hostile lifecycle QA outside the source checkout.
+- [ ] Verify actual ChatGPT/Codex host can float, move and dismiss preview, without affecting other task views.
+- [ ] Generalize to visual/browser task completion with authenticated source-bound events.
+- [ ] Verify two independent float views, no focus theft, and persistent source work.
+
 ### Task 5: Safe replacement
 - [ ] Read back installed worker version and exact deployed Site SHA.
 - [ ] Verify inactive rollback that can read both legacy R2 and inline D1 outcomes.

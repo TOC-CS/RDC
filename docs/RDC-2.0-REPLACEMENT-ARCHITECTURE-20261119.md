@@ -65,3 +65,16 @@ Release is incomplete until every safety and speed gate passes. Existing RDC kee
 - 122/122 Node gateway and V2 regression tests passed.
 - External QA: 12,000 invalid frames rejected, 1,000 valid frames round-tripped, 1,000 simultaneous broker listeners, 700 listener cancellations and 3,000 burst events, with no failed scenarios.
 - No v2 component is connected to the deployed Site or the running worker. No production swap has taken place.
+
+## Required floating preview acceptance: job-bound auto-clear
+
+- RDC 2.0 must support compact host-owned floating/PiP views inside the AI workflow when the exact host advertises and returns that mode. Do not create a separate OS-wide window, steal window focus or claim host support from a simulated request.
+- The existing rdc_preview_open accepts an optional exact durable job_id with required session_id to explicitly bind one job to one visual source. The worker verifies its job record and returns only minimal state; no command, arguments, output or hidden path is included.
+- rdc_preview_frame with the same optional job ID returns current job status inside the existing frame response, avoiding a second cloud status request. On a confirmed completed, failed, cancelled or timed_out job, it skips another screenshot and returns task.complete=true with exact job, device and session IDs.
+- The renderer verifies all three identifiers before clearing the selected view. It hides its presentation, stops its timer, then sends the MCP Apps ui/notifications/request-teardown only if the host confirmed PiP. A host may ignore teardown, so hidden presentation is the fallback.
+- interrupted is uncertain and never automatically clears the viewer. Wrong-job or wrong-source completion cannot dismiss the selected view. Late old results cannot override a new explicit job.
+- Hiding, closing or detaching a viewer never cancels the job or closes the visual source. Host-specific movement, drag behavior and actual teardown require live acceptance.
+
+**Limit:** Current auto-clear applies only to explicitly bound RDC durable jobs. Browser or other visual workflows lack a proven generic task-completion signal. Generic completion lifecycle, multiple host floating views and real ChatGPT/Codex window behavior remain OPEN requirements.
+
+**Source QA:** 16 worker preview tests, 33 MCP Apps host contracts, 111 gateway tests, and 407 external hostile lifecycle cases passed. Source and embedded UI have been synchronized into gateway assets. A complete exact-revision regression rerun remains required. Live speed targets are OPEN pending authenticated measurements.
