@@ -66,3 +66,49 @@ test('v2 broker rejects payload-bearing notifications and invalid cursors',async
   assert.throws(()=>broker.readSince(-1));
   assert.throws(()=>broker.wait({afterSequence:0,timeoutMs:60_000}));
 });
+
+test('scoped result waiter ignores unrelated event kinds and operation IDs',async()=>{
+  const other='33333333-3333-4333-8333-333333333333';
+  const broker=new RDCV2EventBroker({deviceId:device});
+  let resolved=false;
+  const pending=broker.wait({afterSequence:0,timeoutMs:200,
+    kind:'result-ready',operationId:operation}).then(receipt=>{
+      resolved=true;
+      return receipt;
+    });
+  broker.publish({kind:'queue-ready'});
+  broker.publish({kind:'result-ready',operationId:other});
+  await Promise.resolve();
+  assert.equal(resolved,false,'unrelated hints must not prematurely end the exact result wait');
+  assert.equal(broker.activeWaiters,1);
+  const matching=broker.publish({kind:'result-ready',operationId:operation});
+  const receipt=await pending;
+  assert.equal(receipt.gap,false);
+  assert.deepEqual(receipt.events,[matching]);
+  assert.equal(broker.activeWaiters,0);
+});
+
+test('scoped waiter preserves authoritative reconciliation after unrelated event eviction',async()=>{
+  const broker=new RDCV2EventBroker({deviceId:device,maxEvents:2});
+  const pending=broker.wait({afterSequence:0,timeoutMs:200,
+    kind:'result-ready',operationId:operation});
+  broker.publish({kind:'queue-ready'});
+  broker.publish({kind:'queue-ready'});
+  broker.publish({kind:'queue-ready'});
+  const receipt=await pending;
+  assert.equal(receipt.gap,true,'evicted sequence must cause D1 recheck');
+  assert.equal(broker.activeWaiters,0);
+});
+
+test('scoped wait replays only exact retained result without cross-operation leakage',async()=>{
+  const broker=new RDCV2EventBroker({deviceId:device});
+  broker.publish({kind:'result-ready',operationId:'33333333-3333-4333-8333-333333333333'});
+  const target=broker.publish({kind:'result-ready',operationId:operation});
+  const receipt=await broker.wait({afterSequence:0,timeoutMs:100,
+    kind:'result-ready',operationId:operation});
+  assert.deepEqual(receipt.events,[target]);
+  assert.equal(receipt.latestSequence,2);
+  assert.equal(broker.activeWaiters,0);
+  assert.throws(()=>broker.wait({afterSequence:0,kind:'result-ready',operationId:'wrong/id'}));
+  assert.throws(()=>broker.wait({afterSequence:0,operationId:operation}));
+});

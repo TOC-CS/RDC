@@ -111,6 +111,7 @@ export async function handleV2Wake(signal,request){
   }
   const current=await signal.v2Broker.wait({
     afterSequence:payload.afterSequence,timeoutMs:payload.timeoutMs,signal:request.signal,
+    kind:payload.kind,operationId:payload.operationId,
   });
   const matches=current.events.some(event=>event.kind===payload.kind&&
     (payload.kind!=='result-ready'||event.operationId===payload.operationId));

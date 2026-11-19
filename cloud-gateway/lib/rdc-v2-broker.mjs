@@ -48,16 +48,32 @@ export class RDCV2EventBroker {
     this.sequence++;
     this.events.push({event,at:this.clock()});
     this.prune();
-    for(const notify of [...this.waiters])notify();
+    for(const notify of [...this.waiters])notify(event);
     return event;
   }
-  wait({afterSequence,timeoutMs=1000,signal}){
+  wait({afterSequence,timeoutMs=1000,signal,kind,operationId}){
     if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>5000)
       throw new TypeError('Invalid RDC wait interval');
     if(!Number.isSafeInteger(afterSequence)||afterSequence<0)
       throw new TypeError('Invalid RDC event cursor');
-    if(signal?.aborted)return Promise.resolve(Object.freeze({events:Object.freeze([]),gap:false,latestSequence:this.sequence}));
-    const available=this.readSince(afterSequence);
+    if(kind===undefined){
+      if(operationId!==undefined)throw new TypeError('An operation filter requires an event kind');
+    }else{
+      // Reuse strict control-frame validation; never accept payload fields or
+      // invalid operation IDs even on private in-memory subscriptions.
+      createControlEvent({kind,deviceId:this.deviceId,sequence:0,
+        ...(operationId===undefined?{}:{operationId})});
+    }
+    const matches=event=>kind===undefined||
+      (event.kind===kind&&(operationId===undefined||event.operationId===operationId));
+    const scoped=result=>kind===undefined?result:Object.freeze({
+      events:Object.freeze(result.events.filter(matches)),
+      gap:result.gap,latestSequence:result.latestSequence,
+    });
+    if(signal?.aborted)return Promise.resolve(Object.freeze({
+      events:Object.freeze([]),gap:false,latestSequence:this.sequence,
+    }));
+    const available=scoped(this.readSince(afterSequence));
     if(available.events.length||available.gap)return Promise.resolve(available);
     if(this.waiters.size>=this.maxWaiters)throw new RangeError('RDC event waiter capacity reached');
     return new Promise(resolve=>{
@@ -69,9 +85,15 @@ export class RDCV2EventBroker {
         this.waiters.delete(wake);
         signal?.removeEventListener('abort',abort);
         resolve(cancelled?Object.freeze({events:Object.freeze([]),gap:false,latestSequence:this.sequence}):
-          this.readSince(afterSequence));
+          scoped(this.readSince(afterSequence)));
       };
-      const wake=()=>finish();
+      const wake=event=>{
+        if(matches(event))return finish();
+        // A flood of unrelated events may evict the awaited cursor. Reconcile
+        // against durable D1 immediately rather than silently lose a result.
+        const earliest=this.events[0]?.event.sequence??this.sequence+1;
+        if(afterSequence<earliest-1||afterSequence>this.sequence)finish();
+      };
       const abort=()=>finish(true);
       this.waiters.add(wake);
       timer=setTimeout(()=>finish(),timeoutMs);

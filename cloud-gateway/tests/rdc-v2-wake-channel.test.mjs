@@ -141,3 +141,32 @@ test('v2 bounded request reader rejects streaming bodies before consuming overfl
   assert.equal(reads,1);
   assert.equal(cancelled,true);
 });
+
+test('private exact-result wait remains pending across unrelated notices',async()=>{
+  const s=setup();
+  let finished=false;
+  const pending=s.channel.waitResult(DEVICE,OP,200).then(value=>{
+    finished=true;
+    return value;
+  });
+  await s.channel.notify(DEVICE);
+  await s.channel.notifyResult(DEVICE,OTHER);
+  await Promise.resolve();
+  assert.equal(finished,false,'unrelated queue/completion hints must not consume the active wait');
+  await s.channel.notifyResult(DEVICE,OP);
+  assert.equal(await pending,true);
+});
+
+test('private queue wait ignores unrelated completion hints',async()=>{
+  const s=setup();
+  let finished=false;
+  const pending=s.channel.wait(DEVICE,150).then(value=>{
+    finished=true;
+    return value;
+  });
+  await s.channel.notifyResult(DEVICE,OP);
+  await Promise.resolve();
+  assert.equal(finished,false);
+  await s.channel.notify(DEVICE);
+  assert.equal(await pending,true);
+});
