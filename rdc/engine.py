@@ -66,13 +66,13 @@ class Engine:
                  {'limit':{'type':'integer','minimum':1,'maximum':50}}),
             tool('rdc_preview_open','Show or reopen the live RDC preview inside a compatible AI app. '
                  'Pass the session_id for the browser or configured device this task is using. The view shows only that source; closing it leaves work running.',
-                 {'session_id':PREVIEW_SESSION_ID}),
+                 {'session_id':PREVIEW_SESSION_ID,'job_id':JOB_ID}),
             tool('rdc_preview_activity','Read actual current and recent worker operations, visual focus and bounded job state. '
                  'An explicitly selected job_id includes at most 8 KiB of its real retained output. Never executes or repeats work.',
                  {'job_id':JOB_ID}),
             tool('rdc_preview_frame','Read one live frame for the embedded RDC view. '
                  'Does not create, close, pause, or mutate a browser or mobile session.',
-                 {'session_id':PREVIEW_SESSION_ID},['session_id']),
+                 {'session_id':PREVIEW_SESSION_ID,'job_id':JOB_ID},['session_id']),
             tool('rdc_preview_resize','Resize only the exact native window explicitly bound with resize_to_view enabled. Never changes focus or source. Recover pending operations instead of repeating uncertain mutations.',
                  {'session_id':PREVIEW_SESSION_ID,'width':{'type':'integer','minimum':240,'maximum':2560},
                   'height':{'type':'integer','minimum':180,'maximum':1600},
@@ -308,6 +308,14 @@ class Engine:
                 'paused':self.store.get('paused')=='true','sessions':sessions,'session_status':status,
                 **activity,**self.jobs.preview(job_id),'pending_approvals':len(self.store.approvals())}
 
+    def _preview_task(self, job_id):
+        # Optional exact-job binding, never a worker-wide job feed. The owner
+        # explicitly supplies a job that belongs to this paired worker.
+        # 'interrupted' means the outcome is unknown; keep its view available.
+        state = self.jobs.status(job_id)['job']['status']
+        return {'job_id':job_id,'status':state,
+                'complete':state in ('completed','failed','cancelled','timed_out')}
+
     def _invoke_inner(self,name,args):
         handlers = {'rdc_file_list':self.files.list,'rdc_file_read':self.files.read,'rdc_file_search':self.files.search,
                     'rdc_file_write':self.files.write,'rdc_file_edit':self.files.edit,'rdc_job_start':self.jobs.start,
@@ -335,6 +343,8 @@ class Engine:
             return self._preview_activity(**args)
         if name == 'rdc_preview_open':
             selected = args.get('session_id')
+            if args.get('job_id') and not selected:
+                raise RDCError('session_required','A job-linked floating preview requires its exact visual session.')
             if selected == 'desktop':
                 raise RDCError('window_required','This preview requires the exact task window. Use rdc_window_list and rdc_window_open; full-display previews are disabled.')
             sessions = []
@@ -343,14 +353,22 @@ class Engine:
                 sessions = [row for row in available if row['session_id'] == selected]
                 if not sessions:
                     raise RDCError('session_not_found','Requested session is no longer active in this worker.')
+            task = self._preview_task(args['job_id']) if args.get('job_id') else None
             return {'device_id':self.store.device_id,'session_id':selected,'sessions':sessions,
                     'paused':self.store.get('paused')=='true',
-                    'viewer':{'bound_to_session':bool(selected),'close_keeps_working':True,'worker_required':True},
+                    'viewer':{'bound_to_session':bool(selected),'close_keeps_working':True,'worker_required':True,
+                              **({'task_job_id':task['job_id'],'task_complete':task['complete']} if task else {})},
                     'message':'This preview shows only the requested session. Closing it leaves work running.'
                               if selected else 'Pass the session_id for the visual source this task is using.'}
         if name == 'rdc_preview_frame':
             if args['session_id']=='desktop':
                 raise RDCError('window_required','Select the exact task window. Full-display previews are disabled.')
+            task = self._preview_task(args['job_id']) if args.get('job_id') else None
+            if task and task['complete']:
+                # No screenshot or application interaction after a confirmed
+                # terminal job. The viewer can close itself without extra I/O.
+                return {'device_id':self.store.device_id,'session_id':args['session_id'],
+                        'task':task,'paused':self.store.get('paused')=='true'}
             if not self.adapters:
                 raise RDCError('capability_disabled','Device adapters are unavailable.')
             shot = self.adapters.snapshot(args['session_id'])
@@ -358,7 +376,7 @@ class Engine:
                 shot = {key:value for key,value in shot.items() if key!='serial'}
             return {**shot,'device_id':self.store.device_id,'captured_at':time.time(),
                     'viewport':{'width':shot['width'],'height':shot['height']},
-                    'paused':self.store.get('paused')=='true'}
+                    'paused':self.store.get('paused')=='true',**({'task':task} if task else {})}
         if name == 'rdc_preview_resize':
             if not self.adapters or not args['session_id'].startswith('window-'):
                 raise RDCError('resize_not_enabled','Only explicitly resize-enabled native window bindings accept this request.')

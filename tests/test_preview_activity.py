@@ -92,6 +92,36 @@ class PreviewActivityContracts(unittest.TestCase):
     def activity(self, **args):
         return self.call('rdc_preview_activity', args)
 
+    def test_explicit_job_bound_floating_preview_auto_clears_only_for_confirmed_terminal_job(self):
+        adapter = self.sessions()
+        selected_job = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        state = {'status':'running'}
+        def snapshot(job_id):
+            self.assertEqual(job_id, selected_job)
+            return {'job':{'id':job_id,'status':state['status'],'spec':'PRIVATE CMD',
+                           'cwd':'PRIVATE PATH','error':'PRIVATE ERROR'}}
+        with patch.object(self.engine.jobs, 'status', side_effect=snapshot):
+            opened = self.call('rdc_preview_open', {'session_id':SID,'job_id':selected_job})
+            self.assertEqual(opened['viewer']['task_job_id'], selected_job)
+            self.assertFalse(opened['viewer']['task_complete'])
+            self.assertNotIn('PRIVATE', json.dumps(opened))
+            running = self.call('rdc_preview_frame', {'session_id':SID,'job_id':selected_job})
+            self.assertEqual(running['task'], {'job_id':selected_job,'status':'running','complete':False})
+            self.assertIn('data', running)
+            state['status']='completed'
+            finished = self.call('rdc_preview_frame', {'session_id':SID,'job_id':selected_job})
+            self.assertEqual(finished['task'], {'job_id':selected_job,'status':'completed','complete':True})
+            self.assertNotIn('data', finished, 'Completed job must not require another image capture')
+            self.assertEqual(adapter.calls.count('snapshot'), 1)
+            state['status']='interrupted'
+            uncertain = self.call('rdc_preview_frame', {'session_id':SID,'job_id':selected_job})
+            self.assertFalse(uncertain['task']['complete'], 'Uncertain interrupted work must retain the viewer')
+            self.assertIn('data', uncertain)
+        unbound = self.engine.call('rdc_preview_open', {'job_id':selected_job})
+        self.assertFalse(unbound['ok'], 'Job-linked preview must require an exact visual source')
+        invalid = self.engine.call('rdc_preview_frame', {'session_id':SID,'job_id':'not-an-id'})
+        self.assertFalse(invalid['ok'])
+
     def test_activity_catalog_is_read_only_app_only_and_has_no_resource_launch(self):
         tool = {item['name']: item for item in self.engine.catalog()}.get('rdc_preview_activity')
         self.assertIsNotNone(tool)

@@ -13,6 +13,7 @@ const state = {
   connected: false, connecting: false, bridgeReady: false, disposed: false,
   hidden: false, busy: false, timer: null, generation: 0,
   sessionId: null, deviceId: null, frame: null, haveOpenResult: false,
+  taskJobId: null, taskClosed: false,
   availability: null, selectionLost: false, setupProblem: null,
   mode: 'inline', modes: ['inline'], presentationBridge: 'mcp',
   autoFloatAttempted: false, floatPending: false, modeRequest: 0, openPresentationRequested: false,
@@ -30,7 +31,7 @@ function stopPolling() { clearTimeout(state.timer); state.timer = null; }
 function visibleConnected() { return state.connected && state.bridgeReady && !state.disposed && !state.hidden && !document.hidden; }
 function visibleGeneration(generation) { return visibleConnected() && generation === state.generation; }
 function canPoll() {
-  return visibleConnected() && state.haveOpenResult && state.sessionId && !state.selectionLost &&
+  return visibleConnected() && state.haveOpenResult && state.sessionId && !state.taskClosed && !state.selectionLost &&
     !state.availability && !state.setupProblem && !state.pendingFrames.get(state.sessionId)?.halted && !state.blockedFrames.has(state.sessionId);
 }
 function interruptRecovery() {
@@ -57,6 +58,7 @@ function dataOf(result) {
   return {};
 }
 const operationId = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,128}$/.test(value);
+const jobId = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 const previewTools = new Set(['rdc_preview_open', 'rdc_preview_frame', 'rdc_operation_status', 'rdc_preview_resize']);
 function previewError(data = {}) {
   const messages = {
@@ -230,7 +232,8 @@ async function renewPreview(kind, pending, sessionId, generation) {
   if (!sessionId) throw previewError({error:{code:'session_required'}});
   status('Refreshing');
   const tool = kind === 'open' ? 'rdc_preview_open' : 'rdc_preview_frame';
-  const fresh = await callPreviewTool(tool, {session_id: sessionId});
+  const fresh = await callPreviewTool(tool, {session_id: sessionId,
+    ...(state.taskJobId ? {job_id:state.taskJobId} : {})});
   // Even if the view was hidden while awaiting the call, record the new
   // pending identity before returning. Its outcome must not be guessed.
   savePending(kind, sessionId, null);
@@ -329,6 +332,8 @@ function acceptOpen(data) {
   }
   if (!state.sessionId) { unbound(); return; }
   if (data.session_id !== state.sessionId) throw new Error('The preview response belongs to a different session.');
+  if (state.taskJobId && data.viewer?.task_job_id !== state.taskJobId)
+    throw new Error('The preview open did not verify its selected job.');
   requireDevice(data);
   if (!state.deviceId) throw new Error('The preview worker could not be identified.');
   state.availability = null;
@@ -523,12 +528,24 @@ async function refreshFrame(manual = false) {
   try {
     if (!await fitNativeWindow(sessionId,generation) || !visibleGeneration(generation)) return;
     const first = state.pendingFrames.has(sessionId) ? null :
-      await callPreviewTool('rdc_preview_frame', {session_id: sessionId});
+      await callPreviewTool('rdc_preview_frame', {session_id: sessionId,
+        ...(state.taskJobId ? {job_id:state.taskJobId} : {})});
     const result = await resolvePreview('frame', first, sessionId, generation);
     if (!result || !visibleGeneration(generation)) return;
     const data = checkResult(result);
     if (data.session_id !== sessionId) throw new Error('The preview response belongs to a different session.');
     if (data.device_id !== state.deviceId) throw new Error('The preview response belongs to a different worker.');
+    if (state.taskJobId) {
+      const task=data.task;
+      if (!task || task.job_id!==state.taskJobId || typeof task.status!=='string' ||
+          typeof task.complete!=='boolean') throw new Error('The preview task belongs to a different job.');
+      if (task.complete) {
+        if (!['completed','failed','cancelled','timed_out'].includes(task.status))
+          throw new Error('The task result cannot confirm safe viewer completion.');
+        await clearCompletedFloatingView(sessionId, task.job_id, generation);
+        return;
+      }
+    }
     renderFrame(result, data);
   } catch (error) {
     if (visibleGeneration(generation)) {
@@ -547,7 +564,8 @@ async function refreshSessions(manual = false) {
   const generation = state.generation;
   const requested = state.pendingOpen?.sessionId || state.sessionId;
   try {
-    const first = state.pendingOpen ? null : await callPreviewTool('rdc_preview_open', {session_id: requested});
+    const first = state.pendingOpen ? null : await callPreviewTool('rdc_preview_open', {session_id: requested,
+      ...(state.taskJobId ? {job_id:state.taskJobId} : {})});
     const result = await resolvePreview('open', first, requested, generation);
     if (result && visibleGeneration(generation)) acceptOpen(checkResult(result));
   } catch (error) {
@@ -562,6 +580,21 @@ async function retryPreview() {
   if (state.pendingOpen || state.availability || state.setupProblem || !state.haveOpenResult) await refreshSessions(true);
   else await refreshFrame(true);
 }
+async function clearCompletedFloatingView(sessionId, completedJobId, generation) {
+  if (!visibleGeneration(generation) || sessionId!==state.sessionId ||
+      completedJobId!==state.taskJobId || state.taskClosed) return;
+  // Hide and stop this viewer first. The underlying job and visual session
+  // are never closed or cancelled by a floating-window lifecycle transition.
+  const floating=state.mode==='pip';
+  state.taskClosed=true;
+  hidePreview();
+  text('closed-note', 'Task finished. Floating preview cleared. Work remains available.');
+  if (floating) {
+    try { await app.requestTeardown(); }
+    catch { /* Host-owned floating mode can refuse teardown; hidden state remains safe. */ }
+  }
+}
+
 function hidePreview() {
   state.modeRequest += 1; state.floatPending = false; state.autoFloatAttempted = false; state.openPresentationRequested = false;
   state.hidden = true; state.generation += 1; stopPolling(); interruptRecovery();
@@ -682,11 +715,19 @@ function dispose() {
 }
 app.ontoolinput = ({arguments: args}) => {
   if (state.disposed || !sourceId(args?.session_id)) return;
+  if (args.job_id !== undefined && !jobId(args.job_id)) return;
   if (state.sessionId) {
-    if (args.session_id === state.sessionId) state.openPresentationRequested = true;
+    if (args.session_id === state.sessionId) {
+      state.openPresentationRequested = true;
+      if (args.job_id && (!state.taskJobId || state.taskClosed)) {
+        state.taskJobId=args.job_id;
+        state.taskClosed=false;
+      }
+    }
     return;
   }
   state.sessionId = args.session_id;
+  state.taskJobId = args.job_id || null;
   if (state.pendingOpen) state.pendingOpen.sessionId ||= state.sessionId;
   requestAutomaticFloat();
 };

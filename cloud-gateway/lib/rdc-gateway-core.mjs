@@ -625,6 +625,9 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
       // A primary empty poll performs bounded retention maintenance below.
       const stop=clock()+(body.claim===false||body.observation_only===true?0:L.pollWaitMs);
       let op=null, wakeHintCount=0;
+      // Retain the private V2 channel's sequence cursor through the entire
+      // long poll, rather than re-reading already-consumed wake hints.
+      const notifier=body.claim===false?null:notifierFor(env);
       if(body.claim===false)await heartbeat.run();
       let firstClaim=true;
       if(body.claim!==false){
@@ -653,7 +656,6 @@ export function createGateway({catalog,resourceHtml,iconDataUri,clock=Date.now,s
           }else op=await claimStatement.first();
           if(op||clock()>=stop)break;
           const interval=Math.min(L.pollStepMs,stop-clock());
-          const notifier=notifierFor(env);
           if(notifier&&typeof notifier.wait==='function'&&wakeHintCount<3){
             // Wake signals are optional hints only. The durable D1 claim
             // remains authoritative, and a missed signal still falls back

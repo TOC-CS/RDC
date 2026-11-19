@@ -16,6 +16,14 @@ class PreviewConsistencyContracts(unittest.TestCase):
                                 capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
 
+    def test_host_confirmed_picture_in_picture_and_job_end_request_teardown(self): self.check('job-floating-supported')
+    def test_host_without_floating_mode_hides_only_and_never_opens_external_window(self): self.check('job-floating-unsupported')
+    def test_late_completion_result_cannot_reopen_but_new_job_can_rebind(self): self.check('job-next-task')
+    def test_explicit_job_bound_floating_preview_running_keeps_work_visible(self): self.check('job-running')
+    def test_verified_job_completion_clears_floating_view_without_stopping_worker(self): self.check('job-terminal')
+    def test_other_completed_job_cannot_close_selected_floating_task(self): self.check('job-mismatch')
+    def test_unknown_interruption_preserves_floating_view_for_inspection(self): self.check('job-unknown')
+
     def test_thirty_mounts_and_repeated_opens_keep_one_transport(self): self.check('repeated')
     def test_failed_initial_handshake_explicit_retry_preserves_selection(self): self.check('retry')
     def test_delayed_handshake_guards_concurrent_connect(self): self.check('delayed')

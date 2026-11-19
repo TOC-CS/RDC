@@ -10,6 +10,8 @@ import {App,PostMessageTransport} from '../../rdc/embedded/node_modules/@modelco
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const SID='b2957a7b-2062-483f-b174-9c0a3d113d55';
 const SID2='12345678-1234-1234-1234-123456789abc';
+const JOB='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const OTHER_JOB='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const openData=(id=SID)=>({device_id:'fixture-device',sessions:[{session_id:id,browser:'chromium',url:'https://example.test/',width:900,height:560}],session_id:id,viewer:{bound_to_session:true}});
 const toolResult=data=>({structuredContent:data,content:[{type:'text',text:JSON.stringify(data)}]});
 const frameResult=(id=SID)=>({structuredContent:{device_id:'fixture-device',session_id:id,width:900,height:560,mime_type:'image/png'},content:[{type:'image',mimeType:'image/png',data:'cG5n'}]});
@@ -37,8 +39,9 @@ class Element {
   addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}setAttribute(name,value){this.attributes[name]=String(value);}getAttribute(name){return this.attributes[name]??null;}removeAttribute(name){delete this.attributes[name];delete this[name];}
   focus(){}getBoundingClientRect(){return {width:900,height:560};}
 }
-function fixture({initialize='success',initial='open',session=SID,holdTools=false,includeInput=true}={}){
-  const nodes=new Map(),messageListeners=new Set(),windowListeners=new Map(),timers=new Map(),wire=[],tools=[],heldInitial=[],heldTools=[];let sequence=0,initMode=initialize;
+function fixture({initialize='success',initial='open',session=SID,holdTools=false,includeInput=true,jobId=null,frameTaskId=null,hostModes=['inline','fullscreen']}={}){
+  const nodes=new Map(),messageListeners=new Set(),windowListeners=new Map(),timers=new Map(),wire=[],tools=[],heldInitial=[],heldTools=[];let sequence=0,initMode=initialize,taskStatus='running';
+  const openResult=()=>{const data=openData(session);if(jobId)data.viewer={...data.viewer,task_job_id:jobId,task_complete:['completed','failed','cancelled','timed_out'].includes(taskStatus)};return toolResult(data)};
   for(const match of fs.readFileSync(path.join(root,'rdc/embedded/src/index.html'),'utf8').matchAll(/<([a-z][a-z0-9]*)\b[^>]*\bid="([^"]+)"[^>]*>/g)){const node=new Element(match[1]);node.hidden=/\shidden(?:\s|>)/.test(match[0]);node.disabled=/\sdisabled(?:\s|>)/.test(match[0]);nodes.set(match[2],node);}
   const documentEvents = new Map();
   const document={getElementById:id=>nodes.get(id),createElement:tag=>new Element(tag),querySelectorAll:()=>[],
@@ -51,10 +54,13 @@ function fixture({initialize='success',initial='open',session=SID,holdTools=fals
       else if(initMode==='reject')queueMicrotask(()=>send({id:message.id,error:{code:-32000,message:'Synthetic initialize rejection'}}));
       else queueMicrotask(()=>initializeReply(message));
     }else if(message.method==='ui/notifications/initialized'){
-      if(includeInput)queueMicrotask(()=>send({method:'ui/notifications/tool-input',params:{arguments:{session_id:session}}}));
-      if(initial==='open')queueMicrotask(()=>send({method:'ui/notifications/tool-result',params:toolResult(openData(session))}));
+      if(includeInput)queueMicrotask(()=>send({method:'ui/notifications/tool-input',params:{arguments:{session_id:session,...(jobId?{job_id:jobId}:{})}}}));
+      if(initial==='open')queueMicrotask(()=>send({method:'ui/notifications/tool-result',params:openResult()}));
       else if(initial==='pending')queueMicrotask(()=>send({method:'ui/notifications/tool-result',params:pendingResult('original-open-operation')}));
       else if(initial==='offline'||initial==='busy')queueMicrotask(()=>send({method:'ui/notifications/tool-result',params:toolResult({ok:true,preview_unavailable:true,preview_status:initial==='offline'?'device_offline':'gateway_busy',message:'Fixed gateway availability result',device_id:'fixture-device'})}));
+    }else if(message.method==='ui/request-display-mode'){
+      const actual=hostModes.includes(message.params.mode)?message.params.mode:'inline';
+      queueMicrotask(()=>send({id:message.id,result:{mode:actual}}));
     }else if(message.method==='tools/call'){
       tools.push(message.params);
       if(typeof holdTools==='function'?holdTools(message.params.name):holdTools)heldTools.push(message);
@@ -63,12 +69,18 @@ function fixture({initialize='success',initial='open',session=SID,holdTools=fals
   }};
   const window={parent:host,innerWidth:1000,innerHeight:800,addEventListener(name,fn){if(name==='message')messageListeners.add(fn);else{const items=windowListeners.get(name)||[];items.push(fn);windowListeners.set(name,items);}},removeEventListener(name,fn){if(name==='message')messageListeners.delete(fn);}};
   function send(value){for(const fn of [...messageListeners])fn({source:host,data:{jsonrpc:'2.0',...value}});}
-  function initializeReply(message){send({id:message.id,result:{protocolVersion:message.params.protocolVersion,hostInfo:{name:'Pinned SDK test host',version:'1'},hostCapabilities:{serverTools:{},updateModelContext:{text:{}}},hostContext:{displayMode:'inline',availableDisplayModes:['inline','fullscreen']}}});}
+  function initializeReply(message){send({id:message.id,result:{protocolVersion:message.params.protocolVersion,hostInfo:{name:'Pinned SDK test host',version:'1'},hostCapabilities:{serverTools:{},updateModelContext:{text:{}}},hostContext:{displayMode:'inline',availableDisplayModes:hostModes}}});}
   function toolReply(message){
     const {name,arguments:args}=message.params;
     assert.ok(['rdc_preview_open','rdc_preview_frame','rdc_operation_status'].includes(name), 'Unexpected preview call '+name);
     if(name==='rdc_preview_open')assert.equal(args.session_id,session);
-    const result=name==='rdc_preview_frame'?frameResult(args.session_id):toolResult(openData(session));
+    if(name==='rdc_preview_frame' && jobId) assert.equal(args.job_id,jobId);
+    let result=name==='rdc_preview_frame'?frameResult(args.session_id):openResult();
+    if(name==='rdc_preview_frame' && (jobId||frameTaskId)){
+      const task={job_id:frameTaskId||jobId,status:taskStatus,complete:['completed','failed','cancelled','timed_out'].includes(taskStatus)};
+      result=task.complete?toolResult({device_id:'fixture-device',session_id:args.session_id,task}):
+        {...result,structuredContent:{...result.structuredContent,task}};
+    }
     send({id:message.id,result});
   }
   // Only shorten the actual SDK request deadline. Production is still required
@@ -82,10 +94,84 @@ function fixture({initialize='success',initial='open',session=SID,holdTools=fals
   async function click(id){for(const fn of nodes.get(id).listeners.click||[])await fn({preventDefault(){}});await settle();}
   async function runDelay(delay){const entry=[...timers].find(([,item])=>item.delay===delay);assert.ok(entry,`Missing UI timer ${delay}`);timers.delete(entry[0]);const result=entry[1].fn();await settle();return {result};}
   async function cleanup(){context.ui.dispose();await context.ui.app.close();Object.assign(globalThis,saved);}
-  return {...context.ui,nodes,wire,tools,setDocumentHidden,heldInitial,heldTools,timers,messageListeners,send,initializeReply,toolReply,click,runDelay,cleanup,setInitialize:value=>{initMode=value;},setHoldTools:value=>{holdTools=value;}};
+  return {...context.ui,nodes,wire,tools,setDocumentHidden,heldInitial,heldTools,timers,messageListeners,send,initializeReply,toolReply,click,runDelay,cleanup,setTaskStatus:value=>{taskStatus=value;},setInitialize:value=>{initMode=value;},setHoldTools:value=>{holdTools=value;}};
 }
 const which=process.argv[2];
-if(which==='repeated'){
+if(which==='job-floating-supported'){
+  const ui=fixture({jobId:JOB,hostModes:['inline','fullscreen','pip']});try{
+    await ui.connect();await settle();await settle();
+    assert.ok(ui.wire.some(x=>x.method==='ui/request-display-mode'&&x.params.mode==='pip'));
+    assert.equal(ui.state.mode,'pip','Host-confirmed PiP must be used for floating');
+    ui.setTaskStatus('completed');await ui.refreshFrame(true);await settle();
+    assert.equal(ui.state.hidden,true);
+    assert.ok(ui.wire.some(x=>x.method==='ui/notifications/request-teardown'));
+  }finally{await ui.cleanup();}
+}else if(which==='job-floating-unsupported'){
+  const ui=fixture({jobId:JOB,hostModes:['inline','fullscreen']});try{
+    await ui.connect();await settle();
+    assert.equal(ui.state.mode,'inline');
+    assert.equal(ui.nodes.get('float').hidden,true);
+    assert.equal(ui.wire.filter(x=>x.method==='ui/request-display-mode').length,0);
+    ui.setTaskStatus('completed');await ui.refreshFrame(true);await settle();
+    assert.equal(ui.state.hidden,true);
+    assert.equal(ui.wire.filter(x=>x.method==='ui/notifications/request-teardown').length,0,
+      'No host floating view to close when PiP is unavailable');
+  }finally{await ui.cleanup();}
+}else if(which==='job-next-task'){
+  const ui=fixture({jobId:JOB,hostModes:['inline','fullscreen','pip']});try{
+    await ui.connect();await settle();await settle();
+    ui.setTaskStatus('completed');await ui.refreshFrame(true);await settle();
+    assert.equal(ui.state.hidden,true);
+    ui.send({method:'ui/notifications/tool-result',params:toolResult(openData(SID))});
+    await settle();
+    assert.equal(ui.state.hidden,true,'Late stale result cannot revive finished job');
+    ui.send({method:'ui/notifications/tool-input',params:{arguments:{session_id:SID,job_id:OTHER_JOB}}});
+    const data=openData(SID);
+    data.viewer={...data.viewer,task_job_id:OTHER_JOB,task_complete:false};
+    ui.send({method:'ui/notifications/tool-result',params:toolResult(data)});
+    await settle();
+    assert.equal(ui.state.taskJobId,OTHER_JOB,'Explicit new job may claim a fresh task view');
+    assert.equal(ui.state.hidden,false,"New job explicit open may reopen the previous hidden view");
+  }finally{await ui.cleanup();}
+}else if(which==='job-running'){
+  const ui=fixture({jobId:JOB});try{
+    await ui.connect();await settle();
+    assert.equal(ui.state.taskJobId,JOB,'Exact source view binds only explicit host job');
+    await ui.refreshFrame(true);
+    assert.equal(ui.state.hidden,false);
+    assert.equal(ui.nodes.get('frame').hidden,false);
+    assert.equal(ui.tools.filter(t=>t.name==='rdc_preview_frame')[0].arguments.job_id,JOB);
+    assert.equal(ui.wire.filter(x=>x.method==='ui/notifications/request-teardown').length,0);
+  }finally{await ui.cleanup();}
+}else if(which==='job-terminal'){
+  const ui=fixture({jobId:JOB});try{
+    await ui.connect();await settle();ui.state.mode='pip';
+    ui.setTaskStatus('completed');
+    await ui.refreshFrame(true);await settle();
+    assert.equal(ui.state.hidden,true,'Completed exact job must auto-clear viewer');
+    assert.equal(ui.state.sessionId,SID,'Source remains bound after viewer clears');
+    assert.equal(ui.state.taskJobId,JOB,'Job identity survives late results');
+    assert.equal(ui.timers.size,0,'No polling after terminal task');
+    assert.equal(ui.tools.filter(t=>t.name==='rdc_preview_frame').length,1,'One definitive completion observation');
+    assert.ok(ui.wire.some(x=>x.method==='ui/notifications/request-teardown'),'Host should receive floating-window teardown request');
+  }finally{await ui.cleanup();}
+}else if(which==='job-mismatch'){
+  const ui=fixture({jobId:JOB,frameTaskId:OTHER_JOB});try{
+    await ui.connect();await settle();ui.state.mode='pip';ui.setTaskStatus('completed');
+    await ui.refreshFrame(true);await settle();
+    assert.equal(ui.state.hidden,false,'Unrelated completed job cannot clear selected task');
+    assert.equal(ui.state.sessionId,SID);
+    assert.equal(ui.wire.filter(x=>x.method==='ui/notifications/request-teardown').length,0);
+  }finally{await ui.cleanup();}
+}else if(which==='job-unknown'){
+  const ui=fixture({jobId:JOB});try{
+    await ui.connect();await settle();ui.state.mode='pip';ui.setTaskStatus('interrupted');
+    await ui.refreshFrame(true);await settle();
+    assert.equal(ui.state.hidden,false,'Uncertain worker interruption cannot clear floating view');
+    assert.equal(ui.nodes.get('frame').hidden,false);
+    assert.equal(ui.wire.filter(x=>x.method==='ui/notifications/request-teardown').length,0);
+  }finally{await ui.cleanup();}
+}else if(which==='repeated'){
   for(let index=0;index<30;index++){
     const ui=fixture();try{await ui.connect();await settle();assert.equal(ui.state.connected,true);assert.equal(ui.state.sessionId,SID);assert.equal(ui.messageListeners.size,1);await ui.refreshSessions(true);await ui.refreshSessions(true);assert.equal(ui.tools.filter(item=>item.name==='rdc_preview_open').length,2);assert.equal(ui.wire.filter(item=>item.method==='ui/initialize').length,1);assert.equal(ui.messageListeners.size,1);}finally{await ui.cleanup();}assert.equal(ui.messageListeners.size,0);
   }
