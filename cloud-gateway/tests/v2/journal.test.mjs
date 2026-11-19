@@ -1,0 +1,206 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { createHash } from 'node:crypto';
+import { RDC2Journal } from '../../lib/v2/rdc2-journal.mjs';
+
+const digest = value=>createHash('sha256').update(value).digest('hex');
+const uuid='00000000-0000-4000-8000-000000000001';
+function source(){
+  const db=new DatabaseSync(':memory:');
+  const storage={
+    sql:{exec(query,...bind){
+      let rows=[];
+      if(/^\s*(SELECT|WITH|PRAGMA)\b|\bRETURNING\b/i.test(query)){
+        rows=db.prepare(query).all(...bind);
+      } else if(/^\s*CREATE\b/i.test(query)){db.exec(query)}
+      else {db.prepare(query).run(...bind)}
+      return {toArray:()=>rows};
+    }},
+    transactionSync(fn){
+      db.exec('BEGIN');
+      try{const result=fn();db.exec('COMMIT');return result}
+      catch(error){db.exec('ROLLBACK');throw error}
+    }
+  };
+  return {db,storage};
+}
+function rig(options={}){
+  const {db,storage}=source();
+  let clock=1700000000000;
+  const journal=new RDC2Journal(storage,{now:()=>clock,queueTtlMs:30000,
+    unknownMs:120000,resultTtlMs:60000,maxQueue:4,maxRecords:50,...options});
+  const heartbeat=()=>journal.heartbeat();
+  const bootstrap=()=>journal.bindOwner('TOC-owner',{bootstrap:true});
+  const req=(key,tool='rdc_job_run',mutating=true)=>{
+    const json=JSON.stringify({name:tool,arguments:{value:key}});
+    return {principal:'TOC-owner',requestKey:key,requestDigest:digest(json),
+      requestJson:json,tool,mutating};
+  };
+  return {db,storage,journal,heartbeat,bootstrap,req,advance:ms=>{clock+=ms},now:()=>clock};
+}
+function expectCode(fn,code){assert.throws(fn,e=>e?.code===code)}
+
+test('V2 private owner binding requires explicit bootstrap and survives process restart',()=>{
+  const s=rig();
+  expectCode(()=>s.journal.bindOwner('TOC-owner'), 'owner_not_bound');
+  s.bootstrap();
+  assert.equal(s.journal.bindOwner('TOC-owner'), 'TOC-owner');
+  expectCode(()=>s.journal.bindOwner('intruder',{bootstrap:true}),'owner_forbidden');
+  const restarted=new RDC2Journal(s.storage,{now:s.now});
+  assert.equal(restarted.bindOwner('TOC-owner'),'TOC-owner');
+  expectCode(()=>restarted.bindOwner('intruder'),'owner_forbidden');
+});
+test('V2 status knows offline, online, and stale heartbeat without device state leaks',()=>{
+  const s=rig({onlineMs:35000});
+  s.bootstrap();
+  assert.deepEqual(s.journal.status('TOC-owner').online,false);
+  s.heartbeat();
+  assert.equal(s.journal.status('TOC-owner').online,true);
+  s.advance(35001);
+  assert.equal(s.journal.status('TOC-owner').online,false);
+  expectCode(()=>s.journal.status('other-owner'),'owner_forbidden');
+});
+test('V2 admits first original mutation once and recovers duplicate idempotently',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();
+  const original=s.journal.enqueue(s.req('original-1'));
+  assert.equal(original.reused,false);
+  assert.equal(original.state,'queued');
+  const again=s.journal.enqueue(s.req('original-1'));
+  assert.equal(again.id,original.id);
+  assert.equal(again.reused,true);
+  assert.equal(s.journal.status('TOC-owner').pending,1);
+});
+test('V2 same key with different content fails without new operation',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();
+  s.journal.enqueue(s.req('key-a'));
+  const altered={...s.req('key-a'),requestJson:'{"name":"rdc_file_write","arguments":{"value":"altered"}}'};
+  altered.requestDigest=digest(altered.requestJson);
+  expectCode(()=>s.journal.enqueue(altered),'request_id_conflict');
+  assert.equal(s.journal.status('TOC-owner').pending,1);
+});
+test('V2 rejects missing owner, malformed digest, empty key and unauthorized principal',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();
+  expectCode(()=>s.journal.enqueue({...s.req('a'),principal:'other'}),'owner_forbidden');
+  expectCode(()=>s.journal.enqueue({...s.req('a'),requestDigest:'wrong'}),'invalid_request');
+  expectCode(()=>s.journal.enqueue({...s.req('a'),requestKey:''}),'invalid_request');
+  assert.equal(s.journal.status('TOC-owner').pending,0);
+});
+test('V2 requires online device for new dispatch but preserves duplicate recovery when offline',()=>{
+  const s=rig();s.bootstrap();
+  expectCode(()=>s.journal.enqueue(s.req('offline')),'device_offline');
+  s.heartbeat();const initial=s.journal.enqueue(s.req('offline'));
+  s.advance(36000);
+  assert.equal(s.journal.enqueue(s.req('offline')).id,initial.id);
+  expectCode(()=>s.journal.enqueue(s.req('fresh')),'device_offline');
+});
+test('V2 durable ordered claim grants each operation exactly one distinct claim identity',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();
+  const a=s.journal.enqueue(s.req('a'));
+  const b=s.journal.enqueue(s.req('b'));
+  const first=s.journal.claim();const second=s.journal.claim();
+  assert.equal(first.id,a.id);assert.equal(second.id,b.id);
+  assert.notEqual(first.claimId,second.claimId);
+  assert.equal(s.journal.claim(),null);
+  assert.equal(s.journal.status('TOC-owner').pending,2);
+});
+test('V2 forged claim or wrong request hash cannot complete original mutation',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();
+  const input=s.journal.enqueue(s.req('protected'));const op=s.journal.claim();
+  const resultJson='{"content":[{"type":"text","text":"done"}]}';
+  const data={id:input.id,claimId:op.claimId,requestDigest:op.requestDigest,
+    resultJson,resultDigest:digest(resultJson)};
+  expectCode(()=>s.journal.complete({...data,claimId:uuid}),'claim_mismatch');
+  expectCode(()=>s.journal.complete({...data,requestDigest:digest('wrong')}),'claim_mismatch');
+  assert.equal(s.journal.recover('TOC-owner',input.id).state,'claimed');
+  assert.equal(s.journal.complete(data).state,'completed');
+  assert.equal(s.journal.recover('TOC-owner',input.id).resultJson,resultJson);
+});
+test('V2 lost completion ACK recovers original result; identical duplicate is accepted once',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();
+  s.journal.enqueue(s.req('lost-ack'));const op=s.journal.claim();
+  const resultJson='{"content":[{"type":"text","text":"exact"}]}';
+  const data={id:op.id,claimId:op.claimId,requestDigest:op.requestDigest,
+    resultJson,resultDigest:digest(resultJson)};
+  assert.equal(s.journal.complete(data).duplicate,false);
+  assert.equal(s.journal.complete(data).duplicate,true);
+  assert.equal(s.journal.recover('TOC-owner',op.id).resultJson,resultJson);
+  expectCode(()=>s.journal.complete({...data,resultJson:'{"different":true}',
+    resultDigest:digest('{"different":true}')}),'result_conflict');
+});
+test('V2 process restart never reclaims an in-flight mutation',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();
+  s.journal.enqueue(s.req('once'));const op=s.journal.claim();
+  const restored=new RDC2Journal(s.storage,{now:s.now});
+  assert.equal(restored.claim(),null);
+  assert.equal(restored.recover('TOC-owner',op.id).state,'claimed');
+  s.advance(120001);restored.sweep();
+  assert.equal(restored.claim(),null);
+  assert.equal(restored.recover('TOC-owner',op.id).state,'unknown');
+});
+test('V2 original late result may finish unknown state without replay',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();
+  s.journal.enqueue(s.req('late'));const op=s.journal.claim();
+  s.advance(120001);s.journal.sweep();
+  const json='{"content":[],"isError":false}';
+  assert.equal(s.journal.complete({id:op.id,claimId:op.claimId,
+    requestDigest:op.requestDigest,resultJson:json,resultDigest:digest(json)}).state,'completed');
+  assert.equal(s.journal.claim(),null);
+});
+test('V2 expires queued operations and never executes late work',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();const initial=s.journal.enqueue(s.req('expired'));
+  s.advance(30001);
+  assert.equal(s.journal.claim(),null);
+  s.journal.sweep();
+  assert.equal(s.journal.recover('TOC-owner',initial.id).state,'expired');
+});
+test('V2 queue saturation rejects surplus work but never silently removes protected mutation',()=>{
+  const s=rig({maxQueue:2});s.bootstrap();s.heartbeat();
+  const first=s.journal.enqueue(s.req('first'));
+  s.journal.enqueue(s.req('second'));
+  expectCode(()=>s.journal.enqueue(s.req('third')),'queue_full');
+  assert.equal(s.journal.enqueue(s.req('first')).id,first.id);
+});
+test('V2 recorded result expiry stops exposure but preserves mutation tombstone',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();s.journal.enqueue(s.req('result'));
+  const op=s.journal.claim(), json='{"content":[],"isError":false}';
+  s.journal.complete({id:op.id,claimId:op.claimId,
+    requestDigest:op.requestDigest,resultJson:json,resultDigest:digest(json)});
+  s.advance(60001);
+  assert.equal(s.journal.recover('TOC-owner',op.id).state,'result_expired');
+  assert.equal(s.journal.enqueue(s.req('result')).id,op.id);
+});
+test('V2 bounds request and response payloads without persisting overflow',()=>{
+  const s=rig({maxRequestBytes:64,maxResultBytes:64});s.bootstrap();s.heartbeat();
+  const big=JSON.stringify({name:'a',arguments:{value:'x'.repeat(300)}});
+  expectCode(()=>s.journal.enqueue({...s.req('big'),requestJson:big,requestDigest:digest(big)}),'payload_too_large');
+  s.journal.enqueue(s.req('small','t',false));const op=s.journal.claim();
+  const resultJson='{"content":[{"text":"'+ 'x'.repeat(200)+'"}]}';
+  expectCode(()=>s.journal.complete({id:op.id,claimId:op.claimId,requestDigest:op.requestDigest,
+    resultJson,resultDigest:digest(resultJson)}),'payload_too_large');
+  assert.equal(s.journal.recover('TOC-owner',op.id).state,'claimed');
+});
+test('V2 journal rejects altered tool identity or nonobject request with no admission',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();
+  const array='[]';
+  expectCode(()=>s.journal.enqueue({...s.req('invalid'),requestJson:array,
+    requestDigest:digest(array)}),'invalid_request');
+  const impostor=JSON.stringify({name:'rdc_file_read',arguments:{}});
+  expectCode(()=>s.journal.enqueue({...s.req('mismatch'),requestJson:impostor,
+    requestDigest:digest(impostor)}),'invalid_request');
+  assert.equal(s.journal.status('TOC-owner').pending,0);
+});
+test('V2 journal rejects invalid MCP result envelope before committing and permits original valid upload',()=>{
+  const s=rig();s.bootstrap();s.heartbeat();s.journal.enqueue(s.req('mcp-envelope'));
+  const claimed=s.journal.claim();
+  for(const invalid of ['[]','{}','{"content":"invalid"}','{"content":[],"isError":"yes"}']){
+    expectCode(()=>s.journal.complete({id:claimed.id,claimId:claimed.claimId,
+      requestDigest:claimed.requestDigest,resultJson:invalid,resultDigest:digest(invalid)}),
+      'invalid_result');
+    assert.equal(s.journal.recover('TOC-owner',claimed.id).state,'claimed');
+  }
+  const valid='{"content":[{"type":"text","text":"complete"}],"isError":false}';
+  assert.equal(s.journal.complete({id:claimed.id,claimId:claimed.claimId,
+    requestDigest:claimed.requestDigest,resultJson:valid,resultDigest:digest(valid)}).state,
+    'completed');
+});

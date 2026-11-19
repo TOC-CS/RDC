@@ -62,7 +62,7 @@ def read_secret(path):
 def parser():
     command = argparse.ArgumentParser(prog='rdc', description='Independent local agent workspaces (alpha).')
     sub = command.add_subparsers(dest='command', required=True)
-    for name in ('init', 'stdio', 'connect', 'relay', 'serve', 'doctor', 'owner-token', 'diagnostics', 'setup-macos'):
+    for name in ('init', 'stdio', 'connect', 'relay', 'relay-v2', 'serve', 'doctor', 'owner-token', 'diagnostics', 'setup-macos'):
         action = sub.add_parser(name)
         action.add_argument('--state-dir', type=Path, default=default_state_dir())
         if name == 'setup-macos':
@@ -84,7 +84,7 @@ def parser():
         if name == 'connect':
             action.add_argument('--url', default='http://127.0.0.1:8765/mcp', help='Running worker MCP endpoint: loopback HTTP or HTTPS')
             action.add_argument('--timeout', type=float, default=60, help='Upstream request timeout in seconds; actions are never retried')
-        if name == 'relay':
+        if name in ('relay', 'relay-v2'):
             action.add_argument('--config', type=Path, required=True,
                                 help='Private gateway pairing JSON file; secrets remain on this device')
         if name == 'serve':
@@ -134,6 +134,11 @@ def main(argv=None):
             import anyio
             from .relay import run_relay
             anyio.run(run_relay, args.config, state)
+            return 0
+        if args.command == 'relay-v2':
+            import anyio
+            from .relay_v2 import run_relay_v2
+            anyio.run(run_relay_v2, args.config, state)
             return 0
         settings = Settings.load(state / 'config.json')
         if settings.state_dir != state:
