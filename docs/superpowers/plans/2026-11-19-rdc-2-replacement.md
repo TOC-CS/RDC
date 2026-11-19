@@ -36,6 +36,10 @@
 - [ ] Independent review of module and final commit.
 
 ### Task 2: Persistent event-channel integration
+- [x] Write RED six-test broker contract for monotonic events, independent listeners, cancellation, capacity and expired-history gaps.
+- [x] Implement isolated clean RDCV2EventBroker module with bound state and original operation identity.
+- [x] Run external 1000-listener / 700-abort / 3000-event QA, all four scenarios green.
+- [x] Re-run 122 Node gateway + v2 regression tests.
 - [ ] Write failing gateway event admission + result recovery tests, with original operation IDs and no-replay.
 - [ ] Add new gateway adapter only behind an explicit v2 protocol version, without touching v1 behavior.
 - [ ] Run normal gateway suite and external network-disconnect hostile fixture.

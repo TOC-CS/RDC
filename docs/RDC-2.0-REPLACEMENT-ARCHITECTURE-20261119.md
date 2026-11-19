@@ -2,7 +2,7 @@
 
 Date: 2026-11-19
 Owner: TOC Ministries
-Status: DESIGN AND INDEPENDENT QA ACTIVE; replacement NOT deployed.
+Status: CLEAN V2 PROTOCOL AND BOUNDED EVENT BROKER IMPLEMENTED; replacement NOT deployed.
 Source worktree: feature/rdc-2.0-rebuild-20261119
 Baseline: 3371045
 
@@ -57,3 +57,11 @@ Scope independent work: Transport and notifications; Gateway authorization/queue
 - Phase E: protected private Site deployment/rollback proof, exact worker version readback, 30+ live samples for all five targets, then controlled replacement. BLOCKED until release authority and real evidence.
 
 Release is incomplete until every safety and speed gate passes. Existing RDC keeps running.
+
+## Current clean 2.0 implementation checkpoint
+
+- cloud-gateway/lib/rdc-v2-protocol.mjs: strict ID-only versioned event protocol.
+- cloud-gateway/lib/rdc-v2-broker.mjs: bounded per-device notification sequencer with listener cancellation, overload rejection, short-lived event records and explicit gap reporting for durable reconciliation.
+- 122/122 Node gateway and V2 regression tests passed.
+- External QA: 12,000 invalid frames rejected, 1,000 valid frames round-tripped, 1,000 simultaneous broker listeners, 700 listener cancellations and 3,000 burst events, with no failed scenarios.
+- No v2 component is connected to the deployed Site or the running worker. No production swap has taken place.
