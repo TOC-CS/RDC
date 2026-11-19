@@ -40,6 +40,15 @@
 - [x] Implement isolated clean RDCV2EventBroker module with bound state and original operation identity.
 - [x] Run external 1000-listener / 700-abort / 3000-event QA, all four scenarios green.
 - [x] Re-run 122 Node gateway + v2 regression tests.
+- [x] Write RED then GREEN v2 private notification tests for device and operation identity, bounded history, polling fallback and no payload leakage.
+- [x] Add the exact opt-in RDC_ENABLE_V2_WAKE private DO route, retaining V1 routes and D1 claims.
+- [x] Preserve one gateway poll channel cursor; verify stream/body bounds and no unauthorized operation execution.
+- [x] Include the new v2 regression tests in the existing macOS/Linux/Windows gateway CI entry point.
+- [x] Run 132/132 Node gateway and protocol tests, default and DO-enabled Site builds, TypeScript and focused ESLint.
+- [x] Run five detached hostile V2 wake scenarios in the sibling QA folder.
+- [ ] Run a real provisioned development Durable Object smoke to confirm service lifecycle and network bounds.
+- [ ] Verify a protected private Site rollback and actual compatible worker before production feature activation.
+- [ ] Measure at least 30 fresh live samples for all mandatory speed metrics.
 - [ ] Write failing gateway event admission + result recovery tests, with original operation IDs and no-replay.
 - [ ] Add new gateway adapter only behind an explicit v2 protocol version, without touching v1 behavior.
 - [ ] Run normal gateway suite and external network-disconnect hostile fixture.

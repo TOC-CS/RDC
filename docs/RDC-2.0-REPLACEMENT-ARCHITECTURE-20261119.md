@@ -78,3 +78,39 @@ Release is incomplete until every safety and speed gate passes. Existing RDC kee
 **Limit:** Current auto-clear applies only to explicitly bound RDC durable jobs. Browser or other visual workflows lack a proven generic task-completion signal. Generic completion lifecycle, multiple host floating views and real ChatGPT/Codex window behavior remain OPEN requirements.
 
 **Source QA:** 16 worker preview tests, 33 MCP Apps host contracts, 111 gateway tests, and 407 external hostile lifecycle cases passed. Source and embedded UI have been synchronized into gateway assets. A complete exact-revision regression rerun remains required. Live speed targets are OPEN pending authenticated measurements.
+
+## Private opt-in v2 wake transport integration (source qualification)
+
+The gateway source now supports RDC_ENABLE_V2_WAKE='1' **only with** the
+already owner-private RDC_WAKE_CHANNEL Durable Object binding. Default and
+unset configurations keep the existing v1 wake or database-poll-only behavior.
+No new public path, provider subscription, private App, device enrolment,
+Keychain read, credential change, or production deployment is part of this
+source revision.
+
+New source: cloud-gateway/lib/rdc-v2-wake-channel.mjs. The private request
+contains only device ID, a queue/result event kind, original operation ID
+(only for completions), bounded timeout and sequence cursor. It does not
+contain commands, request bodies, results, customer data or secrets.
+The existing DO instance gains isolated /v2/notify and /v2/wait internal
+routes; the v1 paths remain unchanged. It pins the first device ID and
+rejects a mismatch, bounds incoming streamed JSON to 512 bytes, bounds
+listeners/history and returns only a boolean hint, sequence and gap flag.
+
+After a gap, the gateway immediately rechecks authoritative D1 operation
+state. It never repeats a mutation from a hint. The relay long-poll retains
+a single notifier instance and its sequence cursor across all wait cycles.
+The DO stores only short-lived ID-only hints and cannot execute any task.
+
+**Evidence:** New gateway/transport regression suite 132/132 green; both
+default and existing wake-enabled Site builds passed, as did TypeScript and
+focused source lint. External sibling QA passed five adversarial cases:
+400 concurrent wake listeners, 120 wrong-result listeners, 800 completion
+notifications with bounded retention, legacy compatibility, and mismatched
+identity denial. The external runner is never packaged. No connected
+ChatGPT live latency target is proven by these source tests.
+
+**Release dependency:** The current live worker and private Site do not yet
+negotiate this protocol and the v2 flag remains unset. A compatible staged
+worker, exact Site readback and protected rollback must precede activation.
+Subsequent 30+ production-labeled samples per speed target are mandatory.

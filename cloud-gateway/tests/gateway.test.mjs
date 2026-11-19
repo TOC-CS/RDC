@@ -10,6 +10,10 @@ import {makeBoundWakeChannel, RDCWakeSignal} from '../lib/rdc-wake.mjs';
 import './wake-signal.test.mjs';
 // The existing CI contract runner also qualifies the opt-in private DO release config.
 import './wake-bindings-config.test.mjs';
+// CI exercises the opt-in V2 wire, bounded broker and private DO adapter.
+import './rdc-v2-protocol.test.mjs';
+import './rdc-v2-broker.test.mjs';
+import './rdc-v2-wake-channel.test.mjs';
 // Owner speed gates run on the existing three-platform CI, without modifying workflows.
 import '../../benchmarks/rdc_speed_acceptance.test.mjs';
 
@@ -2033,4 +2037,34 @@ test('integrated capacity retry notifies once after durable admission and keeps 
   assert.equal(s.env.DB.sqlite.prepare('SELECT COUNT(*) AS n FROM gateway_operations WHERE mutating=1').get().n,1);
   assert.equal(firstRead.status,200);
   assert.equal(protectedMutation.status,200);
+});
+
+test('RDC 2 opt-in private notifier integrates durable admission and result commit',async()=>{
+  const signal=new RDCWakeSignal();
+  const paths=[];
+  const namespace={
+    idFromName(name){assert.equal(name,DEVICE);return name},
+    get(){return {fetch(request){
+      paths.push({path:new URL(request.url).pathname,body:request.clone().text()});
+      return signal.fetch(request);
+    }}},
+  };
+  const s=setup({callWaitMs:0,pollWaitMs:0},catalog,async()=>{},null,env=>makeBoundWakeChannel(env));
+  s.env.RDC_WAKE_CHANNEL=namespace;
+  s.env.RDC_ENABLE_V2_WAKE='1';
+  await s.poll({claim:false});
+  const accepted=await s.mcp('rdc_file_write',{
+    value:'PRIVATE_DO_NOT_SEND',_rdc_request_id:'rdc2-private-durable-integration'});
+  assert.equal(accepted.status,200);
+  const claimed=(await s.poll()).body.operation;
+  assert.ok(claimed?.operation_id);
+  const committed=await s.complete(claimed,result('PRIVATE_RESULT_BYTES'));
+  assert.equal(committed.status,200);
+  const recovered=await s.mcp('rdc_operation_status',{operation_id:claimed.operation_id});
+  assert.equal(recovered.body.result.structuredContent.value,'PRIVATE_RESULT_BYTES');
+  assert.equal(paths.filter(x=>x.path==='/v2/notify').length,2);
+  const bodies=await Promise.all(paths.map(x=>x.body));
+  assert.ok(bodies.every(body=>!body.includes('PRIVATE_DO_NOT_SEND')&&!body.includes('PRIVATE_RESULT_BYTES')),
+    'private notification payloads carry IDs only, never result or arguments');
+  assert.equal(s.env.BUCKET.puts,0);
 });

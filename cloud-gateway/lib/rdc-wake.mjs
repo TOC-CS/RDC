@@ -3,6 +3,7 @@
  * an explicitly provisioned RDC_WAKE_CHANNEL Durable Object binding before
  * this accelerates anything. No passwords or tool contents enter the signal.
  */
+import {makeBoundV2WakeChannel,handleV2Wake} from './rdc-v2-wake-channel.mjs';
 const internalOrigin='https://rdc-wake.internal';
 const operationIdPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -10,6 +11,7 @@ export function makeBoundWakeChannel(env) {
   const namespace=env?.RDC_WAKE_CHANNEL;
   if (!namespace || typeof namespace.idFromName!=='function' ||
       typeof namespace.get!=='function') return null;
+  if(env?.RDC_ENABLE_V2_WAKE==='1')return makeBoundV2WakeChannel(namespace);
   function endpoint(deviceId) {
     if (typeof deviceId!=='string' || !/^[0-9a-f-]{36}$/.test(deviceId))
       throw new Error('Invalid wake device identity');
@@ -57,6 +59,8 @@ export class RDCWakeSignal {
   constructor(state) {
     this.waiters=new Set();
     this.resultWaiters=new Map();
+    this.v2Broker=null;
+    this.v2DeviceId=null;
     // A committed result may notify the DO in the small gap between a D1
     // completion probe and waiter registration. Keep only bounded, short-lived
     // operation identifiers so that a late waiter can recheck the ORIGINAL
@@ -81,6 +85,7 @@ export class RDCWakeSignal {
   }
   async fetch(request) {
     const address=new URL(request.url);
+    if(address.pathname.startsWith('/v2/'))return handleV2Wake(this,request);
     const body=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
     if(request.method!=='POST')return body({ok:false},405);
     if(address.pathname==='/notify-result'||address.pathname==='/wait-result'){
