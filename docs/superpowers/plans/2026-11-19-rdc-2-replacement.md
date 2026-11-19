@@ -1,0 +1,71 @@
+# RDC 2.0 Clean Replacement Implementation Plan
+
+> For agentic workers: required Superpowers workflow is test-driven development, systematic debugging, isolated worktrees, verification-before-completion. No agent dispatch may be asserted without an authenticated running worker.
+
+**Goal:** Replace the high-latency RDC gateway and relay with a low-latency, durable, owner-authorized 2.0 system that exceeds Desktop Commander performance without losing tool capabilities.
+
+**Architecture:** Introduce a new versioned ID-only event protocol, then connect it to a durable gateway journal and authenticated worker. Keep current production traffic on the old version until an independent canary is proved correct, fast and rollback-safe.
+
+**Tech stack:** Node 24, ECMAScript modules, Cloudflare D1/R2/Durable Objects, Python 3.14, MCP, git worktrees, Node test and Python unittest.
+
+**Spec:** docs/RDC-2.0-REPLACEMENT-ARCHITECTURE-20261119.md
+
+## Global Constraints
+
+- All hostile and fault-injection executables belong exclusively to the SIBLING ../RDC-2.0-QA directory.
+- Release source must not include hostile fixtures or synthetic secrets.
+- Never touch the active private ChatGPT App, Site, worker or TOC production data during isolated qualification.
+- Keep authorized owner, file-path restrictions, approvals, hashes, durable outcomes and no-replay semantics.
+- No status or benchmark claim of <=800ms without at least 30 real connected calls and exact output validation.
+
+## Review Focus
+
+- Duplicate/missed event hints must never redispatch local work.
+- Unauthenticated principal cannot read online or queue status.
+- Invalid event JSON must not leak code, arguments, or secrets.
+- A disconnected wake service must preserve correct polling fallback.
+- Release rollback must understand all result storage formats written by the new version.
+
+### Task 1: Versioned control protocol
+- [x] Write failing five-test source contract for negotiation, immutable ID-only events, strict wire validation and sequence bounds.
+- [x] Confirm RED on missing module.
+- [x] Implement clean module cloud-gateway/lib/rdc-v2-protocol.mjs.
+- [x] Confirm five focused tests GREEN.
+- [x] Run 12,000 invalid-input adversarial cases and 1,000 valid round trips in external QA.
+- [x] Run 116-test existing gateway + v2 regression suite.
+- [ ] Independent review of module and final commit.
+
+### Task 2: Persistent event-channel integration
+- [ ] Write failing gateway event admission + result recovery tests, with original operation IDs and no-replay.
+- [ ] Add new gateway adapter only behind an explicit v2 protocol version, without touching v1 behavior.
+- [ ] Run normal gateway suite and external network-disconnect hostile fixture.
+- [ ] Compare exact live wake p50/p95/p99 with 30+ matched samples.
+
+### Task 3: Worker and coding capabilities
+- [ ] Build persistent worker event stream and explicit typed version handshake.
+- [ ] Add bounded read-only concurrency and serialized idempotent mutation path.
+- [ ] Verify one-call source discovery/read, bulk edits, browser session handling and permissions.
+- [ ] Run 30-pair benchmark RDC 2.0 vs DC per workload.
+
+### Task 4: Cross-platform and hostile QA
+- [ ] Run all worker regressions on isolated source.
+- [ ] Build private Site default and opt-in v2 configurations, then exact bundle inventory.
+- [ ] Run macOS, Ubuntu and Windows CI on exact source commit.
+- [ ] Rehearse offline relay, blocked queue, timed-out result, invalid input and rollback mismatch in detached synthetic fixtures.
+
+### Task 5: Safe replacement
+- [ ] Read back installed worker version and exact deployed Site SHA.
+- [ ] Verify inactive rollback that can read both legacy R2 and inline D1 outcomes.
+- [ ] Stage authenticated existing private Site canary and source-compatible worker.
+- [ ] Collect all five mandatory sets of >=30 live verified samples, fail closed.
+- [ ] Replace v1 only after functionality, privacy, p50/p95/p99 and recovery gates all pass.
+
+## Parallel Ownership
+
+Transport/event API: v2 protocol and transport integration only.
+Gateway: durable D1/R2 admission and recovery only.
+Worker: Python relay, coding, browser only.
+QA: sibling external hostile harness only.
+Integrator: release identity, full regression and readback only.
+
+Atlas Bus may coordinate synthetic tasks today, but its present version has no authenticated ChatGPT-to-agent transport. No real multi-agent swarm has been dispatched by a checklist.
