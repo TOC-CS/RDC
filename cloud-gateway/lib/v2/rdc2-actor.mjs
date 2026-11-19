@@ -9,6 +9,7 @@ import {RDC2Journal,RDC2Error} from './rdc2-journal.mjs';
 const encoder=new TextEncoder();
 const decoder=new TextDecoder();
 const MAX_BODY=1_572_864;
+const MAX_BULK_BODY=16*1024*1024;
 const MAX_FRAME=1_572_864;
 const DEVICE_TAG='rdc2-device';
 const workHint=JSON.stringify({version:2,type:'work_available'});
@@ -25,11 +26,11 @@ async function equivalent(left,right){
   for(let i=0;i<a.length;i++)mismatch|=a.charCodeAt(i)^b.charCodeAt(i);
   return mismatch===0;
 }
-async function body(request){
+async function body(request,maxBytes=MAX_BODY){
   if(request.headers.get('Content-Type')?.split(';')[0]?.trim()!=='application/json')
     throw new RDC2Error('content_type',415);
   const declared=request.headers.get('Content-Length');
-  if(declared!==null&&(!/^\d+$/.test(declared)||Number(declared)>MAX_BODY))
+  if(declared!==null&&(!/^\d+$/.test(declared)||Number(declared)>maxBytes))
     throw new RDC2Error('payload_too_large',413);
   const reader=request.body?.getReader();
   if(!reader)throw new RDC2Error('invalid_json');
@@ -38,7 +39,7 @@ async function body(request){
     const {done,value}=await reader.read();
     if(done)break;
     total+=value.byteLength;
-    if(total>MAX_BODY){await reader.cancel();throw new RDC2Error('payload_too_large',413)}
+    if(total>maxBytes){await reader.cancel();throw new RDC2Error('payload_too_large',413)}
     parts.push(value);
   }
   const data=new Uint8Array(total);
@@ -109,6 +110,60 @@ export class RDC2DeviceActor {
     if(typeof raw!=='string'||!validHex(expected)||await digest(raw)!==expected)
       throw new RDC2Error('digest_mismatch',409);
   }
+  async hydrateResult(result){
+    if(result.state!=='completed'||!result.resultKey)return result;
+    if(typeof this.env?.BUCKET?.get!=='function')
+      throw new RDC2Error('result_store_unavailable',503);
+    let stored;
+    try{stored=await this.env.BUCKET.get(result.resultKey)}
+    catch{throw new RDC2Error('result_store_unavailable',503)}
+    if(!stored)throw new RDC2Error('result_unavailable',503);
+    let raw;
+    try{raw=await stored.text()}
+    catch{throw new RDC2Error('result_unavailable',503)}
+    if(typeof raw!=='string'||encoder.encode(raw).length>this.journal.limits.maxBulkResultBytes)
+      throw new RDC2Error('result_unavailable',503);
+    await this.verifyPayload(raw,result.resultDigest);
+    return {id:result.id,state:'completed',resultJson:raw};
+  }
+  async completeBulk(args){
+    if(typeof this.env?.BUCKET?.put!=='function')
+      throw new RDC2Error('result_store_unavailable',503);
+    await this.verifyPayload(args.resultJson,args.resultDigest);
+    const size=encoder.encode(args.resultJson).length;
+    if(size<=this.journal.limits.maxResultBytes||
+       size>this.journal.limits.maxBulkResultBytes)
+      throw new RDC2Error('payload_too_large',413);
+    let parsed;
+    try{parsed=JSON.parse(args.resultJson)}
+    catch{throw new RDC2Error('invalid_result')}
+    if(!validObject(parsed)||!Array.isArray(parsed.content)||parsed.content.length>1000||
+       (parsed.isError!==undefined&&typeof parsed.isError!=='boolean'))
+      throw new RDC2Error('invalid_result');
+    const eligible=this.journal.preflightExternalCompletion(args);
+    if(eligible.duplicate)return eligible;
+    const resultKey='rdc2-results/'+args.id+'/'+args.resultDigest+'.json';
+    try{
+      await this.env.BUCKET.put(resultKey,args.resultJson,{
+        httpMetadata:{contentType:'application/json'}
+      });
+    }catch{throw new RDC2Error('result_store_unavailable',503)}
+    // Store the pointer only AFTER original result bytes become durable.
+    // If metadata commit fails, the orphan can be cleaned without replay.
+    const completed=this.journal.completeExternal({...args,resultKey,resultSize:size});
+    if(!completed.duplicate)this.notifyResult(completed.id);
+    return completed;
+  }
+  async retireExternal(){
+    const expired=this.journal.expiredExternal(16);
+    if(expired.length&&typeof this.env?.BUCKET?.delete!=='function')
+      throw new RDC2Error('result_store_unavailable',503);
+    for(const entry of expired){
+      try{await this.env.BUCKET.delete(entry.resultKey)}
+      catch{throw new RDC2Error('result_store_unavailable',503)}
+      this.journal.clearExpiredExternal(entry.id,entry.resultKey);
+    }
+  }
   async fetch(request){
     try{
       const secret=this.env?.RDC2_INTERNAL_KEY;
@@ -130,7 +185,7 @@ export class RDC2DeviceActor {
         return new Response(null,{status:101,webSocket:worker});
       }
       if(request.method!=='POST')throw new RDC2Error('method_not_allowed',405);
-      const args=await body(request);
+      const args=await body(request,path==='/v2/complete_bulk'?MAX_BULK_BODY:MAX_BODY);
       let data;
       switch(path){
         case '/v2/bind':
@@ -156,7 +211,7 @@ export class RDC2DeviceActor {
           await this.verifyPayload(args.requestJson,args.requestDigest);
           const admitted=this.journal.enqueue(args);
           if(!admitted.reused)this.notifyWork();
-          data=await this.waitForResult(args.principal,admitted.id,args.waitMs);
+          data=await this.hydrateResult(await this.waitForResult(args.principal,admitted.id,args.waitMs));
           break;
         }
         case '/v2/claim':
@@ -166,10 +221,13 @@ export class RDC2DeviceActor {
           data=this.journal.complete(args);
           if(!data.duplicate)this.notifyResult(data.id);
           break;
+        case '/v2/complete_bulk':
+          data=await this.completeBulk(args);break;
         case '/v2/recover':
           this.authorizePrincipal(args.principal);
-          data=this.journal.recover(args.principal,args.id);break;
+          data=await this.hydrateResult(this.journal.recover(args.principal,args.id));break;
         case '/v2/sweep':
+          await this.retireExternal();
           this.journal.sweep();data={swept:true};break;
         default:throw new RDC2Error('unknown_route',404);
       }

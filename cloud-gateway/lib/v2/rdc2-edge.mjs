@@ -4,6 +4,7 @@
  * Device Durable Object is the only journal; no v1 D1/R2 state is shared.
  */
 const MAX_BODY=1_048_576;
+const MAX_BULK_BODY=16*1024*1024;
 const encoder=new TextEncoder();
 const validObject=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 const validText=(value,length=256)=>typeof value==='string'&&value.length>0&&value.length<=length;
@@ -183,6 +184,50 @@ export function createRDC2Edge({catalog=[]}={}){
       return gatewayError(id,'v2_unavailable',503);
     }
   }
+  async function deviceResult(request,env){
+    if(!isActive(env))return reply({ok:false,error:{code:'v2_disabled'}},404);
+    if(!configured(env)||!validText(env.RDC_DEVICE_SECRET,256)||
+       env.RDC_DEVICE_SECRET.length<32)
+      return reply({ok:false,error:{code:'v2_not_configured'}},503);
+    // Check original paired device auth BEFORE reading any large request body.
+    if(!await equivalent(request.headers.get('X-RDC-Device-Key'),env.RDC_DEVICE_SECRET))
+      return reply({ok:false,error:{code:'invalid_device_key'}},401);
+    if(request.method!=='POST')
+      return reply({ok:false,error:{code:'method_not_allowed'}},405);
+    if(request.headers.get('Content-Type')?.split(';')[0]?.trim()!=='application/json')
+      return reply({ok:false,error:{code:'content_type'}},415);
+    const declared=request.headers.get('Content-Length');
+    if(declared!==null&&(!/^\d+$/.test(declared)||Number(declared)>MAX_BULK_BODY))
+      return reply({ok:false,error:{code:'payload_too_large'}},413);
+    const reader=request.body?.getReader();
+    if(!reader)return reply({ok:false,error:{code:'invalid_json'}},400);
+    const chunks=[];let total=0;
+    try{
+      while(true){
+        const {done,value}=await reader.read();
+        if(done)break;
+        total+=value.byteLength;
+        if(total>MAX_BULK_BODY){
+          await reader.cancel();
+          return reply({ok:false,error:{code:'payload_too_large'}},413);
+        }
+        chunks.push(value);
+      }
+    }catch{return reply({ok:false,error:{code:'upload_interrupted'}},503)}
+    const bytes=new Uint8Array(total);let offset=0;
+    for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength}
+    const stub=env.RDC2_DEVICE.get(env.RDC2_DEVICE.idFromName(env.RDC_DEVICE_ID));
+    try{
+      const outcome=await stub.fetch(new Request('https://rdc2.internal/v2/complete_bulk',{
+        method:'POST',headers:{'Content-Type':'application/json',
+          'X-RDC2-Internal-Key':env.RDC2_INTERNAL_KEY},body:bytes
+      }));
+      const status=await outcome.json();
+      if(!outcome.ok)return reply({ok:false,error:status.error??{code:'upload_unavailable'}},outcome.status);
+      return reply({ok:true,operation_id:status.id,status:status.state,
+        duplicate:status.duplicate});
+    }catch{return reply({ok:false,error:{code:'upload_unavailable'}},503)}
+  }
   async function deviceSocket(request,env){
     if(!isActive(env))return reply({ok:false,error:{code:'v2_disabled'}},404);
     if(!configured(env)||!validText(env.RDC_DEVICE_SECRET,256)||
@@ -199,5 +244,5 @@ export function createRDC2Edge({catalog=[]}={}){
         'X-RDC2-Internal-Key':env.RDC2_INTERNAL_KEY}
     }));
   }
-  return {mcp,deviceSocket};
+  return {mcp,deviceSocket,deviceResult};
 }

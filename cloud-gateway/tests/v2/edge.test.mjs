@@ -126,3 +126,50 @@ test('V2 warm status requires only one private Durable Object fetch hop',async()
   assert.equal(next.status,200);
   assert.equal(actorFetches,1,'warm status must avoid a separate bind hop');
 });
+test('V2 private Site bulk upload authenticates original device and recovers same result',async()=>{
+  const s=fixture();
+  const objects=new Map();
+  s.env.BUCKET={
+    async put(key,value){objects.set(key,String(value))},
+    async get(key){const raw=objects.get(key);return raw===undefined?null:{text:async()=>raw}},
+    async delete(key){objects.delete(key)}
+  };
+  await s.invoke('rdc_connection_status');
+  await s.direct('/v2/heartbeat');
+  const requestJson=JSON.stringify({name:'rdc_job_run',arguments:{argv:['echo','large'],cwd:'/tmp'}});
+  const original=await s.direct('/v2/admit',{principal:'TOC-owner',
+    requestKey:'bulk-test',requestJson,requestDigest:sha(requestJson),
+    tool:'rdc_job_run',mutating:true});
+  const claim=(await s.direct('/v2/claim')).data.operation;
+  assert.equal(claim.id,original.data.id);
+  const resultJson=JSON.stringify({content:[{type:'text',text:'U'.repeat(360000)}],
+    structuredContent:{ok:true,category:'bulk'}});
+  const args={id:claim.id,claimId:claim.claimId,requestDigest:claim.requestDigest,
+    resultJson,resultDigest:sha(resultJson)};
+  const upload=key=>new Request('https://owner-site.invalid/v2/device/result',{
+    method:'POST',headers:{'Content-Type':'application/json','X-RDC-Device-Key':key},
+    body:JSON.stringify(args)});
+  const unauthorized=await s.edge.deviceResult(upload('wrong-device-key'),s.env);
+  assert.equal(unauthorized.status,401);
+  assert.equal(objects.size,0);
+  const first=await s.edge.deviceResult(upload(DEVICE_KEY),s.env);
+  assert.equal(first.status,200);
+  assert.equal((await first.json()).operation_id,claim.id);
+  assert.equal(objects.size,1);
+  const recovered=await s.invoke('rdc_operation_status',{operation_id:claim.id});
+  assert.equal(recovered.status,200);
+  assert.equal(recovered.body.result.structuredContent.category,'bulk');
+  const again=await s.edge.deviceResult(upload(DEVICE_KEY),s.env);
+  assert.equal(again.status,200);
+  assert.equal((await again.json()).duplicate,true);
+  assert.equal(objects.size,1);
+});
+test('V2 private Site bulk endpoint remains completely disabled by default',async()=>{
+  const s=fixture();delete s.env.RDC2_RUNTIME_ENABLED;
+  const req=new Request('https://owner-site.invalid/v2/device/result',{
+    method:'POST',headers:{'Content-Type':'application/json','X-RDC-Device-Key':DEVICE_KEY},
+    body:'{}'});
+  const resp=await s.edge.deviceResult(req,s.env);
+  assert.equal(resp.status,404);
+  assert.equal(s.db.prepare('SELECT COUNT(*) n FROM rdc2_meta').get().n,0);
+});
