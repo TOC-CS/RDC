@@ -24,7 +24,16 @@ function fixture(){
   let now=1700000000000;
   const sockets=[];
   const ctx={storage,getWebSockets(){return sockets}};
-  const env={RDC2_INTERNAL_KEY:KEY,RDC2_OWNER_BOOTSTRAP:'private-site'};
+  const files=new Map();
+  const bucket={
+    puts:0,deletes:0,gets:0,
+    async put(key,value){this.puts++;files.set(key,String(value));return {key}},
+    async get(key){this.gets++;const text=files.get(key);return text===undefined?
+      null:{text:async()=>text}},
+    async delete(key){this.deletes++;files.delete(key)}
+  };
+  const env={RDC2_INTERNAL_KEY:KEY,RDC2_OWNER_BOOTSTRAP:'private-site',
+    BUCKET:bucket};
   const actor=new RDC2DeviceActor(ctx,env,{now:()=>now});
   const call=async(path,body={},key=KEY,extraHeaders={})=>{
     const req=new Request('https://private.internal'+path,{
@@ -38,7 +47,7 @@ function fixture(){
     return {principal:'TOC-owner',requestKey:key,requestJson,
       requestDigest:digest(requestJson),tool:'rdc_job_run',mutating:true};
   };
-  return {db,storage,sockets,ctx,env,actor,call,req,
+  return {db,storage,sockets,ctx,env,actor,call,req,bucket,files,
     advance:ms=>{now+=ms},now:()=>now};
 }
 test('V2 internal actor rejects unauthenticated requests before disclosing owner or queue',async()=>{
@@ -181,4 +190,120 @@ test('V2 first private owner operation binds within its own actor request',async
   assert.equal(sent.body.state,'queued');
   assert.equal(s.db.prepare("SELECT value FROM rdc2_meta WHERE key='owner'").get().value,'TOC-owner');
   assert.equal((await s.call('/v2/status',{principal:'other-owner'})).status,403);
+});
+test('V2 large result uses private R2, exact original identity and durable recovery',async()=>{
+  const s=fixture();
+  await s.call('/v2/heartbeat');
+  const admitted=await s.call('/v2/admit',s.req('bulk-output'));
+  const claim=(await s.call('/v2/claim')).body.operation;
+  assert.equal(claim.id,admitted.body.id);
+  const resultJson=JSON.stringify({content:[{type:'text',text:'V'.repeat(420000)}],
+    structuredContent:{ok:true,kind:'large-original'}});
+  const args={id:claim.id,claimId:claim.claimId,requestDigest:claim.requestDigest,
+    resultJson,resultDigest:digest(resultJson)};
+  const completed=await s.call('/v2/complete_bulk',args);
+  assert.equal(completed.status,200);
+  assert.equal(completed.body.state,'completed');
+  assert.equal(completed.body.duplicate,false);
+  assert.equal(s.bucket.puts,1);
+  assert.equal(s.files.size,1);
+  assert.equal(s.db.prepare('SELECT result_json FROM rdc2_ops WHERE id=?').get(claim.id).result_json,null,
+    'large result bytes must not occupy a Durable Object SQL row');
+  const recovered=await s.call('/v2/recover',{principal:'TOC-owner',id:claim.id});
+  assert.equal(recovered.status,200);
+  assert.equal(recovered.body.resultJson,resultJson);
+  const retry=await s.call('/v2/complete_bulk',args);
+  assert.equal(retry.status,200);
+  assert.equal(retry.body.duplicate,true);
+  assert.equal(s.bucket.puts,1,'same original completion must not trigger second R2 write');
+});
+
+test('V2 forged bulk claim is rejected before any R2 storage write',async()=>{
+  const s=fixture();
+  await s.call('/v2/heartbeat');
+  await s.call('/v2/admit',s.req('not-forged'));
+  const claim=(await s.call('/v2/claim')).body.operation;
+  const resultJson=JSON.stringify({content:[{type:'text',text:'A'.repeat(400000)}]});
+  const base={id:claim.id,claimId:claim.claimId,
+    requestDigest:claim.requestDigest,resultJson,resultDigest:digest(resultJson)};
+  const denied=await s.call('/v2/complete_bulk',{...base,claimId:'forged-claim'});
+  assert.equal(denied.status,409);
+  assert.equal(s.bucket.puts,0);
+  assert.equal((await s.call('/v2/recover',{principal:'TOC-owner',id:claim.id})).body.state,'claimed');
+  const mismatched=await s.call('/v2/complete_bulk',{...base,resultDigest:digest('different')});
+  assert.equal(mismatched.status,409);
+  assert.equal(s.bucket.puts,0);
+  const forbidden=await s.call('/v2/complete_bulk',base,'wrong-private-internal-key');
+  assert.equal(forbidden.status,401);
+  assert.equal(s.bucket.puts,0);
+});
+
+test('V2 missing private R2 binding fails closed, preserving original claimed result',async()=>{
+  const s=fixture();delete s.env.BUCKET;
+  await s.call('/v2/heartbeat');
+  await s.call('/v2/admit',s.req('missing-r2'));
+  const claim=(await s.call('/v2/claim')).body.operation;
+  const resultJson=JSON.stringify({content:[{type:'text',text:'B'.repeat(350000)}]});
+  const result=await s.call('/v2/complete_bulk',{
+    id:claim.id,claimId:claim.claimId,
+    requestDigest:claim.requestDigest,resultJson,resultDigest:digest(resultJson)});
+  assert.equal(result.status,503);
+  assert.equal((await s.call('/v2/recover',{principal:'TOC-owner',id:claim.id})).body.state,'claimed');
+});
+
+test('V2 bulk recovery fails closed when private R2 object is missing',async()=>{
+  const s=fixture();await s.call('/v2/heartbeat');
+  await s.call('/v2/admit',s.req('missing-object'));
+  const claim=(await s.call('/v2/claim')).body.operation;
+  const resultJson=JSON.stringify({content:[{type:'text',text:'C'.repeat(390000)}]});
+  const args={id:claim.id,claimId:claim.claimId,
+    requestDigest:claim.requestDigest,resultJson,resultDigest:digest(resultJson)};
+  assert.equal((await s.call('/v2/complete_bulk',args)).status,200);
+  s.files.clear();
+  const result=await s.call('/v2/recover',{principal:'TOC-owner',id:claim.id});
+  assert.equal(result.status,503);
+  assert.equal(result.body.error.code,'result_unavailable');
+  assert.equal(s.db.prepare('SELECT state FROM rdc2_ops WHERE id=?').get(claim.id).state,'completed',
+    'missing bytes must not cause redispatch');
+});
+
+test('V2 bulk result expiry retires only expired original R2 bytes',async()=>{
+  const s=fixture();await s.call('/v2/heartbeat');
+  for(const key of ['earlier','later']){
+    // A long synthetic time jump requires an authentic device heartbeat.
+    await s.call('/v2/heartbeat');
+    await s.call('/v2/admit',s.req(key));
+    const claim=(await s.call('/v2/claim')).body.operation;
+    const resultJson=JSON.stringify({content:[{type:'text',text:key.repeat(100000)}]});
+    assert.equal((await s.call('/v2/complete_bulk',{
+      id:claim.id,claimId:claim.claimId,
+      requestDigest:claim.requestDigest,resultJson,resultDigest:digest(resultJson)})).status,200);
+    if(key==='earlier')s.advance(3_500_000);
+  }
+  assert.equal(s.files.size,2);
+  s.advance(100_001);
+  const cleaned=await s.call('/v2/sweep',{});
+  assert.equal(cleaned.status,200);
+  assert.equal(s.files.size,1);
+  assert.equal(s.bucket.deletes,1);
+  const earlier=s.db.prepare("SELECT id FROM rdc2_ops WHERE request_key='earlier'").get().id;
+  const later=s.db.prepare("SELECT id FROM rdc2_ops WHERE request_key='later'").get().id;
+  assert.equal((await s.call('/v2/recover',{principal:'TOC-owner',id:earlier})).body.state,'result_expired');
+  assert.equal((await s.call('/v2/recover',{principal:'TOC-owner',id:later})).body.state,'completed');
+});
+test('V2 16 concurrent duplicate bulk completions share one private R2 write',async()=>{
+  const s=fixture();
+  await s.call('/v2/heartbeat');
+  await s.call('/v2/admit',s.req('burst-bulk'));
+  const op=(await s.call('/v2/claim')).body.operation;
+  const resultJson=JSON.stringify({content:[{type:'text',text:'X'.repeat(450000)}]});
+  const input={id:op.id,claimId:op.claimId,requestDigest:op.requestDigest,
+    resultDigest:digest(resultJson),resultJson};
+  const responses=await Promise.all(Array.from({length:16},
+    ()=>s.call('/v2/complete_bulk',input)));
+  assert.ok(responses.every(r=>r.status===200));
+  assert.equal(responses.filter(r=>r.body.duplicate===false).length,1);
+  assert.equal(responses.filter(r=>r.body.duplicate===true).length,15);
+  assert.equal(s.bucket.puts,1,'duplicate completions must not generate 16 redundant private R2 writes');
+  assert.equal((await s.call('/v2/recover',{principal:'TOC-owner',id:op.id})).body.resultJson,resultJson);
 });

@@ -6,7 +6,8 @@
 const DEFAULTS=Object.freeze({
   queueTtlMs:30_000,unknownMs:120_000,resultTtlMs:3_600_000,
   onlineMs:35_000,maxQueue:64,maxRecords:10_000,
-  maxRequestBytes:1_048_576,maxResultBytes:262_144
+  maxRequestBytes:1_048_576,maxResultBytes:262_144,
+  maxBulkResultBytes:12*1024*1024
 });
 const bytes=new TextEncoder();
 const digestPattern=/^[a-f0-9]{64}$/;
@@ -29,10 +30,16 @@ export class RDC2Journal {
       'request_json TEXT, request_size INTEGER NOT NULL, tool TEXT NOT NULL,'+
       'mutating INTEGER NOT NULL, state TEXT NOT NULL,'+
       'created_ms INTEGER NOT NULL, expires_ms INTEGER NOT NULL,'+
-      'claim_id TEXT, claimed_ms INTEGER, result_json TEXT, result_digest TEXT,'+
+      'claim_id TEXT, claimed_ms INTEGER, result_json TEXT, result_key TEXT, result_digest TEXT,'+
       'result_size INTEGER NOT NULL DEFAULT 0, completed_ms INTEGER, result_expires_ms INTEGER,'+
       'UNIQUE(principal,request_key))');
     this.sql.exec('CREATE INDEX IF NOT EXISTS rdc2_queue_idx ON rdc2_ops(state,seq)');
+    // The unreleased early V2 journal predates the optional private R2
+    // pointer. Preserve its persisted operations when that candidate is
+    // upgraded in place. SQLite DDL is atomic, and this check is local.
+    const columns=this.sql.exec('PRAGMA table_info(rdc2_ops)').toArray();
+    if(!columns.some(column=>column.name==='result_key'))
+      this.sql.exec('ALTER TABLE rdc2_ops ADD COLUMN result_key TEXT');
   }
   rows(sql,...values){return this.sql.exec(sql,...values).toArray()}
   first(sql,...values){return this.rows(sql,...values)[0]??null}
@@ -169,10 +176,57 @@ export class RDC2Journal {
     const state=op.state==='queued'&&op.expires_ms<=now?'expired':
       op.state==='claimed'&&op.claimed_ms<=now-this.limits.unknownMs?'unknown':op.state;
     if(state==='completed'){
-      if(op.result_expires_ms<=now||op.result_json===null)return {id,state:'result_expired'};
+      if(op.result_expires_ms<=now||(op.result_json===null&&op.result_key===null))
+        return {id,state:'result_expired'};
+      if(op.result_key!==null)
+        return {id,state,resultKey:op.result_key,resultDigest:op.result_digest,
+          resultSize:op.result_size};
       return {id,state,resultJson:op.result_json};
     }
     return {id,state};
+  }
+  preflightExternalCompletion({id,claimId,requestDigest,resultDigest}={}){
+    if(!validText(id,100)||!validText(claimId,100)||
+      !digestPattern.test(requestDigest??'')||!digestPattern.test(resultDigest??''))
+      fail('invalid_result');
+    const op=this.first('SELECT claim_id,request_digest,result_digest,state FROM rdc2_ops WHERE id=?',id);
+    if(!op)fail('operation_not_found',404);
+    if(op.claim_id!==claimId||op.request_digest!==requestDigest)
+      fail('claim_mismatch',409);
+    if(op.state==='completed'){
+      if(op.result_digest!==resultDigest)fail('result_conflict',409);
+      return {id,state:'completed',duplicate:true};
+    }
+    if(!['claimed','unknown'].includes(op.state))fail('operation_not_claimed',409);
+    return {id,state:op.state,duplicate:false};
+  }
+  completeExternal({id,claimId,requestDigest,resultDigest,resultSize,resultKey}={}){
+    return this.atomic(()=>{
+      const status=this.preflightExternalCompletion({id,claimId,requestDigest,resultDigest});
+      if(status.duplicate)return status;
+      if(!Number.isInteger(resultSize)||resultSize<=this.limits.maxResultBytes||
+        resultSize>this.limits.maxBulkResultBytes)
+        fail('payload_too_large',413);
+      const expected='rdc2-results/'+id+'/'+resultDigest+'.json';
+      if(resultKey!==expected)fail('invalid_result_key',409);
+      const now=this.now();
+      this.sql.exec("UPDATE rdc2_ops SET state='completed',completed_ms=?,"+
+        'result_json=NULL,result_key=?,result_digest=?,result_size=?,result_expires_ms=?,'+
+        "request_json=NULL,request_size=0 WHERE id=? AND claim_id=? AND state IN ('claimed','unknown')",
+        now,resultKey,resultDigest,resultSize,now+this.limits.resultTtlMs,id,claimId);
+      return {id,state:'completed',duplicate:false};
+    });
+  }
+  expiredExternal(limit=16){
+    if(!Number.isInteger(limit)||limit<1||limit>64)fail('invalid_limit');
+    return this.rows("SELECT id,result_key FROM rdc2_ops WHERE state='completed' "+
+      "AND result_key IS NOT NULL AND result_expires_ms<=? ORDER BY completed_ms LIMIT ?",
+      this.now(),limit).map(row=>({id:row.id,resultKey:row.result_key}));
+  }
+  clearExpiredExternal(id,key){
+    this.sql.exec("UPDATE rdc2_ops SET result_key=NULL,result_size=0 "+
+      "WHERE id=? AND result_key=? AND state='completed' AND result_expires_ms<=?",
+      id,key,this.now());
   }
   sweep(){
     return this.atomic(()=>{

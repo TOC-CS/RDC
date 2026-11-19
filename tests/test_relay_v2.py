@@ -145,3 +145,108 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         peer=Peer(lambda msg: peer.incoming('x'*1_600_000))
         with self.assertRaises(RelayPermanentError):
             await V2SocketGateway(peer,wait_timeout=.05).poll()
+
+class BulkUploadTests(unittest.IsolatedAsyncioTestCase):
+    def _original(self):
+        raw=operation('bulk')
+        return Operation.from_wire({
+            'operation_id':raw['id'],'claim_id':raw['claimId'],
+            'request_json':raw['requestJson'],
+            'request_sha256':raw['requestDigest'],
+            'expires_at_ms':raw['expiresAtMs']},raw['serverTimeMs'])
+
+    def _config(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            gateway_url='https://private.example.test/mcp',
+            sites_service_token='synthetic-test-site-service-2026',
+            device_key='synthetic-test-device-key-2026')
+
+    async def test_original_large_result_uses_only_authenticated_https_upload(self):
+        from unittest.mock import patch
+        from rdc import relay_v2
+        requests=[]
+        class Response:
+            status_code=200
+            def json(self):
+                return {'ok':True,'operation_id':'operation-bulk',
+                        'status':'completed','duplicate':False}
+        class Client:
+            def __init__(self,**kwargs):
+                self.options=kwargs
+            async def __aenter__(self): return self
+            async def __aexit__(self,*args): pass
+            async def post(self,url,*,content,headers):
+                requests.append((url,content,headers))
+                return Response()
+        peer=Peer()
+        result=json.dumps({'content':[{'type':'text','text':'P'*420_000}]})
+        with patch.object(relay_v2.httpx2,'AsyncClient',Client):
+            await V2SocketGateway(peer,config=self._config()).submit(self._original(),result)
+        self.assertEqual(len(peer.outbound),0)
+        self.assertEqual(len(requests),1)
+        url,payload,headers=requests[0]
+        self.assertEqual(url,'https://private.example.test/v2/device/result')
+        self.assertEqual(json.loads(payload)['resultJson'],result)
+        self.assertEqual(json.loads(payload)['id'],'operation-bulk')
+        self.assertEqual(json.loads(payload)['resultDigest'],
+                         hashlib.sha256(result.encode()).hexdigest())
+        self.assertIn('X-RDC-Device-Key',headers)
+        self.assertFalse('http://' in url)
+
+    async def test_original_bulk_transport_failure_is_transient_without_replay(self):
+        from unittest.mock import patch
+        from rdc import relay_v2
+        count=0
+        class Response:
+            status_code=503
+        class Client:
+            def __init__(self,**kwargs): pass
+            async def __aenter__(self):return self
+            async def __aexit__(self,*args):pass
+            async def post(self,*args,**kwargs):
+                nonlocal count
+                count+=1
+                return Response()
+        with patch.object(relay_v2.httpx2,'AsyncClient',Client):
+            with self.assertRaises(RelayTransientError):
+                await V2SocketGateway(Peer(),config=self._config()).submit(
+                    self._original(),json.dumps({'content':[{'text':'x'*320000}]}))
+        self.assertEqual(count,1,'large upload may retry only through durable outbox')
+
+    async def test_original_large_upload_denial_is_permanent_and_not_retried(self):
+        from unittest.mock import patch
+        from rdc import relay_v2
+        count=0
+        class Response:
+            status_code=401
+        class Client:
+            def __init__(self,**kwargs):pass
+            async def __aenter__(self):return self
+            async def __aexit__(self,*args):pass
+            async def post(self,*args,**kwargs):
+                nonlocal count
+                count+=1
+                return Response()
+        with patch.object(relay_v2.httpx2,'AsyncClient',Client):
+            with self.assertRaises(RelayPermanentError):
+                await V2SocketGateway(Peer(),config=self._config()).submit(
+                    self._original(),json.dumps({'content':[{'text':'x'*320000}]}))
+        self.assertEqual(count,1)
+
+    async def test_bulk_requires_explicit_private_config_not_unverified_route(self):
+        with self.assertRaises(RelayPermanentError):
+            await asyncio.wait_for(V2SocketGateway(Peer()).submit(
+                self._original(),json.dumps({'content':[{'text':'x'*320000}]})),timeout=.1)
+
+    async def test_beyond_twelve_megabytes_returns_explicit_original_error(self):
+        peer=Peer(lambda msg: peer.incoming({
+            'version':2,'type':'result_ack','id':msg['id'],'duplicate':False})
+                  if msg['type']=='complete' else None)
+        too_big=json.dumps({'content':[{'type':'text','text':'Q'*(13*1024*1024)}]})
+        await V2SocketGateway(peer).submit(self._original(),too_big)
+        self.assertEqual(len(peer.outbound),1)
+        inline=peer.outbound[0]
+        self.assertLess(len(inline['resultJson']),262144)
+        self.assertIn('result_too_large',inline['resultJson'])
+        self.assertEqual(inline['id'],'operation-bulk')

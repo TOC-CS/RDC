@@ -204,3 +204,36 @@ test('V2 journal rejects invalid MCP result envelope before committing and permi
     requestDigest:claimed.requestDigest,resultJson:valid,resultDigest:digest(valid)}).state,
     'completed');
 });
+test('V2 schema migration adds private bulk pointer to older v2 SQLite without losing original result',()=>{
+  const s=source();
+  s.db.exec("CREATE TABLE rdc2_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);"+
+    "CREATE TABLE rdc2_ops("+
+      "seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT NOT NULL UNIQUE,"+
+      "principal TEXT NOT NULL,request_key TEXT NOT NULL,request_digest TEXT NOT NULL,"+
+      "request_json TEXT,request_size INTEGER NOT NULL,tool TEXT NOT NULL,"+
+      "mutating INTEGER NOT NULL,state TEXT NOT NULL,"+
+      "created_ms INTEGER NOT NULL,expires_ms INTEGER NOT NULL,"+
+      "claim_id TEXT,claimed_ms INTEGER,result_json TEXT,result_digest TEXT,"+
+      "result_size INTEGER NOT NULL DEFAULT 0,completed_ms INTEGER,result_expires_ms INTEGER,"+
+      "UNIQUE(principal,request_key));"+
+    "CREATE INDEX rdc2_queue_idx ON rdc2_ops(state,seq);");
+  const sourcePayload=JSON.stringify({name:'rdc_job_run',arguments:{value:'migrate'}});
+  const resultPayload=JSON.stringify({content:[{type:'text',text:'ORIGINAL_RESULT'}]});
+  const now=1700000000000;
+  s.db.prepare("INSERT INTO rdc2_meta(key,value) VALUES ('owner',?)").run('TOC-owner');
+  s.db.prepare("INSERT INTO rdc2_ops (id,principal,request_key,request_digest,"+
+    "request_json,request_size,tool,mutating,state,created_ms,expires_ms,"+
+    "claim_id,claimed_ms,result_json,result_digest,result_size,completed_ms,result_expires_ms)"+
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run(
+    'older-original','TOC-owner','preserved',digest(sourcePayload),null,0,
+    'rdc_job_run',1,'completed',now-500,now+30000,'older-claim',now-490,
+    resultPayload,digest(resultPayload),Buffer.byteLength(resultPayload),now-480,now+60000);
+  const journal=new RDC2Journal(s.storage,{now:()=>now});
+  assert.equal(s.db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('rdc2_ops') WHERE name='result_key'").get().n,1);
+  const old=journal.recover('TOC-owner','older-original');
+  assert.equal(old.state,'completed');
+  assert.equal(old.resultJson,resultPayload);
+  assert.equal(s.db.prepare('SELECT result_key FROM rdc2_ops WHERE id=?').get('older-original').result_key,null);
+  const reboot=new RDC2Journal(s.storage,{now:()=>now});
+  assert.equal(reboot.recover('TOC-owner','older-original').resultJson,resultPayload);
+});

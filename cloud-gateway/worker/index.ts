@@ -9,6 +9,9 @@ const worker = {
     if (new URL(request.url).pathname === "/v2/device/socket") {
       return rdc2Edge.deviceSocket(request, env);
     }
+    if (new URL(request.url).pathname === "/v2/device/result") {
+      return rdc2Edge.deviceResult(request, env);
+    }
     let binding = ctx.props?.CONNECTORS;
     // Local preview emulates the same request-scoped capability. This branch and
     // the auxiliary service binding are absent from production builds.
