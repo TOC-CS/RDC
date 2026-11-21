@@ -103,3 +103,92 @@ class V2LocalCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(peer.sent),1)
         self.assertEqual(peer.sent[0]["type"],"register_catalog")
         self.assertEqual(peer.sent[0]["tools"][0]["name"],"rdc_system_status")
+
+class V2LocalBulkResultTests(unittest.IsolatedAsyncioTestCase):
+    """Original bulk upload through exact local transport, no Site credentials."""
+
+    def original(self):
+        import hashlib
+        import json
+        import time
+        from rdc.relay import Operation
+
+        request=json.dumps({"name":"rdc_job_run",
+                            "arguments":{"argv":["/bin/echo","one"],"cwd":"/tmp"}})
+        now=int(time.time()*1000)
+        return Operation.from_wire({
+            "operation_id":"local-bulk-original","claim_id":"local-bulk-claim",
+            "request_json":request,
+            "request_sha256":hashlib.sha256(request.encode()).hexdigest(),
+            "expires_at_ms":now+30_000},now)
+
+    async def test_original_large_result_is_authentic_and_no_sites_header(self):
+        import hashlib
+        import json
+        from unittest.mock import patch
+        from rdc import relay_v2
+
+        observed=[]
+        operation=self.original()
+        result=json.dumps({"content":[{"type":"text","text":"A"*300_000}]})
+        class Response:
+            status_code=200
+            def json(self):
+                return {"ok":True,"operation_id":"local-bulk-original",
+                        "status":"completed","duplicate":False}
+        class Client:
+            def __init__(self,**options):
+                observed.append(("options",options))
+            async def __aenter__(self): return self
+            async def __aexit__(self,*args): pass
+            async def post(self,url,*,content,headers):
+                observed.append(("post",(url,content,headers)))
+                return Response()
+        cfg=RelayConfig(gateway_url=LOCAL,device_id=PRIVATE_DEVICE,
+                        device_key=PRIVATE_KEY,transport="standalone-local")
+        class Peer:
+            def __init__(self):self.sent=[]
+            async def send(self,raw):self.sent.append(raw)
+        peer=Peer()
+        with patch.object(relay_v2.httpx2,'AsyncClient',Client):
+            await relay_v2.V2SocketGateway(peer,config=cfg).submit(operation,result)
+        self.assertEqual(peer.sent,[],"Bulk sends no WebSocket completion replay")
+        self.assertEqual([k for k,_ in observed],["options","post"])
+        opts=observed[0][1]
+        self.assertEqual(opts["trust_env"],False)
+        self.assertEqual(opts["follow_redirects"],False)
+        url,body,headers=observed[1][1]
+        self.assertEqual(url,"http://127.0.0.1:18795/v2/device/result")
+        self.assertEqual(headers["X-RDC-Device-Key"],PRIVATE_KEY)
+        self.assertNotIn("OAI-Sites-Authorization",headers)
+        self.assertEqual(headers["Accept"],"application/json")
+        wire=json.loads(body)
+        self.assertEqual(wire["id"],operation.operation_id)
+        self.assertEqual(wire["claimId"],operation.claim_id)
+        self.assertEqual(wire["requestDigest"],operation.request_sha256)
+        self.assertEqual(wire["resultJson"],result)
+        self.assertEqual(wire["resultDigest"],hashlib.sha256(result.encode()).hexdigest())
+
+    async def test_denied_local_bulk_upload_never_retries_original_mutation(self):
+        import json
+        from unittest.mock import patch
+        from rdc import relay_v2
+
+        attempts=[]
+        class Response:
+            status_code=401
+        class Client:
+            def __init__(self,**kwargs):pass
+            async def __aenter__(self):return self
+            async def __aexit__(self,*args):pass
+            async def post(self,url,*,content,headers):
+                attempts.append(url)
+                return Response()
+        cfg=RelayConfig(gateway_url=LOCAL,device_id=PRIVATE_DEVICE,
+                        device_key=PRIVATE_KEY,transport="standalone-local")
+        with patch.object(relay_v2.httpx2,'AsyncClient',Client):
+            with self.assertRaises(RelayPermanentError):
+                await relay_v2.V2SocketGateway(None,config=cfg).submit(
+                    self.original(),json.dumps({"content":[{"type":"text",
+                                                             "text":"B"*300_000}]}))
+        self.assertEqual(attempts,["http://127.0.0.1:18795/v2/device/result"])

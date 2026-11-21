@@ -98,7 +98,7 @@
       "python_module": "tests.test_v2_loopback_transport",
       "python_discovery": false,
       "python_offset": 0,
-      "python_take": 7
+      "python_take": 9
     },
     "local-relay-v2-compatibility": {
       "description": "Full bounded WebSocket V2 relay recovery and backward-compatibility source suite",

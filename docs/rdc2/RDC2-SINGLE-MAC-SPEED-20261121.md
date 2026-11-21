@@ -8,6 +8,8 @@ The standalone gateway binds 127.0.0.1. Explicit relay transport standalone-loca
 
 Public hosts, localhost ambiguity, alternate IP addresses, missing ports, credentials embedded in URLs, query strings, fragments, encoded path changes and unexpected paths are rejected. The device pairing key, gateway client bearer and worker credentials remain separate. The local relay must not use the Sites service credential. The original operation ID, retained result, durable claim and no-replay behavior remain unchanged.
 
+Synthetic large-output coverage checks the local HTTP bulk-upload branch using the original operation ID, claim ID, request digest, result digest and X-RDC-Device-Key header. It confirms that the Sites service header is absent for this opt-in local mode, redirects/proxies remain disabled, and an authenticated denial is never automatically retried or re-executed. These are focused security simulations, not an independently verified large live transfer.
+
 This permits an optional future owner-authorized outbound Secure MCP Tunnel on the same Mac without requiring a VPS. It does not provision a tunnel, create a new ChatGPT plugin, or use paid Platform API operations.
 
 ## Verified bounded source tests
