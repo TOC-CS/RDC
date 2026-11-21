@@ -336,5 +336,31 @@ class StandaloneGatewayContracts(unittest.TestCase):
                 gateway.main()
         serve.assert_not_called()
 
+
+    def test_authenticated_status_reports_actual_gateway_source_fingerprint(self):
+        from rdc import gateway_standalone as module
+        expected=hashlib.sha256(Path(module.__file__).resolve().read_bytes()).hexdigest()
+        response=self.call("rdc_connection_status")
+        self.assertEqual(response.status_code,200)
+        view=response.json()["result"]["structuredContent"]
+        self.assertEqual(view["gatewaySourceSha256"],expected)
+        self.assertEqual(len(view["gatewaySourceSha256"]),64)
+        self.assertEqual(view["protocol_version"],2)
+        self.assertNotIn("device-token",response.text)
+        self.assertNotIn(self.device_token,response.text)
+        restarted=StandaloneGateway(self.root)
+        try:
+            self.assertEqual(restarted.status()["gatewaySourceSha256"],expected)
+        finally:
+            restarted.db.close()
+
+    def test_unpaired_client_cannot_read_gateway_source_fingerprint(self):
+        denied=self.client.post("/v2/mcp",headers={"Authorization":"Bearer bad"},
+            json={"jsonrpc":"2.0","id":"unpaired-status","method":"tools/call",
+                  "params":{"name":"rdc_connection_status","arguments":{}}})
+        self.assertEqual(denied.status_code,401)
+        self.assertNotIn("gatewaySourceSha256",denied.text)
+        self.assertNotIn(self.client_token,denied.text)
+
 if __name__=="__main__":
     unittest.main()

@@ -113,6 +113,11 @@ class StandaloneGateway:
 
     def __init__(self, directory, *, catalog=None, clock=now_ms):
         self.root = Path(directory).expanduser().absolute()
+        # Runtime readback is the digest of the actual imported gateway source,
+        # rather than a caller-supplied release string. Calculate once at
+        # startup so normal operation and WebSocket hot paths stay unchanged.
+        self.gateway_source_sha256 = hashlib.sha256(
+            Path(__file__).resolve().read_bytes()).hexdigest()
         self.client_token = read_secret(self.root / "client-token")
         self.device_token = read_secret(self.root / "device-token")
         self.device_id = (self.root / "device-id").read_text().strip()
@@ -222,7 +227,8 @@ class StandaloneGateway:
     def status(self):
         count = self.row("SELECT COUNT(*) AS n FROM operations WHERE state IN ('queued','claimed')")
         return {"online": self.online(), "pending_operations": count["n"],
-                "protocol_version": 2, "transport": "standalone"}
+                "protocol_version": 2, "transport": "standalone",
+                "gatewaySourceSha256": self.gateway_source_sha256}
 
     def phase_metrics(self, limit=30):
         if type(limit) is not int or not 1<=limit<=100:

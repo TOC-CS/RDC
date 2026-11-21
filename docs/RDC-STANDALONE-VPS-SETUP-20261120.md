@@ -55,6 +55,8 @@ rdc gateway-connect --url https://rdc.example.org/v2/mcp --token-file /private/r
 
 When the VPS service is intentionally loopback-only, an operator can use an authenticated SSH tunnel instead of exposing a public endpoint. After opening `ssh -N -L 127.0.0.1:18783:127.0.0.1:18782 your-vps-ssh-alias` in a separate session, connect with `rdc gateway-connect --url http://127.0.0.1:18783/v2/mcp --token-file /private/rdc-client-token`. Verify the SSH host key and private owner pairing. No secrets belong on the command line.
 
+For protected release readback, the owner-authorized rdc_connection_status tool now includes gatewaySourceSha256, calculated once from the actual imported gateway_standalone.py file at server startup. Compare its 64-hex SHA-256 with the expected source artifact through an independent owner-controlled channel. A matching source-file hash is evidence for the gateway module, not proof of the entire Git tree, worker identity, live ChatGPT wiring or successful rollback. The unauthenticated /health endpoint does not reveal this fingerprint.
+
 The paired device registers its own bounded worker tool catalog after reconnect, rather than relying on three hard-coded device tools. The gateway rejects reserved administrative tool names and cannot override local permissions. Official MCP SDK initialization and real one-call source discovery were independently verified in a 30/30 bounded two-machine campaign (p50 95.508 ms, p95 114.446 ms), with 67 tools discovered. The tunnel test does not establish public HTTPS acceptance.
 
 ## Verified bounded speed data (not public Internet measurements)
