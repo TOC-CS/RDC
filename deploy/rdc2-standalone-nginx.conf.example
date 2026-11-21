@@ -1,0 +1,47 @@
+# Example ONLY: requires an independently owned DNS name and valid TLS
+# certificate. Enable only after verified access, ownership and rollback.
+# Do not proxy a shared service to the maintainer's personal workstation.
+server {
+    listen 443 ssl;
+    server_name rdc.example.org;
+    ssl_certificate /etc/letsencrypt/live/rdc.example.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/rdc.example.org/privkey.pem;
+
+    location = /health {
+        return 404;
+    }
+
+    location = /v2/mcp {
+        client_max_body_size 1m;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 30s;
+        proxy_pass http://127.0.0.1:18782;
+    }
+
+    location = /v2/device/result {
+        client_max_body_size 16m;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 45s;
+        proxy_pass http://127.0.0.1:18782;
+    }
+
+    location = /v2/device/socket {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_buffering off;
+        proxy_pass http://127.0.0.1:18782;
+    }
+
+    location / {
+        return 404;
+    }
+}

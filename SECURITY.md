@@ -22,6 +22,10 @@ WebDriver is a privileged local automation endpoint. Configure its URL and capab
 
 When WebDriver creation succeeds but later setup fails, RDC attempts cleanup of that exact session. If cleanup cannot be confirmed, the session remains listed as `cleanup_required` and accepts close only. Inspect and close that session instead of assuming creation was rolled back.
 
+## Independent standalone gateway
+
+RDC V2 includes an optional self-hosted gateway with no ChatGPT Sites credential requirement. Its existing implementation is **one operator and one paired device per instance**, not a publicly usable multi-user backend. It binds to loopback, uses separate owner/client and device bearer tokens, stores durable request/result identities in a private SQLite database, and never claims an uncertain mutation again after a lost connection. Use a verified TLS/WSS reverse proxy and a dedicated least-privilege account for any remote access. Do not expose the raw loopback service, share a maintainer's workstation as a public relay, or let an unverified caller supply identity headers. Shared multi-user SaaS requires OAuth/OIDC and tenant isolation first. See [the standalone setup](docs/RDC-STANDALONE-VPS-SETUP-20261120.md).
+
 ## Data and recovery
 
 Telemetry is absent. No RDC vendor receives commands or files. A chosen cloud AI still receives tool results, page text, screenshots, and any other data returned to it. Review approvals and job logs may contain sensitive command arguments, filenames, and output. Protect the state directory and choose an appropriate retention policy. This alpha bounds each log, not the aggregate disk usage.

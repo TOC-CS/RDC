@@ -16,6 +16,13 @@ import './rdc-v2-broker.test.mjs';
 import './rdc-v2-wake-channel.test.mjs';
 // Owner speed gates run on the existing three-platform CI, without modifying workflows.
 import '../../benchmarks/rdc_speed_acceptance.test.mjs';
+// Existing cross-platform GitHub runner imports this suite. Qualify the
+// isolated RDC 2.0 protocol, journal, actor and binding regressions here
+// without changing protected GitHub Actions workflow permissions.
+import './v2/journal.test.mjs';
+import './v2/actor.test.mjs';
+import './v2/bindings.test.mjs';
+import './v2/edge.test.mjs';
 
 const DEVICE = '00000000-0000-4000-8000-000000000001';
 const KEY = 'test-device-key-with-at-least-thirty-two-bytes';

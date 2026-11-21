@@ -180,11 +180,15 @@ def run(state_dir, job_id):
                 # instead of leaving it blocked until the command timeout.
                 terminate_tree(process)
                 break
-            # Wake as soon as output drains for the usual short-command exit.
-            # EOF may precede process exit: an already-set event must not turn
-            # the control/heartbeat loop into a busy spin.
+            # Wake promptly when an EOF-first child actually exits.
+            # An unconditional sleep here adds up to 40 ms after child
+            # completion. A bounded wait returns immediately on real exit,
+            # while still checking cancellation/timeout at least every 40 ms.
             if reader_done.is_set():
-                time.sleep(.04)
+                try:
+                    process.wait(timeout=.04)
+                except subprocess.TimeoutExpired:
+                    pass
             else:
                 reader_done.wait(.04)
         exit_code = process.wait(timeout=10)

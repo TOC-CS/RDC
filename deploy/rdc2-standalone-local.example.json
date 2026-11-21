@@ -1,0 +1,9 @@
+{
+  "gateway_url": "http://127.0.0.1:18795/v2/mcp",
+  "device_id": "REPLACE_WITH_PAIRED_WORKER_DEVICE_ID",
+  "device_key": "REPLACE_WITH_PRIVATE_DEVICE_PAIRING_SECRET",
+  "transport": "standalone-local",
+  "worker_url": "http://127.0.0.1:18791/mcp",
+  "allowed_tools": ["rdc_code_context", "rdc_job_run"],
+  "tool_timeout": 15
+}

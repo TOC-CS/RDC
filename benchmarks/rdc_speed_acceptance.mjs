@@ -30,21 +30,36 @@ export function percentile(values,p) {
 }
 export function evaluateRdcAcceptance(receipt) {
   const blockers=[],metrics={};
+  // Five absolute speed ceilings plus a mandatory independent matched
+  // 2x end-to-end Desktop Commander comparison are SIX release requirements.
   const report={schemaVersion:1,complete:false,passedGoals:0,
-    requiredGoals:GOAL_NAMES.length,metrics,blockers};
+    requiredGoals:GOAL_NAMES.length+1,metrics,blockers,comparison:null};
   const data=receipt&&typeof receipt==='object'&&!Array.isArray(receipt)?receipt:{};
   if(!receipt) blockers.push('No independently evidenced LIVE speed receipt supplied');
   if(data.schemaVersion!==1) blockers.push('Expected schemaVersion 1');
-  if(Object.keys(data).some(key=>!['schemaVersion','environment','metrics'].includes(key))) {
+  if(Object.keys(data).some(key=>!['schemaVersion','environment','metrics','comparison'].includes(key))) {
     blockers.push('Unknown top-level acceptance receipt fields');
   }
   const env=data.environment&&typeof data.environment==='object'?data.environment:{};
   if(env.mode!=='production-live') blockers.push('Source simulations and local tests cannot establish deployed live speed');
   if(env.host!=='ChatGPT-connected-RDC') blockers.push('Measure the actual ChatGPT-connected RDC path');
   if(!nonempty(env.gitRevision)) blockers.push('Missing exact deployed git revision');
-  if(!nonempty(env.siteVersion)) blockers.push('Missing actual private Site release readback');
+  const transport=env.transport??'private-sites';
+  if(transport==='private-sites') {
+    if(!nonempty(env.siteVersion)) blockers.push('Missing actual private Site release readback');
+    if(env.wakeBindingVerified!==true)
+      blockers.push('Cloudflare wake binding was not verified on deployed Site');
+  }else if(transport==='owner-standalone') {
+    // Independent operator-hosted transport never requires or silently
+    // inherits a Cloudflare binding. It MUST prove its own protected endpoint.
+    if(!nonempty(env.gatewayVersion))
+      blockers.push('Missing exact standalone gateway release readback');
+    if(env.tlsVerified!==true)
+      blockers.push('Standalone gateway public TLS/WSS was not verified');
+    if(env.pairingVerified!==true)
+      blockers.push('Standalone gateway owner/device pairing was not verified');
+  }else blockers.push('Unknown gateway transport cannot bypass release verification');
   if(!nonempty(env.workerVersion)) blockers.push('Missing actual connected worker release readback');
-  if(env.wakeBindingVerified!==true) blockers.push('Cloudflare wake binding was not verified on deployed Site');
   if(env.rollbackVerified!==true) blockers.push('Protected deployment rollback was not independently verified');
   const supplied=data.metrics&&typeof data.metrics==='object'&&!Array.isArray(data.metrics)?data.metrics:{};
   if(Object.keys(supplied).some(key=>!GOAL_NAMES.includes(key))) blockers.push('Unknown metric supplied');
@@ -80,6 +95,10 @@ export function evaluateRdcAcceptance(receipt) {
       ids.add(sample.requestId);
       if(!finitePositive(sample.latencyMs)) issues.push('Invalid or missing actual measured latency');
       else times.push(sample.latencyMs);
+      // Durable millisecond timestamps can run backwards after OS clock
+      // correction. Never accept the resulting zero/negative phase as fast.
+      if(sample.timingStatus!==undefined && sample.timingStatus!=='valid')
+        issues.push('Invalid clock ordering: phase timing must be remeasured live');
       if(sample.success!==true||sample.outputCorrect!==true||sample.gatewayBusy===true) {
         issues.push('Failed, incorrect, or gateway_busy operation is an acceptance failure');
       }
@@ -105,7 +124,61 @@ export function evaluateRdcAcceptance(receipt) {
     if(outcome.passed) report.passedGoals++;
     else blockers.push(name+': '+[...new Set(issues)].join('; '));
   }
-  report.complete=blockers.length===0&&report.passedGoals===GOAL_NAMES.length;
+  // Never infer a real-world comparison from a local Site simulation,
+  // unrelated devices or different output. Each matched pair counts as TWO
+  // operations; 50 pairs is the maximum under the 100-operation campaign cap.
+  const match=data.comparison;
+  const issues=[];
+  const paired={passed:false,samples:0,minSamples:MIN_LIVE_SAMPLES,
+    maxPairs:50,rdcMedianMs:null,dcMedianMs:null,speedup:null,issues};
+  report.comparison=paired;
+  if(!match||!Array.isArray(match.samples)) {
+    issues.push('Missing independent matched RDC versus Desktop Commander live samples');
+  }else{
+    paired.samples=match.samples.length;
+    if(match.samples.length<MIN_LIVE_SAMPLES)
+      issues.push('Matched 2x DC comparison requires 30 actual live pairs');
+    if(match.samples.length>50)
+      issues.push('Matched comparison exceeds the 100-operation campaign maximum');
+    if(match.origin!=='production-live')
+      issues.push('Matched comparison may not use simulations or local-only measurements');
+    if(match.workload!=='terminal')
+      issues.push('Matched comparison must exercise the same real terminal workload');
+    if(!nonempty(match.evidenceRef))
+      issues.push('Missing independent matched terminal evidence reference');
+    if(!nonempty(match.measuredRevision)||match.measuredRevision!==env.gitRevision)
+      issues.push('Matched RDC revision disagrees with deployed source');
+    const ids=new Set(),rdc=[],dc=[];
+    for(const sample of match.samples){
+      if(!sample||typeof sample!=='object'||Array.isArray(sample)){
+        issues.push('Malformed matched terminal record');continue;
+      }
+      if(!nonempty(sample.requestId)||ids.has(sample.requestId))
+        issues.push('Every matched terminal pair requires a unique request ID');
+      ids.add(sample.requestId);
+      if(!finitePositive(sample.rdcLatencyMs)||!finitePositive(sample.dcLatencyMs))
+        issues.push('Matched end-to-end latencies must be positive finite milliseconds');
+      else {rdc.push(sample.rdcLatencyMs);dc.push(sample.dcLatencyMs);}
+      if(sample.rdcSuccess!==true||sample.dcSuccess!==true||sample.sameOutput!==true)
+        issues.push('Both tools must finish successfully with identical original output');
+      if(sample.sameDevice!==true)
+        issues.push('Matched comparison must execute on the same authorized device');
+    }
+    if(rdc.length===match.samples.length&&rdc.length){
+      paired.rdcMedianMs=percentile(rdc,0.5);
+      paired.dcMedianMs=percentile(dc,0.5);
+      const ratio=paired.dcMedianMs/paired.rdcMedianMs;
+      paired.speedup=fixed(ratio,3);
+      if(ratio<2)
+        issues.push('Measured RDC end-to-end speed is below required 2x Desktop Commander advantage');
+      if(paired.rdcMedianMs>RDC_SPEED_GOALS.live_terminal.maxMedianMs)
+        issues.push('Matched live RDC terminal median exceeds 800ms goal');
+    }
+  }
+  paired.passed=issues.length===0;
+  if(paired.passed) report.passedGoals++;
+  else blockers.push('matched_dc_speedup: '+[...new Set(issues)].join('; '));
+  report.complete=blockers.length===0&&report.passedGoals===report.requiredGoals;
   return report;
 }
 

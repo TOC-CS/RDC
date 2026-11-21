@@ -37,6 +37,8 @@ def summarize(samples):
 
 
 def run(trials=30, warmups=3):
+    if type(trials) is not int or type(warmups) is not int or trials<1 or warmups<0 or 2*(trials+warmups)>100:
+        raise ValueError('RDC testing hard cap: 100 total benchmark trials')
     if not 5 <= trials <= 100 or not 0 <= warmups <= 15:
         raise ValueError("Benchmark requires 5-100 trials and 0-15 warmups")
     with tempfile.TemporaryDirectory(prefix="rdc-coding-search-perf-") as tmp:

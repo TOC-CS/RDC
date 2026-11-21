@@ -3,8 +3,8 @@
 Date: 2026-11-18
 Status: **OPEN / NOT VERIFIED COMPLETE**
 Project: TOC-CS/RDC, connected ChatGPT app, private Site and worker.
-No scheduled monitoring is authorized. A previously created hourly task is
-disabled; permanent task deletion is a separate ChatGPT UI operation.
+
+**Updated owner testing rule (November 19, 2026):** Every RDC testing campaign has a hard maximum of **100 total checks across all categories and platforms**. See `docs/RDC-TEST-100-EXECUTION-POLICY.md`. The required 30 correct real-live samples for EACH of the five metrics remain mandatory. Collect these in separately bounded campaigns, never launch over 100 at once, and leave the release OPEN while evidence is incomplete. An enabled recurring RDC development task may resume bounded work, but its existence does not prove continuous execution or live speed acceptance.
 
 ## Locked acceptance goals
 
@@ -30,6 +30,12 @@ A terminal median below 900 ms but above 800 ms FAILS.
    including actual duration, success, output correctness, gateway_busy errors,
    matching source revision, original evidence, and p50/p95/p99. Retain exact
    request identities without exposing payloads, secrets or private content.
+   RDC V2 owner phase telemetry now exposes validSampleCount,
+   invalidSampleCount, and timingStatus per sample. A wall-clock reversal yields
+   timingStatus='invalid_clock_order' with null phase times, never a synthetic
+   zero-ms success. Exclude and remeasure invalid samples, and fail the release
+   gate if they enter a receipt. Durable SQLite timestamps resolve to 1 ms;
+   those timestamps alone cannot prove the <=1 ms notification target.
 3. Each coding sample must discover source and read selected matching file contents
    in exactly one authorized cloud request, with complete correct results.
 4. Any wrong output, non-live measurement, missing record, duplicate ID, missing

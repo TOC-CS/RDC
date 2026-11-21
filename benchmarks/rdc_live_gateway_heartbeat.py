@@ -21,6 +21,8 @@ def percentile_nearest(sorted_values, percentile):
 
 
 async def benchmark(path, samples):
+    if type(samples) is not int or samples<1 or samples+2>100:
+        raise ValueError('RDC testing hard cap: 100 total live heartbeat samples')
     config = RelayConfig.load(path)
     results = []
     errors = 0

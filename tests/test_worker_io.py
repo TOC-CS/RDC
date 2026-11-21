@@ -165,6 +165,8 @@ class WorkerOutputFailures(unittest.TestCase):
                            'open("finished-side-effect", "w").write("done")')
         self.assert_capture_failed(job, 'capture disk full')
         self.assertEqual((self.base / 'finished-side-effect').read_text(), 'done')
+        self.assertIn(.04,self.child_wait_timeouts,
+            'after pipe EOF, wait for actual child exit instead of an unconditional 40ms sleep')
 
     def test_write_and_close_failures_are_durable(self):
         class BrokenDestination:
@@ -295,7 +297,10 @@ class WorkerOutputFailures(unittest.TestCase):
             # Keep the child live without leaving a reader blocked on its pipes.
             job = self.run_job('import os,time; os.close(1); os.close(2); time.sleep(60)', timeout=.1)
         self.assertEqual(len(calls), 2)
-        self.assertEqual(self.child_wait_timeouts, [10])
+        self.assertEqual(self.child_wait_timeouts[-1],10,
+            'uncertain cleanup must still have one bounded final reap')
+        self.assertTrue(all(wait==.04 for wait in self.child_wait_timeouts[:-1]),
+            'EOF-first optimization may only introduce short bounded waits')
         self.assertEqual(job['status'], 'timed_out')
         self.assertIsNone(job['exit_code'])
         self.assertIn('termination backend unavailable', job['error'])
