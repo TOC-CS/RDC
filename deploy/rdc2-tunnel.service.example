@@ -1,0 +1,27 @@
+# SOURCE TEMPLATE ONLY. Requires owner approval, verified Platform tunnel,
+# separate private key/environment file, correct UNIX user and profile first.
+# This service does not start when source is committed.
+[Unit]
+Description=Owner-private RDC 2.0 Secure MCP Tunnel staging
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rdc
+Group=rdc
+WorkingDirectory=/var/lib/rdc2-tunnel
+Environment=HOME=/var/lib/rdc2-tunnel
+EnvironmentFile=/etc/rdc2-tunnel/private-runtime.env
+ExecStart=/usr/local/bin/tunnel-client run --profile rdc2-staging
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/rdc2-tunnel
+
+[Install]
+WantedBy=multi-user.target

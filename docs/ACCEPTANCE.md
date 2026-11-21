@@ -1,5 +1,7 @@
 # Try RDC in a real AI client
 
+**100-check owner limit (November 19, 2026):** All RDC test campaigns are capped at 100 test operations total across categories, platforms, and worker lanes. The existing 30-sample live speed gates remain required as separately bounded campaigns. Use the verified test governor in `scripts/rdc_test_budget.py`, the source manifest `docs/rdc-test-budget-100.json`, and the complete policy `docs/RDC-TEST-100-EXECUTION-POLICY.md`. Never substitute a 100-case subset for universal release acceptance.
+
 Use this sequence after the worker is running and the selected AI client is connected. It separates transport, actual task execution and embedded presentation. Keep the first run inside a disposable workspace with synthetic data.
 
 ## 1. Verify the actual connection

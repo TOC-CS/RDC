@@ -1,0 +1,36 @@
+# Example ONLY. Install with owner-authorized administration after verifying
+# the dedicated account, state directory, readback and rollback.
+# This is a single-operator gateway, not a public multi-tenant service.
+[Unit]
+Description=RDC 2.0 Standalone MCP Gateway
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=rdc2
+Group=rdc2
+WorkingDirectory=/opt/rdc2
+Environment=PYTHONPATH=/opt/rdc2/current
+ExecStart=/opt/rdc2/venv/bin/python -B -m rdc.gateway_standalone serve --state-dir /var/lib/rdc2 --port 18782
+Restart=on-failure
+RestartSec=2
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/rdc2
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+TasksMax=64
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

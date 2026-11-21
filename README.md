@@ -8,6 +8,12 @@ RDC (Remote Desktop Commander) is an independent TOC Ministries project: a free,
 
 The local worker requires no RDC account, subscription, hosted service, telemetry, or model API key. Optional gateway hosting and your AI provider have their own terms and costs. This repository contains no Desktop Commander proprietary service code or assets.
 
+**Independent RDC V2 gateway:** RDC also supports a portable standalone, single-operator gateway with private SQLite journaling and a persistent authenticated WebSocket, usable on your own VPS without ChatGPT Sites or any publisher computer. The operator's own device executes tools; the VPS is only the relay. See [self-hosted gateway setup](docs/RDC-STANDALONE-VPS-SETUP-20261120.md) and [public open-source deployment boundaries](docs/RDC-PUBLIC-OPEN-SOURCE-TOPOLOGY-20261120.md). Hosted multi-user OAuth is still under development.
+
+**Mandatory RDC release gate:** five live latency targets plus 30+ correct matched terminal calls demonstrating at least 2x end-to-end speed over Desktop Commander. The standalone gateway additionally needs public TLS/WSS, owner/device pairing, deployed source and protected rollback verification. Synthetic or SSH-tunnel-only timings are not ChatGPT-hosted acceptance evidence.
+
+**RDC 2.0 developer speed policy:** the direct, single-owner workflow replaces retired Atlas Bus orchestration. Run `python3 scripts/rdc_speed_first.py status` to inspect the source, `python3 scripts/rdc_speed_first.py test` for the capped 100-case regression, and `python3 scripts/rdc_speed_first.py gate --receipt /path/to/authenticated-live-receipt.json` for fail-closed speed acceptance. See [the speed-first workflow](docs/RDC-DIRECT-SPEED-WORKFLOW-20261120.md). This process never deploys the private Site or changes the installed worker.
+
 **Preview v7 repair on the 0.1.0a8 production baseline.** Each view is bound to this chat's exact browser/device/native-window session. It shows the live image, cursor when available and viewer controls only. No desktop fallback, dashboard, jobs or session picker. Hiding or closing leaves work running. The resource is `ui://rdc/preview-v7.html`; published v1–v6 aliases remain readable. Native Mac capture works without activating the window; resizing requires the owner's Accessibility grant. [Guided macOS setup](docs/MACOS-SETUP.md) checks the separate RDC Window Preview helper. Shared native input requires owner approval even in trusted mode.
 
 OpenAI's current MCP extension supports inline/fullscreen, not the built-in floating computer-use viewer. RDC now requests inline by default to avoid opening the tall side panel automatically; hosts still control presentation. Outer App branding and separate-chat ChatGPT web acceptance remain distinct checks. See [host contracts](docs/EMBEDDED-HOSTS.md).
@@ -162,13 +168,13 @@ The service binds to loopback. Remote use needs a secured tunnel or authenticate
 For a guided run inside a real AI host, follow [client acceptance](docs/ACCEPTANCE.md). It covers the actual connection, independent browser, view lifecycle, durable jobs, credential consent and platform evidence.
 
 ```sh
-.venv/bin/python -m pip install '.[browser,test]'
+.venv/bin/python -m pip install '.[browser,test,v2]'
 .venv/bin/python -m playwright install chromium
-.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python scripts/rdc_test_budget.py --campaign local-core
 .venv/bin/python scripts/benchmark.py --browser
 ```
 
-Use the installed virtual environment. The managed system Python may contain an older incompatible MCP SDK. Hosted Linux, macOS and Windows results are recorded by exact revision in [verification](docs/VERIFICATION.md). Tests report unavailable browser runtimes as skips. macOS and Windows hardware and permission checks remain separate from protocol fixtures.
+**Testing cap:** The RDC owner has limited every RDC test campaign to **100 total test cases**, across all categories. The command above runs 86 Node V2 plus 14 Python checks, not the entire historical suite. The GitHub three-OS workflow shares 100 total tests across its jobs. Before running, review [the enforced RDC 100-check testing policy](docs/RDC-TEST-100-EXECUTION-POLICY.md). Unselected tests remain unverified and release gates stay open. Use the installed virtual environment. The managed system Python may contain an older incompatible MCP SDK. Hosted Linux, macOS and Windows results are recorded by exact revision in [verification](docs/VERIFICATION.md). Tests report unavailable browser runtimes as skips. macOS and Windows hardware and permission checks remain separate from protocol fixtures.
 
 Benchmarks report local worker latency and call counts. They do not establish that RDC is faster than Codex or Desktop Commander. Comparable task success, recovery, total round trips, and end-to-end time are the intended performance measures.
 

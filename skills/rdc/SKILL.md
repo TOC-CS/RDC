@@ -43,7 +43,7 @@ An isolated source speed candidate adds optional `RDC_WAKE_CHANNEL` Durable Obje
 
 A live `gateway_busy` response may indicate retained operation capacity despite online=true and pending_operations=0. Do not rerun an uncertain mutation or delete protected history. Review the existing capacity repair candidate and receive actual Site version/rollback evidence before activation.
 
-For two-way, cross-session communication among ChatGPT, Claude, Grok, BandMates and other AI apps, use [RDC communications](../rdc-communications/SKILL.md). Its message bus and terminal prototypes are synthetic-only until actual host enrollment and direct-chat readback are verified. Never treat an open browser tab as an authenticated peer AI session.
+RDC directly operates an owner-authorized workspace through its terminal, file, browser, desktop and mobile tools. Atlas Bus and cross-session AI chat orchestration have been retired from RDC. For RDC performance development, use the single-owner speed workflow in `scripts/rdc_speed_first.py` without spawning bus or swarm coordination.
 
 ## Keep the owner’s work in the foreground
 

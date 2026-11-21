@@ -1,0 +1,6 @@
+{
+  "tunnel_id": "REPLACE_WITH_ACTUAL_PLATFORM_TUNNEL_ID",
+  "mcp_server_url": "http://127.0.0.1:18786/v2/mcp",
+  "runtime_key_file": "/owner/private/runtime.key",
+  "gateway_client_token_file": "/owner/private/client-token"
+}

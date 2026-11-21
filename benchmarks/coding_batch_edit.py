@@ -26,8 +26,8 @@ def metrics(values):
 
 
 def run(trials=30,warmups=3):
-    if trials<5 or trials>100:
-        raise ValueError("Expected 5 to 100 trials")
+    if type(trials) is not int or type(warmups) is not int or trials<5 or warmups<0 or 2*(trials+warmups)>100:
+        raise ValueError("RDC testing hard cap: 100 total benchmark trials")
     count=6
     samples={"batch":[],"individual":[]}
     with tempfile.TemporaryDirectory(prefix="rdc-code-batch-") as scratch:

@@ -12,6 +12,9 @@ from .errors import RDCError
 
 
 ACTIVE = ('queued', 'running', 'cancelling')
+# Short inline jobs check their exact durable state promptly. Long-running
+# commands keep the existing bounded 40ms poll cadence and recovery identity.
+INLINE_SHORT_POLL_SECONDS = 0.003
 
 
 class Jobs:
@@ -103,7 +106,7 @@ class Jobs:
                             'complete':False, 'output':None}
                 # Observe short completions promptly, then bound SQLite polling
                 # for commands that need the durable background lifecycle.
-                interval = 0.01 if now - wait_started < 0.2 else 0.04
+                interval = INLINE_SHORT_POLL_SECONDS if now - wait_started < 0.2 else 0.04
                 time.sleep(min(interval, remaining))
             # Read one terminal snapshot. Do not give job and output
             # different status or completion metadata.

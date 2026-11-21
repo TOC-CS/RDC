@@ -28,6 +28,8 @@ def summarize(samples):
 
 
 def compare(rounds=30, warmup=5):
+    if type(rounds) is not int or type(warmup) is not int or rounds<1 or warmup<0 or 2*(rounds+warmup)>100:
+        raise ValueError('RDC testing hard cap: 100 total benchmark trials')
     samples = {"one_call":[], "two_calls":[]}
     with tempfile.TemporaryDirectory(prefix="rdc-auto-read-bench-") as td:
         home = Path(td)
