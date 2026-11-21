@@ -84,3 +84,5 @@ This mode uses cleartext HTTP and WebSocket only to the exact 127.0.0.1 loopback
 An interleaved 60-request coding comparison found a local p50 of 9.282ms against 89.084ms through the encrypted SSH/VPS path, 30 correct requests each. Details are documented in docs/rdc2/RDC2-SINGLE-MAC-SPEED-20261121.md. Source-only speed cannot certify ChatGPT-hosted performance.
 
 A future Secure MCP Tunnel can connect outward from this same host only if the owner's actual Platform and ChatGPT workspace permissions authorize it. The existing ChatGPT plugin is unchanged.
+
+Source-identical comparison confirmed the Mac local path remains faster with the exact same gateway file hash on both hosts: one-request coding p50 8.906ms locally versus 88.698ms over SSH/VPS, and terminal p50 91.725ms locally versus 176.692ms over SSH/VPS, with 30/30 correct per variant in each of two separate 60-operation campaigns. The hosts and network path still differ. Refer to docs/rdc2/RDC2-SINGLE-MAC-SPEED-20261121.md for the full limitations and private evidence. All six live ChatGPT acceptance gates remain open.

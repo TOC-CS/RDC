@@ -50,3 +50,7 @@ Added a read-only source-side tunnel readiness validator, eight focused security
 ## Verified tunnel-client QA staging (Nov 20)
 
 Official Linux amd64 tunnel-client v0.0.21 was checksum-verified and staged on the owner VPS in a standalone QA folder, without launching the daemon. The real on-VPS preflight correctly refused activation because the tunnel identity, restricted runtime key and separate gateway client credential remain unprovisioned. Full receipt and exact binary checksum are documented in docs/rdc2/RDC2-SECURE-MCP-TUNNEL-QA-20261120.md. No ChatGPT-hosted V2 performance receipt exists yet.
+
+## Exact-source reproduction
+
+Verified the same rdc/gateway_standalone.py SHA-256 on separate isolated Mac and VPS QA servers, then ran two 60-operation interleaved A/B campaigns on the same isolated worker. Coding p50 8.906ms local against 88.698ms VPS, terminal p50 91.725ms local against 176.692ms VPS, 120/120 correct across TWO separate campaigns each below the 100-operation limit. The strong single-host fast-path conclusion remains source and isolated transport evidence, not a ChatGPT-hosted release approval. See docs/rdc2/RDC2-SINGLE-MAC-SPEED-20261121.md.
