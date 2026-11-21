@@ -110,6 +110,22 @@ def validate_gateway_url(url):
     return url.rstrip('/')
 
 
+def validate_loopback_gateway_url(url):
+    """Permit plain HTTP only for an explicitly paired same-host V2 gateway.
+
+    The standalone server binds 127.0.0.1 exclusively. No hostname, other IP,
+    missing port, userinfo, extra path or ambiguous URL is permitted here.
+    Regular Site and remote standalone transports always require HTTPS.
+    """
+    parts = _url_parts(url)
+    if (parts.scheme != 'http' or parts.hostname != '127.0.0.1'
+            or parts.port is None or parts.path != '/v2/mcp'
+            or parts.netloc != f'127.0.0.1:{parts.port}'
+            or url != f'http://127.0.0.1:{parts.port}/v2/mcp'):
+        raise RelayPermanentError('Standalone local gateway requires the exact 127.0.0.1 loopback MCP endpoint.')
+    return url
+
+
 def validate_worker_url(url):
     parts = _url_parts(url)
     try:
@@ -153,7 +169,10 @@ class RelayConfig:
     transport: str = 'sites'  # opt-in standalone without ChatGPT Sites
 
     def __post_init__(self):
-        object.__setattr__(self, 'gateway_url', validate_gateway_url(self.gateway_url))
+        validated_gateway = (validate_loopback_gateway_url(self.gateway_url)
+                             if self.transport == 'standalone-local'
+                             else validate_gateway_url(self.gateway_url))
+        object.__setattr__(self, 'gateway_url', validated_gateway)
         object.__setattr__(self, 'worker_url', validate_worker_url(self.worker_url))
         if not isinstance(self.device_id, str) or not IDENTIFIER.fullmatch(self.device_id):
             raise RelayPermanentError('Relay device identity is invalid.')
@@ -164,7 +183,7 @@ class RelayConfig:
                 raise RelayPermanentError('A private Sites transport requires its separate service credential.')
             if hmac.compare_digest(self.device_key, self.sites_service_token):
                 raise RelayPermanentError('Relay device and Sites service credentials must be distinct.')
-        elif self.transport == 'standalone':
+        elif self.transport in ('standalone', 'standalone-local'):
             if self.sites_service_token != '':
                 raise RelayPermanentError('Independent standalone transport must not use a ChatGPT Sites token.')
         else:

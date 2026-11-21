@@ -70,3 +70,13 @@ These results demonstrate independent local and encrypted two-machine speed with
 The existing owner-private ChatGPT Site and v1 iMac relay are untouched. The isolated VPS gateway has its own process, private filesystem, independent journal and two operator credentials. No developer computer is a shared public router. The initial VPS process is an isolated loopback deployment; set up and verify your chosen supervisor for reboot persistence before relying on it for production.
 
 **Do not invite public users into this single-operator gateway.** A shared RDC service needs verified OAuth/OIDC, independent account/device pairing, tenant-specific queues and storage, abuse limits, TLS, revocation, multi-user isolation and separate operator-controlled rollback. Its future hosting provider is an implementation choice, never a requirement of the open-source local worker. Keep the existing fail-closed live speed gates and maximum 100 checks per campaign.
+
+## Optional single-Mac mode without a VPS
+
+The private standalone gateway and device worker can run on one machine. An explicitly configured relay uses transport standalone-local and a canonical local URL like http://127.0.0.1:18795/v2/mcp. A placeholder-only example is provided at deploy/rdc2-standalone-local.example.json. Keep resolved configurations owner-private and mode 600; never commit pairing credentials.
+
+This mode uses cleartext HTTP and WebSocket only to the exact 127.0.0.1 loopback interface. The gateway requires distinct private client/device keys and the worker keeps its authorization. Remote standalone and Sites connections remain HTTPS-only. Do not attach an old relay and a new V2 relay to the same worker state concurrently.
+
+An interleaved 60-request coding comparison found a local p50 of 9.282ms against 89.084ms through the encrypted SSH/VPS path, 30 correct requests each. Details are documented in docs/rdc2/RDC2-SINGLE-MAC-SPEED-20261121.md. Source-only speed cannot certify ChatGPT-hosted performance.
+
+A future Secure MCP Tunnel can connect outward from this same host only if the owner's actual Platform and ChatGPT workspace permissions authorize it. The existing ChatGPT plugin is unchanged.

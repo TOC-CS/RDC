@@ -91,6 +91,22 @@
       "python_discovery": false,
       "python_offset": 0,
       "python_take": 8
+    },
+    "local-v2-loopback-transport": {
+      "description": "Opt-in same-host V2 authenticated loopback WebSocket and upload with remote TLS unchanged",
+      "node_files": [],
+      "python_module": "tests.test_v2_loopback_transport",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 7
+    },
+    "local-relay-v2-compatibility": {
+      "description": "Full bounded WebSocket V2 relay recovery and backward-compatibility source suite",
+      "node_files": [],
+      "python_module": "tests.test_relay_v2",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 26
     }
   }
 }

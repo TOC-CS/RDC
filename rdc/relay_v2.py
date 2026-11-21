@@ -19,7 +19,7 @@ from .relay import (
     Journal, Operation, RelayConfig, RelayError, RelayPermanentError,
     RelayTransientError, RelayPump, _encoded, _json, _private_bytes, _secret,
     _relay_lock, _worker_session, error_result, validate_gateway_url,
-    httpx2,
+    validate_loopback_gateway_url, httpx2,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -30,16 +30,26 @@ MAX_V2_BULK_BODY_BYTES = 16 * 1024 * 1024
 MAX_V2_IDLE_WAIT_SECONDS = 15.0
 
 
-def v2_socket_url(gateway_url: str) -> str:
-    """Use the exact validated HTTPS gateway, independent of hosting vendor."""
-    parts = urlsplit(validate_gateway_url(gateway_url))
-    return urlunsplit(('wss', parts.netloc, '/v2/device/socket', '', ''))
+def _v2_transport_parts(gateway_url: str, transport: str):
+    if transport == 'standalone-local':
+        return urlsplit(validate_loopback_gateway_url(gateway_url)), 'local'
+    if transport in ('sites', 'standalone'):
+        return urlsplit(validate_gateway_url(gateway_url)), 'remote'
+    raise RelayPermanentError('Unknown relay gateway transport mode.')
 
 
-def v2_result_url(gateway_url: str) -> str:
-    """Keep bulk uploads on the same HTTPS gateway origin."""
-    parts = urlsplit(validate_gateway_url(gateway_url))
-    return urlunsplit(('https', parts.netloc, '/v2/device/result', '', ''))
+def v2_socket_url(gateway_url: str, *, transport: str = 'sites') -> str:
+    """Encrypted remote transport; cleartext only to exact opted-in loopback."""
+    parts, location = _v2_transport_parts(gateway_url, transport)
+    return urlunsplit(('ws' if location == 'local' else 'wss',
+                       parts.netloc, '/v2/device/socket', '', ''))
+
+
+def v2_result_url(gateway_url: str, *, transport: str = 'sites') -> str:
+    """Bulk results preserve the same validated remote or local transport."""
+    parts, location = _v2_transport_parts(gateway_url, transport)
+    return urlunsplit(('http' if location == 'local' else 'https',
+                       parts.netloc, '/v2/device/result', '', ''))
 
 
 class V2SocketGateway:
@@ -125,7 +135,7 @@ class V2SocketGateway:
         The private Sites actor has a different protocol. Keep this strictly
         opt-in to prevent accidentally breaking existing owner connections.
         """
-        if getattr(self.config,'transport',None) != 'standalone':
+        if getattr(self.config,'transport',None) not in ('standalone', 'standalone-local'):
             raise RelayPermanentError('The device catalog may only be registered with a standalone gateway.')
         if not isinstance(catalog,dict) or not 1<=len(catalog)<=256:
             raise RelayPermanentError('RDC 2.0 worker tool catalog is invalid.')
@@ -243,7 +253,8 @@ class V2SocketGateway:
                 trust_env=False,follow_redirects=False,verify=True,
                 timeout=httpx2.Timeout(30,connect=5,pool=5)
             ) as client:
-                response = await client.post(v2_result_url(self.config.gateway_url),
+                response = await client.post(
+                    v2_result_url(self.config.gateway_url, transport=getattr(self.config, 'transport', 'sites')),
                     content=raw,headers=headers)
             if response.status_code in (401,403,409):
                 raise RelayPermanentError('RDC 2.0 bulk upload identity was rejected; no action replay.')
@@ -329,7 +340,7 @@ async def run_relay_v2(config_path, state_dir, *, stop_event=None):
                     headers = {'X-RDC-Device-Key': config.device_key}
                     if config.transport == 'sites':
                         headers['OAI-Sites-Authorization'] = 'Bearer ' + config.sites_service_token
-                    async with connect(v2_socket_url(config.gateway_url),
+                    async with connect(v2_socket_url(config.gateway_url, transport=config.transport),
                         additional_headers=headers, proxy=None, compression=None,
                         open_timeout=10, ping_interval=20, ping_timeout=20,
                         max_size=MAX_V2_FRAME_BYTES, max_queue=16,
@@ -340,7 +351,7 @@ async def run_relay_v2(config_path, state_dir, *, stop_event=None):
                         # Preserve original stored result across any reconnect.
                         await RelayPump(config,journal,gateway,None,{}).flush()
                         async with _worker_session(config,token) as (session,catalog):
-                            if config.transport == 'standalone':
+                            if config.transport in ('standalone', 'standalone-local'):
                                 await gateway.register_catalog(catalog)
                             pump=RelayPump(config,journal,gateway,session,catalog)
                             delay=.5
