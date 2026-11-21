@@ -24,6 +24,8 @@ cd /path/to/your/RDC/source-checkout
 
 An operator must choose privately writable `/var/lib/rdc-gateway/state` and grant the service account ownership. Replace the sample locations and device UUID with values from their own deployment. Initial setup writes two distinct random bearer tokens and the selected device ID using private file permissions, never printing tokens. Existing state refuses reinitialization. Use one process per journal, and protect its SQLite database and result directory.
 
+Startup readiness now fails closed when the optional WebSocket dependency is missing, before HTTP health can report ready while device upgrades return 404. Install the documented V2 extra in the gateway environment, and verify WebSocket device pairing after installing. The standalone gateway refuses to start without the importable WebSocket server backend.
+
 The server **always binds 127.0.0.1**, not a public interface. Expose remote access only through a verified HTTPS/WSS reverse proxy with a real server certificate, controlled DNS, correct WebSocket upgrades, request-size limits and operator access restrictions. An SSH tunnel can provide temporary encrypted testing without a public port. Never expose `http://127.0.0.1:18782` directly or turn off its bearer checks.
 
 ## Device agent pairing

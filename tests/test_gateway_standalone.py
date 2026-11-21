@@ -308,5 +308,33 @@ class StandaloneGatewayContracts(unittest.TestCase):
         self.assertNotIn("historical-0",self.state.phase_ns)
         self.assertIn(operation,self.state.phase_ns)
 
+
+    def test_standalone_requires_websocket_backend_before_serving(self):
+        from rdc import gateway_standalone as gateway
+        with patch('rdc.gateway_standalone.importlib.import_module',
+                   return_value=object()) as load:
+            self.assertTrue(gateway.require_websocket_backend())
+        load.assert_called_once_with('websockets.asyncio.server')
+
+    def test_missing_websocket_backend_fails_closed_with_install_hint(self):
+        from rdc import gateway_standalone as gateway
+        with patch('rdc.gateway_standalone.importlib.import_module',
+                   side_effect=ModuleNotFoundError('websockets missing')):
+            with self.assertRaisesRegex(RuntimeError,'rdc\\[v2\\]'):
+                gateway.require_websocket_backend()
+
+    def test_cli_server_refuses_to_become_healthy_without_websocket(self):
+        import sys
+        from rdc import gateway_standalone as gateway
+        args=['rdc-standalone-gateway','serve','--state-dir',str(self.root),
+              '--port','18795']
+        with (patch.object(sys,'argv',args),
+              patch('rdc.gateway_standalone.require_websocket_backend',
+                    side_effect=RuntimeError('missing WebSocket transport')),
+              patch('uvicorn.run') as serve):
+            with self.assertRaisesRegex(RuntimeError,'missing WebSocket'):
+                gateway.main()
+        serve.assert_not_called()
+
 if __name__=="__main__":
     unittest.main()

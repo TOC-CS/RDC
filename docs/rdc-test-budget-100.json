@@ -66,7 +66,7 @@
       "python_module": "tests.test_gateway_standalone",
       "python_discovery": false,
       "python_offset": 0,
-      "python_take": 13
+      "python_take": 16
     },
     "local-inline-poll-tdd": {
       "description": "Bounded terminal inline completion polling, original job identity and deadline safety",

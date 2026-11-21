@@ -12,6 +12,7 @@ import asyncio
 from dataclasses import dataclass
 import hashlib
 import hmac
+import importlib
 import json
 import os
 import re
@@ -645,6 +646,24 @@ def create_app(state: StandaloneGateway):
         WebSocketRoute("/v2/device/socket",device),
     ])
 
+def require_websocket_backend() -> bool:
+    """Fail closed before /health can report ready without the device socket.
+
+    Uvicorn can otherwise serve regular HTTP while returning HTTP 404 for a
+    device WebSocket upgrade when its optional WebSocket runtime is absent.
+    The documented V2 extra installs websockets on every supported host.
+    """
+    try:
+        importlib.import_module('websockets.asyncio.server')
+    except ImportError:
+        raise RuntimeError(
+            'RDC 2.0 standalone gateway requires WebSocket support. '
+            "Install the optional dependency with pip install 'rdc[v2]' "
+            'in the isolated gateway environment before starting serve.'
+        ) from None
+    return True
+
+
 def main():
     parser=argparse.ArgumentParser(prog="rdc-standalone-gateway")
     parser.add_argument("action",choices=["init","serve"])
@@ -658,6 +677,7 @@ def main():
               ". Token values have not been printed.")
         return
     import uvicorn
+    require_websocket_backend()
     state=StandaloneGateway(opts.state_dir)
     uvicorn.run(create_app(state),host="127.0.0.1",port=opts.port,
                 proxy_headers=False,ws="auto",workers=1)
