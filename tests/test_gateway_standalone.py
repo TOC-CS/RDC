@@ -237,6 +237,27 @@ class StandaloneGatewayContracts(unittest.TestCase):
             self.assertEqual(len(list((self.root/"results").glob("*.json"))),1)
 
 
+    def test_orphaned_pending_bulk_file_does_not_block_original_result(self):
+        from rdc.gateway_standalone import sha256
+        socket=DeviceSocket(None)
+        self.state.sockets.add(socket)
+        self.state.last_heartbeat=self.state.clock()
+        request=json.dumps({"name":"rdc_job_run","arguments":{"argv":["echo","one"],"cwd":"/tmp"}})
+        original,_=self.state.enqueue("bulk-orphan-key",request,"rdc_job_run",True)
+        claim=self.state.claim()
+        raw=json.dumps({"content":[{"type":"text","text":"A"*300_000}]})
+        digest=sha256(raw)
+        result_file=original+"-"+digest+".json"
+        stale=self.root/"results"/(result_file+".pending")
+        stale.write_text("previous incomplete write")
+        frame={"id":original,"claimId":claim["claimId"],
+               "requestDigest":claim["requestDigest"],"resultJson":raw,
+               "resultDigest":digest}
+        self.assertFalse(self.state.complete(frame)["duplicate"])
+        self.assertEqual(self.state.recover(original)["resultJson"],raw)
+        self.assertTrue(stale.exists(),"never silently delete a preexisting uncertain artifact")
+        self.assertEqual(len(list((self.root/"results").glob("*.json"))),1)
+
     def _completed_trace(self, *, backward_clock=False):
         socket=DeviceSocket(None)
         self.state.sockets.add(socket)

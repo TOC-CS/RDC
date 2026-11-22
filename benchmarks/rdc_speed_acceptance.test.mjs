@@ -31,7 +31,7 @@ function receipt(overrides={}) {
       evidenceRef:'unittest-fixture-only://'+metric,
       samples:Array.from({length:30},(_,i)=>({
         requestId:metric+'-'+i,latencyMs:targets[metric],
-        success:true,outputCorrect:true,gatewayBusy:false,
+        success:true,outputCorrect:true,gatewayBusy:false,timingStatus:'valid',
         ...(metric==='coding_discovery_read'?{cloudRequests:1}:{})
       })),
     };
@@ -170,4 +170,13 @@ test('standalone release fails without public TLS, exact gateway ID, pairing and
 test('unrecognized transport cannot bypass verified private Site or standalone release checks',()=>{
   const input=receipt({environment:{transport:'untrusted-mode'}});
   assert.equal(evaluateRdcAcceptance(input).complete,false);
+});
+
+test('missing gateway busy and timing status evidence cannot pass',()=>{
+  const a=receipt();
+  delete a.metrics.live_terminal.samples[0].gatewayBusy;
+  assert.equal(evaluateRdcAcceptance(a).complete,false);
+  const b=receipt();
+  delete b.metrics.claim_to_result.samples[0].timingStatus;
+  assert.equal(evaluateRdcAcceptance(b).complete,false);
 });
