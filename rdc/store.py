@@ -82,6 +82,18 @@ class Store:
         data['device_id'] = device_id
         return data
 
+    def job_state(self, identifier):
+        """Read just the durable terminal state while a short job is running.
+
+        Completion still gets one detailed record through job(), retaining the
+        original snapshot, device identity, arguments and exit status.
+        """
+        with self.connection() as db:
+            row = db.execute('SELECT status FROM jobs WHERE id=?', (identifier,)).fetchone()
+        if not row:
+            raise RDCError('job_not_found', 'No job with that ID belongs to this worker.')
+        return row['status']
+
     def job(self, identifier):
         with self.connection() as db:
             row = db.execute('SELECT * FROM jobs WHERE id=?', (identifier,)).fetchone()
