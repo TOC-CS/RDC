@@ -18,6 +18,7 @@ AI client with locally installed stdio MCP bridge -> local RDC worker on THAT US
 - No central RDC account, owner Site, publisher computer, VPS, Cloudflare account or subscription is required.
 - Owner grants, file scopes, saved passwords, OS consent, command execution and job history stay with that user's worker.
 - Users who choose to host their own relay are responsible for its authenticated HTTPS access; never publish the worker's localhost endpoint directly.
+- Optional direct Codex integration is installed using the source-only credential-free setup helper scripts/rdc_setup_codex_local.py against an already paired local worker. The helper never copies private agent tokens or depends on the publisher's workstation, VPS, Platform API credits, or ChatGPT plugin identity. See docs/rdc2/RDC2-DIRECT-LOCAL-CODEX-CONNECTION-20261121.md.
 - The existing deploy/compose.yaml runs a *single user's isolated worker*, not a multi-tenant gateway. It binds host loopback only.
 
 ### B1. Independently self-hosted single-operator V2 gateway (now implemented and VPS loopback-tested)

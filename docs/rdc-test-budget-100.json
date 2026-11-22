@@ -115,6 +115,14 @@
       "python_discovery": false,
       "python_offset": 0,
       "python_take": 3
+    },
+    "local-codex-setup": {
+      "description": "Portably configure authenticated loopback RDC in Codex without disclosing secrets",
+      "node_files": [],
+      "python_module": "tests.test_codex_local_setup",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
     }
   }
 }

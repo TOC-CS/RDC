@@ -33,3 +33,20 @@ Do not automatically run paid Codex model prompts, make OpenAI Platform API infe
 - Source-only optional relay catalog registration is now filtered to its actual allowed worker tools, to prevent the gateway from advertising actions the relay would later reject.
 
 This document is source and local-host verification, not a production Site version upgrade or completed ChatGPT speed acceptance.
+
+## Repeatable installation on an authorized machine
+
+The source now includes scripts/rdc_setup_codex_local.py. The default is a read-only dry run, and it does not need a ChatGPT or OpenAI Platform token. It checks the existing agent-token and worker config file modes, canonical 127.0.0.1 HTTP MCP URL, worker state identity, Python executable, and source entrypoint. It never reads the token contents and refuses to replace an already configured Codex alias.
+
+Example dry run, using a previously paired local worker:
+
+    python scripts/rdc_setup_codex_local.py \
+      --state-dir /path/to/authorized/rdc-state \
+      --worker-url http://127.0.0.1:8765/mcp \
+      --alias rdc2-fast-local
+
+After checking the output, add --apply to register the separate Codex MCP entry. The installer invokes Codex's supported MCP registration command without shell expansion and verifies the exact saved command, environment and alias. Restore the old configuration by removing only the newly added alias using the Codex MCP CLI, never by overwriting the entire config from a stale backup. Open a fresh Codex session if the active client has not refreshed its MCP tool catalog.
+
+The helper was exercised with a distinct disposable alias against the existing authorized QA worker. The full apply, metadata readback and exact-alias removal all succeeded. Existing rdc and rdc2-fast-local entries were preserved. The five focused source tests passed, including public-host rejection, private token permission checks, malformed state rejection and refusal to overwrite an existing alias.
+
+The setup command does not install or start an RDC worker, grant OS access, refresh ChatGPT's separate Sites plugin, start a Secure MCP Tunnel, purchase credits, or authorize a production migration. It makes an already paired local RDC worker easy to connect to Codex.
