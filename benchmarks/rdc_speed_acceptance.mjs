@@ -97,10 +97,10 @@ export function evaluateRdcAcceptance(receipt) {
       else times.push(sample.latencyMs);
       // Durable millisecond timestamps can run backwards after OS clock
       // correction. Never accept the resulting zero/negative phase as fast.
-      if(sample.timingStatus!==undefined && sample.timingStatus!=='valid')
-        issues.push('Invalid clock ordering: phase timing must be remeasured live');
-      if(sample.success!==true||sample.outputCorrect!==true||sample.gatewayBusy===true) {
-        issues.push('Failed, incorrect, or gateway_busy operation is an acceptance failure');
+      if(sample.timingStatus!=='valid')
+        issues.push('Missing or invalid clock/timing status: phase timing must be verified live');
+      if(sample.success!==true||sample.outputCorrect!==true||sample.gatewayBusy!==false) {
+        issues.push('Failed, incorrect, missing busy status, or gateway_busy operation is an acceptance failure');
       }
       if(name==='coding_discovery_read'&&sample.cloudRequests!==goal.maxCloudRequests) {
         issues.push('Coding search and selected file read MUST complete in exactly one cloud request');

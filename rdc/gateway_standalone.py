@@ -376,12 +376,18 @@ class StandaloneGateway:
         if size > 262_144:
             result_file = identifier+"-"+outdigest+".json"
             path = self.root / "results" / result_file
-            temp = self.root / "results" / (result_file+".pending")
-            with os.fdopen(os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600),"w") as out:
-                out.write(raw)
-                out.flush()
-                os.fsync(out.fileno())
-            os.replace(temp,path)
+            # A crashed writer may leave an earlier .pending file. Each
+            # attempt owns a fresh temporary name, so recovery of the original
+            # claim never depends on deleting an uncertain previous attempt.
+            temp = self.root / "results" / (result_file+"."+str(uuid4())+".pending")
+            try:
+                with os.fdopen(os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600),"w") as out:
+                    out.write(raw)
+                    out.flush()
+                    os.fsync(out.fileno())
+                os.replace(temp,path)
+            finally:
+                temp.unlink(missing_ok=True)
             result_json = None
         self.db.execute("BEGIN IMMEDIATE")
         try:
