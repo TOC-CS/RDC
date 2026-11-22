@@ -131,6 +131,14 @@
       "python_discovery": false,
       "python_offset": 0,
       "python_take": 4
+    },
+    "local-job-list-single-snapshot": {
+      "description": "One-snapshot detailed RDC job list, preserving original job identities and fields",
+      "node_files": [],
+      "python_module": "tests.test_job_list_single_snapshot",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 4
     }
   }
 }
