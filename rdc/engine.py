@@ -553,8 +553,8 @@ class Engine:
         return {'ok':True,'paused':paused,'message':'Already-admitted actions may finish. Running jobs continue; cancel them individually when needed.'}
 
     def status(self,summary=False):
-        jobs = self.jobs.list()['jobs']
-        approvals = self.store.approvals()
+        jobs = self.jobs.count() if summary else self.jobs.list()['jobs']
+        approvals = self.store.approvals_count() if summary else self.store.approvals()
         result = {'ok':True,'name':'RDC','version':__version__,'device_id':self.store.device_id,
                   'settings':self.settings.public(),'paused':self.store.get('paused')=='true',
                   'adapters':self.adapters.status() if self.adapters else {},
@@ -562,8 +562,8 @@ class Engine:
         if summary:
             result.pop('jobs')
             result.pop('approvals')
-            result['job_count'] = len(jobs)
-            result['pending_approvals'] = len(approvals)
+            result['job_count'] = jobs
+            result['pending_approvals'] = approvals
         else:
             result['credentials'] = self.credentials.owner_snapshot()
         return result

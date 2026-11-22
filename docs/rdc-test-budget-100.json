@@ -123,6 +123,14 @@
       "python_discovery": false,
       "python_offset": 0,
       "python_take": 5
+    },
+    "local-status-fast-counts": {
+      "description": "Fast summary counts preserve capped jobs, expired approvals and interrupted job semantics",
+      "node_files": [],
+      "python_module": "tests.test_status_fast_counts",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 4
     }
   }
 }

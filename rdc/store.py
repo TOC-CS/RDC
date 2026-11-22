@@ -84,10 +84,25 @@ class Store:
         data['device_id'] = self.device_id
         return data
 
+    def job_count(self, limit=100):
+        """Match bounded list length without N+1 detailed job reads."""
+        with self.connection() as db:
+            total=db.execute('SELECT COUNT(*) AS n FROM jobs').fetchone()['n']
+        return min(total,limit)
+
     def jobs(self, limit=100):
         with self.connection() as db:
             ids = [r['id'] for r in db.execute('SELECT id FROM jobs ORDER BY created_at DESC LIMIT ?', (limit,))]
         return [self.job(identifier) for identifier in ids]
+
+    def approvals_count(self, limit=100):
+        """Keep expiration authoritative while avoiding JSON decoding."""
+        with self.connection() as db:
+            db.execute("UPDATE approvals SET status='expired' "
+                       "WHERE status='pending' AND expires_at<?", (time.time(),))
+            total=db.execute("SELECT COUNT(*) AS n FROM approvals "
+                             "WHERE status='pending'").fetchone()['n']
+        return min(total,limit)
 
     def approvals(self, limit=100):
         with self.connection() as db:

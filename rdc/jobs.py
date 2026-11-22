@@ -125,6 +125,10 @@ class Jobs:
         self.reconcile()
         return {'job':self.store.job(job_id)}
 
+    def count(self, limit=100):
+        self.reconcile()
+        return self.store.job_count(limit)
+
     def list(self, limit=100):
         self.reconcile()
         return {'jobs':self.store.jobs(limit)}
