@@ -50,3 +50,7 @@ After checking the output, add --apply to register the separate Codex MCP entry.
 The helper was exercised with a distinct disposable alias against the existing authorized QA worker. The full apply, metadata readback and exact-alias removal all succeeded. Existing rdc and rdc2-fast-local entries were preserved. The five focused source tests passed, including public-host rejection, private token permission checks, malformed state rejection and refusal to overwrite an existing alias.
 
 The setup command does not install or start an RDC worker, grant OS access, refresh ChatGPT's separate Sites plugin, start a Secure MCP Tunnel, purchase credits, or authorize a production migration. It makes an already paired local RDC worker easy to connect to Codex.
+
+## Owner-direct production-worker fast connection
+
+A separate owner-only Codex alias can also point directly to the user's already-running authorized RDC worker. This was configured and tested privately as rdc-owner-direct with no change to its existing permissions. Thirty complete original-output terminal commands achieved p50 104.380ms and p95 112.182ms through the local MCP client. This is a real Codex local route, not hosted ChatGPT production speed qualification. It inherits the original worker's full-host access if that is how the user configured the worker; enable only for the authorized owner, never as a shared or public gateway. Further evidence and recovery instructions: docs/rdc2/RDC2-OWNER-DIRECT-CODEX-SPEED-20261121.md.
