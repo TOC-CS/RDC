@@ -107,6 +107,14 @@
       "python_discovery": false,
       "python_offset": 0,
       "python_take": 26
+    },
+    "local-v2-catalog-filter": {
+      "description": "Restrict V2 exposed worker catalog to the owner relay allowlist before registering it",
+      "node_files": [],
+      "python_module": "tests.test_relay_v2_catalog_filter",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 3
     }
   }
 }

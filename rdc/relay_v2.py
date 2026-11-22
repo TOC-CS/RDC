@@ -52,6 +52,25 @@ def v2_result_url(gateway_url: str, *, transport: str = 'sites') -> str:
                        parts.netloc, '/v2/device/result', '', ''))
 
 
+def filter_catalog_for_allowlist(catalog, allowed_tools):
+    """Advertise only real, authorized worker tools to the private gateway.
+
+    Local and standalone relays may limit their tool surface. Publishing the
+    unfiltered worker catalog could otherwise offer actions the relay will
+    reject at execution. Preserve the same worker-owned schemas and stable
+    iteration order, with no extra device request or network traffic.
+    """
+    if allowed_tools is None:
+        return catalog
+    permitted = set(allowed_tools)
+    visible = {name: schema for name, schema in catalog.items()
+               if name in permitted}
+    if not visible:
+        raise RelayPermanentError(
+            'The paired RDC worker has no tools in this relay allowlist.')
+    return visible
+
+
 class V2SocketGateway:
     """A single original-work WebSocket with bounded event-driven reads."""
 
@@ -352,7 +371,8 @@ async def run_relay_v2(config_path, state_dir, *, stop_event=None):
                         await RelayPump(config,journal,gateway,None,{}).flush()
                         async with _worker_session(config,token) as (session,catalog):
                             if config.transport in ('standalone', 'standalone-local'):
-                                await gateway.register_catalog(catalog)
+                                await gateway.register_catalog(
+                                    filter_catalog_for_allowlist(catalog, config.allowed_tools))
                             pump=RelayPump(config,journal,gateway,session,catalog)
                             delay=.5
                             while stop_event is None or not stop_event.is_set():
