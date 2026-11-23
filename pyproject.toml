@@ -24,5 +24,5 @@ rdc = "rdc.cli:main"
 include = ["rdc*"]
 
 [tool.setuptools.package-data]
-rdc = ["web/*", "embedded/preview.html", "embedded/THIRD_PARTY_NOTICES.txt", "assets/*.png", "native/*.swift"]
+rdc = ["web/*", "mobile_web/*", "embedded/preview.html", "embedded/THIRD_PARTY_NOTICES.txt", "assets/*.png", "native/*.swift"]
 

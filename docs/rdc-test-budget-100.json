@@ -8,6 +8,38 @@
     "windows-latest": "ci-windows"
   },
   "campaigns": {
+    "mobile-native-regression": {
+      "description": "Existing native Appium and ADB synthetic protocol regression.",
+      "node_files": [],
+      "python_module": "tests.test_mobile",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 33
+    },
+    "mobile-integration-regression": {
+      "description": "Existing worker mobile integration regression.",
+      "node_files": [],
+      "python_module": "tests.test_mobile_integration",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
+    "mobile-gateway-regression": {
+      "description": "Existing standalone gateway regression.",
+      "node_files": [],
+      "python_module": "tests.test_gateway_standalone",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 19
+    },
+    "mobile-install": {
+      "description": "Five focused mobile installation, least-privilege status and profile tests.",
+      "node_files": [],
+      "python_module": "tests.test_mobile_install",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
     "local-core": {
       "description": "One capped campaign spanning 86 Node V2 tests and 14 Python V2 tests.",
       "node_files": [

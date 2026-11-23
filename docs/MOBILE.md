@@ -1,5 +1,7 @@
 # Phones and tablets
 
+For the independent installable iPhone/Android companion, read-only status credential, and owner-side profile generator, see [Mobile installation and onboarding](MOBILE-INSTALL.md). The development candidate still requires physical-device qualification.
+
 RDC can operate an owner-authorized Android device through ADB and can create dedicated native Appium sessions for Android, iPhone, and iPad. Mobile sessions have their own tools and `mobile-<uuid>` IDs. They remain separate from dedicated browser sessions.
 
 This expansion has synthetic protocol and privacy tests. **Real Android, iPhone, iPad, emulator, and simulator qualification is still pending.** A configured profile or successful HTTP fixture does not establish hardware compatibility. The previous desktop/iMac verification applies to its tested revision and workflows.
