@@ -67,10 +67,28 @@ def main():
     prepare.add_argument("--udid")
     prepare.add_argument("--alias", default="iphone")
     prepare.add_argument("--output", required=True)
+    android_probe = sub.add_parser("android-usb-check", help="Read-only Android USB authorization diagnostic")
+    android_probe.add_argument("--serial", help="Exact owner-selected USB device if multiple are attached")
+    android_prepare = sub.add_parser("android-usb-profile", help="Create a private fragment for an authorized USB device")
+    android_prepare.add_argument("--serial")
+    android_prepare.add_argument("--alias", default="android")
+    android_prepare.add_argument("--app", required=True)
+    android_prepare.add_argument("--activity", required=True)
+    android_prepare.add_argument("--output", required=True)
     args = parser.parse_args()
     if args.action == "enable-status":
         provision_mobile_token(args.state_dir)
         print("Read-only mobile status enabled. Retrieve mobile-status-token privately from the state directory.")
+    elif args.action == "android-usb-check":
+        from .android_usb import usb_check
+        print(json.dumps(usb_check(args.serial),indent=2))
+    elif args.action == "android-usb-profile":
+        from .android_usb import write_profile
+        try:
+            write_profile(args.output,args.alias,args.app,args.activity,args.serial)
+        except (OSError,ValueError,EOFError,TypeError,KeyError):
+            parser.exit(1,"Unable to create private Android profile; verify the authorized USB device, installed activity and output path.\n")
+        print("Private Android profile created; no live worker configuration or phone data changed.")
     elif args.action == "ios-usb-check":
         from .ios_usb import usb_check
         print(json.dumps(usb_check(args.udid),indent=2))

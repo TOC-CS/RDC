@@ -98,3 +98,16 @@ receipt explicitly leaves native UI and foreground verification false.
 No app installation, removal, data access, screenshot or arbitrary input
 occurred. No production configuration changed. Existing release holds
 and Android hardware qualification remain open.
+
+## Android USB onboarding qualification
+
+Installed official Android SDK platform-tools 37.0.1 on the iMac;
+the ADB 1.0.41 executable reported version 37.0.1-15733141. No ADB
+process was running following host installation verification. Added
+owner-local USB discovery, exact transport authorization status, and
+private profile generation with installed activity resolution. A
+separate five-case Android onboarding source campaign passed all five
+tests: network/emulator exclusion, unauthorized device refusal, private
+exact transport status, private profile creation and configured-profile
+worker routing. No physical Android device was connected and no live
+Android control, signed APK or release qualification is claimed.

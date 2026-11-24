@@ -265,3 +265,39 @@ the owner-configured Apple Settings application and a temporary isolated
 RDC Engine. The owner must enable the feature in their own production
 settings after release qualification. The existing Appium and Apple
 Mirroring routes remain separate.
+
+### Android USB onboarding without Android Studio
+
+The host-side ADB path needs only official Android SDK platform-tools
+for connection and device diagnostics. On macOS, platform-tools 37.0.1
+was installed from the Homebrew Android platform-tools cask. Full
+Android Studio, JDK and Appium are unnecessary for this onboarding path;
+the separate UiAutomator2 route still requires its compatible toolchain.
+
+On an owner-controlled host, connect the selected Android phone by USB,
+enable Developer Options and USB debugging on that device, and approve
+the host's debugging prompt on the phone. Then run:
+
+```sh
+python -m rdc.mobile_install android-usb-check
+python -m rdc.mobile_install android-usb-profile --alias android \
+  --app com.android.settings --activity .Settings \
+  --output /YOUR/PRIVATE/DIRECTORY/android-profile.json
+```
+
+The owner may provide `--serial` to choose the exact USB device when
+more than one is attached. The tools refuse ambiguous devices, emulators,
+network transports and unauthorized debugging sessions. The ADB
+transport must be positively identified as USB by the installed ADB
+binary. A private fragment is created only after the exact selected
+installed activity resolves; it does not modify a live configuration.
+On POSIX the fragment is created with mode 0600 and cannot overwrite an
+existing file. Keep the private serial and fragment off public logs.
+
+A configured Android profile can use `rdc_mobile_android_usb_status`
+for bounded status without revealing identifiers or launching apps.
+The local ADB client uses the loopback ADB server only; it may start
+that standard local server if needed. No remote ADB connections,
+automatic pairing, TCP debugging, app installation or input is performed
+by these onboarding commands. No physical Android device was connected
+during source qualification; hardware acceptance remains open.

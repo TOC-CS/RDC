@@ -135,6 +135,8 @@ def _catalog():
                    for key in ('start_x','start_y','end_x','end_y')}
     rows = [
         ('list', 'List owner-configured native mobile profiles and active sessions. Private connection details are omitted.', False, {}, ()),
+        ('android_usb_status', 'Read only the exact owner-configured Android USB transport and existing debugging authorization. Never automatically pairs, connects over Wi-Fi, exposes device identifiers or launches apps.', False,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
         ('ios_status', 'Read battery, storage, Developer Mode and trusted USB connectivity for an owner-configured iOS profile on this Mac. Auto prefers PyMobileDevice3, with libimobiledevice fallback. Go-iOS verifies identity only. Does not start automation or expose identifiers.', False,
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},'backend':{'type':'string','enum':['auto','pymobiledevice3','libimobiledevice','go-ios']}}, ('profile',)),
         ('ios_developer_preflight', 'Verify the owner-configured iOS USB Developer Mode, personalized developer image and a temporary no-root RemoteXPC tunnel. Does not mount images, install apps, pair devices, start UI automation, or expose service addresses.', False,
@@ -378,6 +380,12 @@ class Mobile:
                         fail('profile_not_found')
                     from .ios_usb import developer_preflight
                     return developer_preflight(profile['capabilities']['appium:udid'])
+                if action == 'android_usb_status':
+                    profile = self._profiles.get(args['profile'])
+                    if profile is None or profile['platformName'] != 'Android':
+                        fail('profile_not_found')
+                    from .android_usb import usb_check
+                    return usb_check(profile['capabilities']['appium:udid'])
                 if action == 'ios_status':
                     profile = self._profiles.get(args['profile'])
                     if profile is None or profile['platformName'] != 'iOS':

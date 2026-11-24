@@ -32,6 +32,14 @@
       "python_offset": 0,
       "python_take": 19
     },
+    "android-usb-onboarding": {
+      "description": "Five focused authorized Android USB discovery and private onboarding checks.",
+      "node_files": [],
+      "python_module": "tests.test_android_usb",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
     "ios-coredevice-launch": {
       "description": "Six focused direct iOS app launch cases; separate new functionality campaign.",
       "node_files": [],
