@@ -1,11 +1,11 @@
 {
   "campaign": "background-preview-repair-20261124",
   "maximum": 100,
-  "executed_unittest_cases": 62,
+  "executed_unittest_cases": 64,
   "extra_nested_native_cases_charged": 10,
   "live_preview_requests_charged": 2,
-  "charged_total": 85,
-  "remaining": 15,
+  "charged_total": 94,
+  "remaining": 6,
   "runs": [
     {
       "name": "background red",
@@ -76,6 +76,17 @@
       "cases": 3,
       "failures": 0,
       "skips": 0
+    },
+    {
+      "name": "installed-source preview job binding red",
+      "cases": 1,
+      "failures": 1
+    },
+    {
+      "name": "installed-source preview job binding green",
+      "cases": 1,
+      "failures": 0,
+      "skips": 0
     }
   ],
   "limitations": [
@@ -84,5 +95,6 @@
     "No installed Python policy activation",
     "Immediate shared-Chrome stop guard was removed by another active workflow; owner clarification pending"
   ],
-  "extra_resource_alias_reads_charged": 10
+  "extra_resource_alias_reads_charged": 10,
+  "extra_nested_preview_operations_charged": 7
 }
