@@ -181,6 +181,18 @@
       "python_take": 2,
       "python_offset": 0,
       "python_module": "tests.test_preview_resources"
+    },
+    "background-preview-grant-red": {
+      "node_files": [],
+      "python_take": 3,
+      "python_offset": 0,
+      "python_module": "tests.test_background_preview_window_grant"
+    },
+    "background-preview-grant-green": {
+      "node_files": [],
+      "python_take": 3,
+      "python_offset": 0,
+      "python_module": "tests.test_background_preview_window_grant"
     }
   }
 }

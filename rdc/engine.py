@@ -176,6 +176,11 @@ class Engine:
             raise RDCError('background_required',
                 'Background-only mode blocks shared desktop input and window resizing. '
                 'Use the independent Playwright browser. Foreground work requires an explicit owner configuration change.')
+        if (self.settings.background_only and name == 'rdc_window_open'
+                and arguments.get('resize_to_view', False)):
+            raise RDCError('background_required',
+                'Background-only previews are observational. Open the window without resize-to-view; '
+                'resizing requires an explicit owner configuration change.')
         if name in ('rdc_job_start', 'rdc_job_run'):
             if not self.settings.allow_exec:
                 raise RDCError('capability_disabled','Command execution is disabled in the owner configuration.')

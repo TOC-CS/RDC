@@ -1,11 +1,11 @@
 {
   "campaign": "background-preview-repair-20261124",
   "maximum": 100,
-  "executed_unittest_cases": 53,
+  "executed_unittest_cases": 62,
   "extra_nested_native_cases_charged": 10,
   "live_preview_requests_charged": 2,
-  "charged_total": 76,
-  "remaining": 24,
+  "charged_total": 85,
+  "remaining": 15,
   "runs": [
     {
       "name": "background red",
@@ -58,6 +58,24 @@
       "name": "preview v10 resource and aliases green",
       "cases": 2,
       "failures": 0
+    },
+    {
+      "name": "resize grant red",
+      "cases": 3,
+      "failures": 1,
+      "skips": 0
+    },
+    {
+      "name": "resize grant green",
+      "cases": 3,
+      "failures": 0,
+      "skips": 0
+    },
+    {
+      "name": "resize grant narrow installed-source copy",
+      "cases": 3,
+      "failures": 0,
+      "skips": 0
     }
   ],
   "limitations": [

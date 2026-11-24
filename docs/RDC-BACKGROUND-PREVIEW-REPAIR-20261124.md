@@ -38,3 +38,7 @@ The source candidate is not a live worker upgrade. Applying the new Python polic
 Real ChatGPT floating placement is still OPEN. Background YouTube editing requires authentication in an independent browser session; ordinary Chrome authentication does not imply the headless browser is signed in. Never copy cookie databases or silently fall back to the owner's tabs.
 
 Keep the existing V2 migration and merge hold. This patch does not qualify the broader latency or platform release gates.
+
+## Continuation, November 24
+
+A background preview could still request `resize_to_view=true`, creating a pending owner approval for a grant the background policy would later refuse to use. A test-first repair now rejects this grant before approval or dispatch while preserving observational windows and explicit foreground owner approval. One expected red failure among three cases was reproduced; all three passed after the change, and all three passed again against the isolated narrow installed-source copy. The cumulative campaign is 85/100 charged slots (15 remain). All six installed preimages and candidate hashes were revalidated, and the narrow package manifest now includes the additional guard. No production files, active browser sessions or gateway deployments were changed. Live verification and activation remain open.
