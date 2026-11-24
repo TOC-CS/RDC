@@ -32,6 +32,14 @@
       "python_offset": 0,
       "python_take": 19
     },
+    "ios-coredevice-launch": {
+      "description": "Six focused direct iOS app launch cases; separate new functionality campaign.",
+      "node_files": [],
+      "python_module": "tests.test_ios_app",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 6
+    },
     "ios-developer-preflight": {
       "description": "Three bounded developer preflight exact-target, privacy and fail-closed checks.",
       "node_files": [],

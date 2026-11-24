@@ -235,3 +235,33 @@ iPhone Mirroring also requires its own Apple account/Continuity setup and
 an available wireless connection. On this host, Internet Sharing was
 disabled by the owner to resolve the connection conflict. The separate
 USB developer transport remained operational.
+
+### Direct native iOS application launch without Xcode or Appium
+
+A local owner can enable the narrowly scoped CoreDevice route with
+`ios_coredevice_launch_enabled: true` in the RDC worker settings.
+The existing private mobile profile must specify an exact USB device and
+installed application bundle. The option defaults to false.
+
+Call `rdc_mobile_ios_app_prepare` with the configured profile alias.
+The worker verifies USB trust, Developer Mode, mounted developer image,
+the exact installed application and advertised CoreDevice launch support.
+On success it returns a single-use observation valid for 120 seconds.
+
+Call `rdc_mobile_ios_app_launch` with that alias and observation. The
+worker requires owner review even in trusted mode. It rechecks device
+identity and installed app, launches the configured app without killing
+an existing process, and independently queries its bundle-specific
+process identity through Instruments. No raw process identifier or
+driver response is returned. A process-running result does not prove
+foreground display, an unlocked screen, touch input or native UI
+automation. A failed or uncertain dispatch is never automatically
+replayed. This route cannot uninstall, reinstall, signal processes,
+access app content, take screenshots or provide arbitrary launch
+arguments. It does not open a network listener or require Xcode.
+
+The route was verified on the physical iOS 26.6.1 device using only
+the owner-configured Apple Settings application and a temporary isolated
+RDC Engine. The owner must enable the feature in their own production
+settings after release qualification. The existing Appium and Apple
+Mirroring routes remain separate.

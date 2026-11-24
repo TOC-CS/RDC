@@ -38,6 +38,9 @@ MESSAGES = {
     'invalid_config': 'Invalid mobile profile. Use an owner-defined native Android/UiAutomator2 or iOS/XCUITest profile with a safe endpoint and flat capabilities.',
     'invalid_arguments': 'Invalid mobile arguments. Use the advertised tool schema and current observation.',
     'unknown_tool': 'Unknown mobile tool.',
+    'ios_app_launch_disabled': 'The owner must explicitly enable direct CoreDevice iOS app launch.',
+    'ios_app_outcome_unknown': 'The app launch may have occurred. Inspect the device; do not replay it.',
+    'ios_app_launch_unavailable': 'The exact app launch could not proceed. Prepare the owner-configured application again after inspecting the device.',
     'mirror_disabled': 'Owner opt-in and a desktop grant are required for Apple iPhone Mirroring.',
     'mirror_unavailable': 'The exact Apple iPhone Mirroring window or menu is unavailable. No other window was selected.',
     'mirror_outcome_unknown': 'Mirroring menu dispatch could not be confirmed. Inspect the phone; do not replay the action.',
@@ -136,6 +139,10 @@ def _catalog():
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},'backend':{'type':'string','enum':['auto','pymobiledevice3','libimobiledevice','go-ios']}}, ('profile',)),
         ('ios_developer_preflight', 'Verify the owner-configured iOS USB Developer Mode, personalized developer image and a temporary no-root RemoteXPC tunnel. Does not mount images, install apps, pair devices, start UI automation, or expose service addresses.', False,
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
+        ('ios_app_prepare', 'Verify the exact installed app and direct CoreDevice launch support for an opted-in owner-defined iOS profile. Returns a short-lived launch observation, never private app data or identifiers.', False,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
+        ('ios_app_launch', 'Request one owner-reviewed launch of the prepared iOS profile app without Xcode or Appium. No termination, installation, launch arguments, screen capture, or retry. Process readback does not imply foreground or native UI control.', True,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},'observation_id':string}, ('profile','observation_id')),
         ('mirror_observe', 'Read only the exact Apple iPhone Mirroring window and available fixed navigation commands. Requires owner opt-in. No phone contents or device identity are returned.', False, {}, ()),
         ('mirror_navigate', 'Request one owner-reviewed Apple iPhone Mirroring menu action with a fresh observation. The owner must verify the Apple-selected phone. No arbitrary input, capture or retry.', True,
          {'observation_id':string,'action':{'type':'string','enum':['home','app_switcher','spotlight']}}, ('observation_id','action')),
@@ -289,6 +296,8 @@ class Mobile:
         self._sessions = {}
         from .ios_mirroring import Mirroring
         self._mirroring = Mirroring(settings)
+        from .ios_app import IOSAppLaunch
+        self._ios_app = IOSAppLaunch(settings,self._profiles)
         self._lock = threading.RLock()
         self._status_lock = threading.Lock()
         self._closed = False
@@ -348,11 +357,18 @@ class Mobile:
             if action == 'screenshot': return self.snapshot(args['session_id'])
             self._publish_status(busy=True)
             try:
+                if action in ('ios_app_prepare','ios_app_launch'):
+                    if self._sessions: fail('developer_preflight_conflict')
+                    self._mirroring.observation = None
+                    if action == 'ios_app_prepare': return self._ios_app.prepare(args['profile'])
+                    return self._ios_app.launch(args['profile'],args['observation_id'])
                 if action in ('mirror_observe','mirror_navigate'):
                     if self._sessions: fail('mirror_conflict')
+                    self._ios_app.invalidate()
                     if action == 'mirror_observe': return self._mirroring.observe()
                     return self._mirroring.navigate(args['observation_id'],args['action'])
                 if action == 'start':
+                    self._ios_app.invalidate()
                     self._mirroring.observation = None
                     return self._start(args['profile'])
                 if action == 'ios_developer_preflight':
@@ -631,4 +647,5 @@ class Mobile:
             finally:
                 self._closed = True
                 self._sessions.clear()
+                self._ios_app.invalidate()
                 self._publish_status()

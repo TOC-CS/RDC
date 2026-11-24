@@ -219,7 +219,7 @@ class Engine:
                 # owner decision for each native input, even in trusted mode.
                 # Mirroring navigation always needs an exact owner decision,
                 # even when other configured tools use trusted mode.
-                if name == 'rdc_mobile_mirror_navigate':
+                if name in ('rdc_mobile_mirror_navigate','rdc_mobile_ios_app_launch'):
                     return self._queue(name,arguments)
                 if name in ('rdc_desktop_pointer','rdc_desktop_keys','rdc_desktop_type') and self.settings.desktop_mode != 'disabled':
                     return self._queue(name,arguments)

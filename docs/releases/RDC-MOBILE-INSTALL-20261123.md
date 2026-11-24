@@ -85,3 +85,16 @@ still enabled. No personal device content was accessed or changed by these
 development operations. Physical UI action qualification, signed companion
 packaging, wireless direct control, and existing production release gates
 remain open. No production deployment or merge occurred.
+
+## Direct CoreDevice application launch qualification
+
+A new scoped app-launch campaign exercised six targeted software tests;
+all six passed. One bounded live smoke workflow on the physical iOS
+26.6.1 device prepared the owner-selected Apple Settings bundle, verified
+the owner-review gate, dispatched one authorized launch without terminating
+any process, and independently verified the configured bundle was running.
+The separate temporary no-root USB tunnel closed successfully. The
+receipt explicitly leaves native UI and foreground verification false.
+No app installation, removal, data access, screenshot or arbitrary input
+occurred. No production configuration changed. Existing release holds
+and Android hardware qualification remain open.
