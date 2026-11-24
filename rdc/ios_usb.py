@@ -282,7 +282,7 @@ def preferred_device_metrics(udid,backend="auto"):
     return {**fallback,"backend":"libimobiledevice"}
 
 
-def developer_preflight(udid):
+def developer_preflight(udid, interaction=False):
     """Readiness only; never mount a DDI or expose RemoteXPC endpoints."""
     if not isinstance(udid,str) or not re.fullmatch(r"[A-Za-z0-9-]{8,128}",udid):
         return {"developer_status":"invalid_target","remote_xpc_connected":False}
@@ -293,7 +293,10 @@ def developer_preflight(udid):
     python=_pmd_python()
     if not python:
         return {**result,"developer_status":"library_required"}
-    obj=_safe_json_command([python,"-I",str(Path(__file__).with_name("ios_developer_probe.py")),udid],timeout=24)
+    command=[python,"-I",str(Path(__file__).with_name("ios_developer_probe.py")),udid]
+    if interaction:
+        command.append("interaction")
+    obj=_safe_json_command(command,timeout=36 if interaction else 24)
     for field in ("developer_mode","developer_image_mounted"):
         if type(obj.get(field)) is bool:
             result[field]=obj[field]
@@ -308,6 +311,43 @@ def developer_preflight(udid):
                       "debug_service_advertised","instruments_service_advertised","image_service_advertised"):
             if type(obj.get(field)) is bool:
                 result[field]=obj[field]
+        if interaction:
+            result.update(_interaction_receipt(obj))
     elif status=="tunnel_verified":
         status="unavailable"
     return {**result,"developer_status":status}
+
+
+def _interaction_receipt(obj):
+    # Never expose raw service records, window identifiers, or screen content.
+    result={"lock_state":"unknown","native_input_verified":False,
+            "screen_capture_permitted":False,"native_input_permitted":False}
+    for key in ("touch_service_advertised","hardware_button_service_advertised",
+                "accessibility_service_advertised","screen_capture_service_advertised",
+                "touch_transport_queried"):
+        if type(obj.get(key)) is bool:
+            result[key]=obj[key]
+    lock=obj.get("lock_state")
+    if lock in ("locked","unlocked","unknown"):
+        result["lock_state"]=lock
+    width,height=obj.get("native_width"),obj.get("native_height")
+    if (type(width) is int and type(height) is int and 1<=width<=16384
+            and 1<=height<=16384 and width*height<=48000000):
+        result.update(native_width=width,native_height=height)
+        if obj.get("orientation") in ("rot0","rot90","rot180","rot270"):
+            result["orientation"]=obj["orientation"]
+        if obj.get("backlight_state") in ("on","off","unknown"):
+            result["backlight_state"]=obj["backlight_state"]
+    count=obj.get("hid_surface_count")
+    if (result.get("touch_service_advertised") is True and result.get("touch_transport_queried") is True
+            and type(count) is int and 0<=count<=256):
+        result["hid_surface_count"]=count
+    else:
+        result["touch_transport_queried"]=False
+    return result
+
+
+def interaction_preflight(udid):
+    evidence=developer_preflight(udid,interaction=True)
+    return {**evidence,"native_input_verified":False,"native_input_permitted":False,
+            "screen_capture_permitted":False,"lock_state":evidence.get("lock_state","unknown")}

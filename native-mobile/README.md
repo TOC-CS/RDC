@@ -24,15 +24,42 @@ Sign it with Android's apksigner using an owner-held development or release
 key, verify its signature, and install only on the explicitly authorized
 device. No keys or credentials belong in this repository.
 
-## iOS
+## iOS: standalone command-line packaging
 
-Prerequisites: full Xcode, the iPhoneOS SDK, and XcodeGen. Run
-xcodegen generate --spec ios/project.yml from this directory, then open
-the generated project in Xcode. For a physical iPhone, the owner chooses
-their Apple development team and provisioning profile; for simulation,
-build using the iOS Simulator SDK. No signing identity or provisioning
-profile is embedded. A native signed IPA is not available until those
-steps are verified. Do not disable ATS or override certificate validation.
+Owner policy: no Xcode application, Xcode project build, or xcodebuild
+invocation. The active packaging helper uses an explicit standalone Swift
+compiler and a separately supplied, legitimately obtained iPhoneOS device SDK.
+It rejects paths inside Xcode.app and does not download SDKs or accept
+licenses. The older project.yml is retained as historical project metadata,
+not the active build path.
+
+Inspect current readiness without an SDK or credentials:
+
+    python3 ios/standalone.py doctor
+
+With a compatible owner-supplied SDK:
+
+    python3 ios/standalone.py doctor --sdk /OWNER/SDK/iPhoneOS.sdk
+    python3 ios/standalone.py build --sdk /OWNER/SDK/iPhoneOS.sdk --out ios/build/RDCMobile-unsigned.app
+
+The build step produces an unsigned app bundle only. To sign a physical-device
+development package, obtain a valid Apple-issued development certificate and
+an explicit RDC provisioning profile covering the exact selected phone. The
+certificate and its private key must already be present in the owner's local
+keychain. Do not revoke other certificates, export private keys, use ad hoc
+signatures, disable ATS, or override certificate validation.
+
+    python3 ios/standalone.py sign --app ios/build/RDCMobile-unsigned.app --profile /OWNER/PRIVATE/RDC.mobileprovision --device OWNER_DEVICE_ID --identity OWNER_CERTIFICATE_SHA1 --out ios/build/RDCMobile.ipa
+
+Use local private variables for the owner device and signing identity values,
+not shared logs. This verifies the profile's expiry, iOS platform, explicit
+bundle entitlement, registered device and authorized certificate, then signs
+a temporary copy, checks minimal entitlements and strict local signature
+verification, and creates a fresh IPA. Apple's device installation service
+remains the authority for signing and provisioning. The helper never installs
+an application. A compatible SDK/toolchain and Apple signing prerequisites
+are still required; no full iOS compile or signed IPA has been verified.
+The direct USB developer-control path is separate and does not require Xcode.
 
 The independent gateway /mobile/ PWA remains the lower-friction installation
 option on either platform. Physical device acceptance, full native UI control,

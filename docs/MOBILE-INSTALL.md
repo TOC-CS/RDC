@@ -301,3 +301,27 @@ that standard local server if needed. No remote ADB connections,
 automatic pairing, TCP debugging, app installation or input is performed
 by these onboarding commands. No physical Android device was connected
 during source qualification; hardware acceptance remains open.
+
+
+### Owner policy: standalone iOS packaging and native interaction readiness
+
+Do not install or invoke Xcode for RDC development. The active native iOS
+companion packaging route is native-mobile/ios/standalone.py, described in
+native-mobile/README.md. It requires an explicitly supplied legitimate
+iPhoneOS SDK compatible with the standalone Swift compiler and a valid
+owner-held Apple development identity and device-specific profile for a
+signed IPA. It never downloads an SDK, uses Xcode, creates a certificate,
+changes device trust, or installs an application. The legacy Appium/XCUITest
+setup described earlier in this document is not the active owner-approved
+development route.
+
+The read-only rdc_mobile_ios_interaction_preflight tool inspects the exact
+owner-selected USB device, positively identifies one built-in primary
+display, reports bounded native dimensions/orientation and checks the
+advertised touch, button, accessibility and screen-capture services. It
+may query registered HID surfaces without sending any input. Service
+presence or surface enumeration never implies successful touchscreen
+automation. Lock-state uncertainty remains explicit. Neither this tool
+nor its helper returns screen content or permits touch, keyboard input
+or screenshot capture; complete privacy and foreground verification must
+be established before qualifying those operations.

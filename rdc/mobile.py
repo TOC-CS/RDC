@@ -141,6 +141,8 @@ def _catalog():
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},'backend':{'type':'string','enum':['auto','pymobiledevice3','libimobiledevice','go-ios']}}, ('profile',)),
         ('ios_developer_preflight', 'Verify the owner-configured iOS USB Developer Mode, personalized developer image and a temporary no-root RemoteXPC tunnel. Does not mount images, install apps, pair devices, start UI automation, or expose service addresses.', False,
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
+        ('ios_interaction_preflight', 'Inspect the exact iOS USB profile for native display, touch, hardware-button and accessibility service readiness. Does not capture screens, send input, read app content or grant input authority. Unknown lock or privacy state remains blocked.', False,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
         ('ios_app_prepare', 'Verify the exact installed app and direct CoreDevice launch support for an opted-in owner-defined iOS profile. Returns a short-lived launch observation, never private app data or identifiers.', False,
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
         ('ios_app_launch', 'Request one owner-reviewed launch of the prepared iOS profile app without Xcode or Appium. No termination, installation, launch arguments, screen capture, or retry. Process readback does not imply foreground or native UI control.', True,
@@ -373,13 +375,14 @@ class Mobile:
                     self._ios_app.invalidate()
                     self._mirroring.observation = None
                     return self._start(args['profile'])
-                if action == 'ios_developer_preflight':
+                if action in ('ios_developer_preflight','ios_interaction_preflight'):
                     if self._sessions: fail('developer_preflight_conflict')
                     profile = self._profiles.get(args['profile'])
                     if profile is None or profile['platformName'] != 'iOS':
                         fail('profile_not_found')
-                    from .ios_usb import developer_preflight
-                    return developer_preflight(profile['capabilities']['appium:udid'])
+                    from .ios_usb import developer_preflight, interaction_preflight
+                    operation = interaction_preflight if action == 'ios_interaction_preflight' else developer_preflight
+                    return operation(profile['capabilities']['appium:udid'])
                 if action == 'android_usb_status':
                     profile = self._profiles.get(args['profile'])
                     if profile is None or profile['platformName'] != 'Android':

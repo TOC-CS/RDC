@@ -48,6 +48,22 @@
       "python_offset": 0,
       "python_take": 6
     },
+    "ios-standalone-packaging": {
+      "description": "Six focused non-Xcode SDK, signing admission and packaging safety cases.",
+      "node_files": [],
+      "python_module": "tests.test_ios_standalone_packaging",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 6
+    },
+    "ios-interaction-preflight": {
+      "description": "Five focused privacy-safe iOS native interaction readiness checks.",
+      "node_files": [],
+      "python_module": "tests.test_ios_interaction_preflight",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
     "ios-developer-preflight": {
       "description": "Three bounded developer preflight exact-target, privacy and fail-closed checks.",
       "node_files": [],

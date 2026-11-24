@@ -141,3 +141,34 @@ signed companion distribution remain open.
 
 The existing release gates and production hold remain in effect.
 No personal apps or production gateway settings were changed.
+
+
+## Owner-directed no-Xcode development continuation
+
+The owner explicitly prohibited Xcode and Safari, and ChatGPT Work was
+not used. Full Xcode remains absent. The standalone Swift compiler in
+the existing Apple Command Line Tools was detected without invoking
+the Xcode application or xcodebuild. The legitimate iPhoneOS SDK remains
+unsupplied, and no Apple development signing identity was previously
+available. Native Android SDK Platform 36 and Build Tools 36.0.0 remain
+uninstalled pending owner acceptance of the SDK license. No agreement
+was accepted on the owner's behalf.
+
+Five focused native interaction preflight source tests passed. In the
+isolated RDC Engine, the physical iOS 26.6.1 iPhone returned verified USB
+trust, Developer Mode, mounted signed image, 82 remote services,
+a unique built-in primary display at 1320 x 2868 pixels and four HID
+surfaces. Touch, button, accessibility and screen-capture services were
+advertised. The device did not return a verifiable lock-state response.
+No screenshots, screen contents, HID input, app mutations or personal
+data were accessed. Input and capture permission are explicitly false.
+
+Six standalone packaging source tests passed prior to relocating the
+test module into the repository's capped runner catalog. The new helper
+admits only an explicit iPhoneOS device SDK outside the Xcode app path,
+direct Swift compiler commands, and exact development provisioning for
+the RDC app, device and keychain identity. It rejects expired, mismatched
+or wildcard profiles and preserves existing output. Standalone compiler
+preflight succeeded while the missing iPhoneOS SDK was honestly reported.
+No real iOS compilation, package signing, application installation,
+Android device qualification or production deployment occurred.
