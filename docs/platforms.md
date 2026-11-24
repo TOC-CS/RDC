@@ -15,7 +15,7 @@ its evidence alongside this matrix before choosing a worker.
 | Windows native GUI | Optional PyAutoGUI on its worker desktop | Independent operation requires a separate VM/session with verified desktop capture and input. A second application window shares the owner's cursor. Windows desktop/session provisioning is not automated here. |
 | Android native device | Owner-configured ADB serial or Appium UiAutomator2 profile | ADB provides status, privacy-checked screenshots, taps, simple text, keys, swipes, long presses and explicit activity launch. Appium provides observation-bound native controls and a preview. Pairing and authorization remain with the owner. Protocol fixtures passed; hardware qualification remains pending. |
 | iPhone/iPad native device | Owner-configured Appium XCUITest profile | Dedicated native observe, tap, nonsecure fill, swipe, screenshot and session cleanup are implemented, with native preview integration. Mac/Xcode, device trust, signing and provisioning remain external owner setup. Protocol fixtures passed; actual iPhone/iPad/simulator and AI-host qualification remain pending. |
-| Phone dashboard | Responsive web page on an authenticated worker origin | Touch-friendly controller for the worker's browser and approvals. Phone-native control requires its separate device adapter. A gateway or private network route is needed when the worker remains bound to loopback. |
+| Mobile AI host | Embedded live preview | Native device input requires the configured adapter. |
 | ChatGPT/Claude local MCP clients | Official MCP SDK stdio, authenticated HTTP MCP | Verify each actual client and transport. Public ChatGPT web onboarding requires its supported authentication/discovery path; bearer HTTP alone is not proof of compatibility. |
 | Private ChatGPT cloud connection | Owner-private Sites gateway and outbound `rdc relay` | Native RDC calls confirmed installed worker 0.1.0a4 online after activation and the matching gateway deployment. Private plugin 1.0.4 was saved and read back with its App binding and private audience preserved. Actual in-chat rendering, the publisher label and an approved live cloud browser workflow remain unresolved. See [verification](VERIFICATION.md). |
 | Saved credential filling | Owner-authorized broker; classic macOS Keychain internet password or Windows generic Credential Manager target | Synthetic private fills and owner consent are tested. Native provider access, Apple Passwords/iCloud, browser extensions, Windows Hello and mobile providers require their own qualification. See [credential limits](CREDENTIALS.md). |
@@ -30,7 +30,7 @@ from that session. Owner actions use the same session as agent actions. Session
 cookies and pages last only for the daemon lifetime; durable terminal jobs use a
 separate retained record and log.
 
-The dashboard's Owner control switch pauses new agent input before enabling
+The private local owner pause command pauses new agent input before enabling
 preview clicks. Observed controls use current observation handles. Browser keys
 are available through the observed session. The displayed pointer belongs to the
 workspace. Pausing gates new agent browser/native input; it does not terminate
@@ -40,7 +40,7 @@ already admitted. Owner actions can still operate while agent input is paused.
 For native applications, choose an isolated virtual display, separate OS session,
 or VM before enabling `desktop_mode: isolated`. That setting reports your
 configuration; it cannot create or prove an independent desktop. Shared mode
-explicitly uses the worker desktop's normal pointer. The dashboard exposes the
+explicitly uses the worker desktop's normal pointer. The owner-only API exposes the
 mode so that a shared desktop is visible to the owner. The preview covers browser
 and Appium mobile sessions; native desktop screenshots remain adapter tools.
 An Appium session uses the selected device's normal screen. It does not create a
@@ -79,7 +79,7 @@ and simultaneous usability of the owner's normal desktop. Phone qualification
 adds a real touch browser, narrow layout, authenticated connectivity, and owner
 review. Native mobile qualification is its own device test.
 
-`tests/test_dashboard.py` uses an explicitly test-only API fixture and a
+Historical dashboard verification used an explicitly test-only API fixture and a
 browser-generated fixture image to verify page behavior at desktop and phone
 sizes. Its screenshots illustrate the UI; they are not evidence that a hardware
 adapter or AI client passed. Static packaging and JavaScript checks also do not

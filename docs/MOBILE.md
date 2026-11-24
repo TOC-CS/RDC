@@ -11,7 +11,7 @@ This expansion has synthetic protocol and privacy tests. **Real Android, iPhone,
 | Android ADB | Status, tap, simple ASCII input, key events, swipe, long press, explicit activity launch, privacy-checked screenshot | Owner-selected ADB serial and an already authorized device |
 | Android Appium | Native observe, tap, nonsecure fill, swipe, screenshot, session lifecycle | Owner profile using UiAutomator2 and an exact device/emulator UDID |
 | iPhone/iPad Appium | The same native session tools | Owner profile using XCUITest, exact device/simulator UDID, and Apple's required setup |
-| Phone/tablet web browser | View the RDC owner dashboard or a supported host's preview | Access to the selected worker; viewing does not authorize control of that phone's OS |
+| Phone/tablet web browser | View a supported AI host's embedded preview | Access to the selected worker; viewing does not authorize control of that phone's OS |
 
 Native actions use the selected device's screen and can interrupt someone using it. A separate emulator, simulator, or dedicated physical device provides a separate place to work. A native session does not create a second private screen on a physical phone. Host desktop input stays governed by its existing desktop setting.
 
@@ -81,7 +81,7 @@ App installation or other setup implied by additional owner capabilities remains
 
 At most eight mobile sessions may run. A profile cannot start a second session while its first remains active or unresolved. Aliases for the same platform, UDID, and configured server are also prevented from starting competing sessions. Owners must avoid configuring different servers to control the same physical device concurrently.
 
-Mobile start and input tools use RDC's existing owner review and pause controls. Mobile close is an explicit cleanup operation. The embedded preview remains a viewer; owner administration supplies authorized native controls. Mobile controls never offer the browser credential chooser.
+Mobile start and input tools follow the configured worker grants and pause state. Mobile close is an explicit cleanup operation. The embedded preview remains a viewer; exceptional owner authorization uses the local CLI. Mobile controls never expose credential locators or authorize access to protected fields.
 
 ## Observation, privacy, and image coordinates
 

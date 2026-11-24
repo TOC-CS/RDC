@@ -7,6 +7,10 @@ description: Use RDC (Remote Desktop Commander) by TOC Ministries for independen
 
 Use the existing connected RDC App and its current tool schemas. Keep the user's worker, authorization, and task context together. Read [cloud operations](references/cloud-operations.md) when a call is pending or reconnecting, [diagnostics](references/diagnostics.md) for incident reports, [credentials](references/credentials.md) for saved-password fills, [mobile](references/mobile.md) for phones and tablets, and [compatibility](references/compatibility.md) before making platform or host-support claims.
 
+## Headless automation
+
+The headless development candidate removes the standalone administration page. New scoped CLI initialization defaults to trusted routine execution. Existing profiles retain their configured mode. Use the connected worker's actual capabilities and configuration as authority; never imply the candidate is deployed. For exceptional owner decisions, the local owner may use the private `rdc owner` CLI after verifying the installed version supports it. Do not read owner tokens or grant yourself access. Preserve current pairing, workspace boundaries, OS permission, credential consent, background-only behavior and no-replay recovery. Active source handles and durable job receipts remain internal operational state, without a saved-session manager.
+
 ## Speed first: verified RDC versus Desktop Commander qualification
 
 ### Locked owner acceptance, November 18, 2026
@@ -55,7 +59,7 @@ Keep a hidden or closed preview hidden across tool results, recovery, and task p
 
 If a required native action has no background-safe route, continue independent work and report the specific limitation before requesting takeover. Do not claim shared desktop input is independent or silently provision another desktop, account, or VM.
 
-Updated workers enforce a separate owner decision for each `rdc_desktop_pointer`, `rdc_desktop_keys` and `rdc_desktop_type` call even in trusted mode. A queued result means no input was sent. Recover the original request; do not evade the guard with shell input injection or app activation. Approval controls stay in local owner administration, never in the live preview. Older workers may lack this guard; check the installed release and keep the same background policy.
+Updated workers enforce a separate owner decision for each `rdc_desktop_pointer`, `rdc_desktop_keys` and `rdc_desktop_type` call even in trusted mode. A queued result means no input was sent. Recover the original request; do not evade the guard with shell input injection or app activation. Exceptional owner decisions use the private local CLI or authenticated owner API, never agent tools or the live preview. Older workers may lack this guard; check the installed release and keep the same background policy.
 
 ## Establish the working connection
 
@@ -126,13 +130,13 @@ The embedded preview uses a landscape viewing area and reports its content size 
 
 Confirm the host actually shows a changing frame from the selected session. A successful open result, static screenshot, or simulated host does not qualify live rendering. If the host cannot render it, keep working through normal tools and report the preview limitation. For pending or expired preview reads, see [preview recovery](references/cloud-operations.md#preview-lifecycle).
 
-After an App update, an already-mounted pane may retain the old dashboard HTML. Refresh the existing App's tools through its supported settings, then reload the affected chat when its draft is safe. Verify the newly mounted pane. Do not restart the worker, recreate the App, or open a duplicate source to clear host UI caching.
+After an App update, an already-mounted pane may retain the old viewer HTML. Refresh the existing App's tools through its supported settings, then reload the affected chat when its draft is safe. Verify the newly mounted pane. Do not restart the worker, recreate the App, or open a duplicate source to clear host UI caching.
 
 ## Use saved credentials privately
 
 Call `rdc_credentials_list` for configured opaque aliases and permitted HTTPS origins. Observe the intended page and obtain fresh session, observation, and password-control handles. Request a fill with `rdc_credentials_request` using its current schema, a stable worker `idempotency_key`, and the cloud `_rdc_request_id` when required.
 
-Recover the cloud operation first, then retain the broker's `request.id` and call `rdc_credentials_status` with it as `request_id`. The owner chooses Allow Once, Always Allow for this site, or Deny in owner administration. A matching persistent grant can avoid a new RDC consent prompt; the owner can revoke it there.
+Recover the cloud operation first, then retain the broker's `request.id` and call `rdc_credentials_status` with it as `request_id`. The owner chooses Allow Once, Always Allow for this site, or Deny using the local owner-only CLI. A matching persistent grant can avoid a new RDC consent prompt; the owner can revoke it there.
 
 Preserve owner and operating-system prompts. Do not select Always Allow, approve or revoke grants, read owner tokens, automate native authentication, or extract a password vault on the owner's behalf. General trusted mode does not bypass credential consent.
 
@@ -162,4 +166,8 @@ Honor pause, review, roots, and granted actions. Owner approvals remain outside 
 
 Use headless browser sessions for web work that leaves the user's pointer and focus alone. Native desktop control uses the selected desktop's pointer and focus unless a separate display, desktop, account, or VM is actually configured and verified. The `isolated` label does not provision that environment. Obtain a fresh native screenshot and use its coordinate-scale metadata before input.
 
-Report actual observations separately from implemented adapters, fixtures, and planned support. Preserve authentication and permission boundaries on every platform. Do not claim that local Codex success proves production ChatGPT or Claude rendering, that WebKit proves Safari, or that a phone-sized web dashboard proves native phone control. Measure comparable workflows before asserting a speed advantage. Keep the user's existing working route until the replacement they need is verified.
+Report actual observations separately from implemented adapters, fixtures, and planned support. Preserve authentication and permission boundaries on every platform. Do not claim that local Codex success proves production ChatGPT or Claude rendering, that WebKit proves Safari, or that a phone-sized web page proves native phone control. Measure comparable workflows before asserting a speed advantage. Keep the user's existing working route until the replacement they need is verified.
+
+## Visual file inspection
+
+When the connected worker advertises image-aware `rdc_file_read`, read an authorized raster image directly with its exact file path. Omit byte pagination for images. Use `mode: "image"` and optionally `max_edge` (320–1600) when the live schema supports them. Inspect the returned MCP image content, not the metadata alone. Do not claim to have seen the image if the host suppresses image blocks. Read one image at a time; text batch and code-context reads are for text. Source files are unchanged. Unsupported formats require a separate authorized decoder. Treat old deployed UTF-8-only versions as unsupported, rather than claiming the new source is active.

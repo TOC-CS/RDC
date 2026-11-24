@@ -11,7 +11,6 @@ import secrets
 import shutil
 import stat
 import sys
-import webbrowser
 
 
 def default_state_dir():
@@ -62,7 +61,7 @@ def read_secret(path):
 def parser():
     command = argparse.ArgumentParser(prog='rdc', description='Independent local agent workspaces (alpha).')
     sub = command.add_subparsers(dest='command', required=True)
-    for name in ('init', 'stdio', 'connect', 'gateway-connect', 'relay', 'relay-v2', 'serve', 'doctor', 'owner-token', 'diagnostics', 'setup-macos'):
+    for name in ('init', 'stdio', 'connect', 'gateway-connect', 'relay', 'relay-v2', 'serve', 'doctor', 'owner-token', 'diagnostics', 'setup-macos', 'owner'):
         action = sub.add_parser(name)
         action.add_argument('--state-dir', type=Path, default=default_state_dir())
         if name == 'setup-macos':
@@ -74,7 +73,7 @@ def parser():
             action.add_argument('--root', type=Path, action='append', help='Allowed workspace root, repeatable (default: current directory)')
             action.add_argument('--allow-exec', action='store_true', help='Grant shell execution as this OS account')
             action.add_argument('--access-mode', choices=['workspace', 'full-host'], default='workspace')
-            action.add_argument('--approval-mode', choices=['review', 'trusted'], default='review')
+            action.add_argument('--approval-mode', choices=['review', 'trusted'], default='trusted', help='Run permitted routine operations automatically; review remains an explicit option')
             action.add_argument('--desktop-mode', choices=['disabled', 'shared', 'isolated'], default='disabled')
             action.add_argument('--browser-backend', choices=['playwright', 'webdriver', 'disabled'], default='playwright')
             action.add_argument('--webdriver-url')
@@ -91,10 +90,14 @@ def parser():
         if name in ('relay', 'relay-v2'):
             action.add_argument('--config', type=Path, required=True,
                                 help='Private gateway pairing JSON file; secrets remain on this device')
+        if name == 'owner':
+            from .owner_api import ROUTES
+            action.add_argument('operation', choices=tuple(ROUTES), help='Local owner API operation; mutations with fields read a JSON object from standard input')
+            action.add_argument('--port', type=int, default=8765)
         if name == 'serve':
             action.add_argument('--host', choices=['127.0.0.1', 'localhost', '::1'], default='127.0.0.1', help='Loopback listener; use an authenticated TLS gateway for remote access')
             action.add_argument('--port', type=int, default=8765)
-            action.add_argument('--open', action='store_true', help='Open the local owner dashboard')
+            action.add_argument('--open', dest='legacy_open', action='store_true', help=argparse.SUPPRESS)
     return command
 
 
@@ -121,13 +124,20 @@ def main(argv=None):
             write_secret(state / 'owner-token')
             settings.save(state / 'config.json')
             print(f'Initialized RDC at {state}. Shell: {settings.allow_exec}; approvals: {settings.approval_mode}; desktop: {settings.desktop_mode}.')
-            print('Run rdc serve, connect your AI client, and ask it to open the RDC preview. Owner administration is available locally.')
+            print('Run rdc serve and connect your AI client. Optional preview is embedded; exceptional owner controls use rdc owner.')
             if sys.platform == 'darwin' and settings.desktop_mode != 'disabled':
                 print('Native window setup is required: run rdc setup-macos with the same --state-dir before opening native previews. It prepares RDC Window Preview and walks you through Screen Recording and Accessibility. Headless browsers need neither permission.')
             return 0
         if args.command == 'owner-token':
             print(read_secret(state / 'owner-token'))
             return 0
+        if args.command == 'owner':
+            from .owner_api import request, read_body
+            result = request(args.operation, port=args.port,
+                             token=read_secret(state / 'owner-token'),
+                             body=read_body(args.operation, sys.stdin))
+            print(json.dumps(result, indent=2))
+            return 1 if result.get('ok') is False else 0
         if args.command in ('connect', 'gateway-connect'):
             import anyio
             from .proxy import run_connect, validate_endpoint
@@ -190,14 +200,8 @@ def main(argv=None):
             import uvicorn
             app = create_app(engine, read_secret(state / 'agent-token'), read_secret(state / 'owner-token'))
             host = f'[{args.host}]' if ':' in args.host else args.host
-            url = f'http://{host}:{args.port}/'
-            if args.open:
-                # The public shell can load before the listener; it retries on connection.
-                import threading
-                timer = threading.Timer(1.0, webbrowser.open, args=(url,))
-                timer.daemon = True
-                timer.start()
-            print(f'Owner dashboard: {url}', file=sys.stderr)
+            url = f'http://{host}:{args.port}/mcp'
+            print(f'RDC MCP endpoint: {url}', file=sys.stderr)
             uvicorn.run(app, host=args.host, port=args.port, proxy_headers=False)
         return 0
     except KeyboardInterrupt:

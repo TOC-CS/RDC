@@ -51,9 +51,9 @@ python3 -m venv .venv
 
 On Windows use `.venv\Scripts\python.exe` and `.venv\Scripts\rdc.exe`, and a Windows path for `--root`. `python` can replace `python3` where appropriate. Firefox and WebKit browser runtimes are installed separately with `python -m playwright install firefox webkit`.
 
-Initialization defaults to owner review, file operations within the working root, no shell execution, and native desktop input disabled. To grant terminal execution at initialization, add `--allow-exec`. To explicitly grant file access across the host, add `--access-mode full-host`. The account's ordinary OS permissions still apply. To permit agent mutations without per-operation review on a trusted dedicated worker, add `--approval-mode trusted`. Existing initialization is preserved; grants can be edited in its private `config.json` while the service is stopped.
+New CLI initialization defaults to trusted execution within the explicitly configured working root, no shell execution, and native desktop input disabled. Add `--allow-exec` or `--access-mode full-host` only when the owner intends those grants. Use `--approval-mode review` for per-operation review. Existing settings are never silently widened; an owner may change the private configuration while the service is stopped. OS permissions still apply.
 
-Connect your AI client as described below and ask it to open the RDC preview. For owner administration, open `http://127.0.0.1:8765/`. Run `rdc owner-token` in your own terminal and paste that credential into the administration page. The page retains it only in memory. It is separate from `agent-token`; do not send either credential to an AI conversation. `rdc doctor` reports dependencies and selected capabilities without printing tokens.
+Connect your AI client and ask it to open the optional embedded RDC preview. The worker has no standalone administration page. Local owner-only operations use `rdc owner status`, `rdc owner pause`, `rdc owner resume`, and the authenticated CLI operations in [headless operation](docs/HEADLESS.md). `rdc doctor` reports capabilities without printing tokens. Never share agent or owner credentials with an AI conversation.
 
 Default state directory:
 
@@ -77,7 +77,7 @@ Add the matching `--state-dir` if the worker uses a custom state directory. `con
 
 Use the ready examples for [Codex](examples/client-codex.toml), [Claude Desktop](examples/client-claude-desktop.json), or [direct HTTP](examples/client-http.py). They contain placeholders for your installation paths. A model can use RDC when its host supports the relevant MCP transport. Client permissions, tool approvals, image support, and context limits still apply.
 
-`rdc stdio` also runs a standalone worker inside one client's process. Its browser sessions end when that process exits and are separate from a separately launched dashboard. Choose `connect` to retain the worker while each chat keeps its own preview source.
+`rdc stdio` also runs a standalone worker inside one client's process. Its browser sessions end when that process exits and are separate from an independently running worker. Choose `connect` to retain the worker while each chat keeps its own preview source.
 
 ### Private ChatGPT web gateway
 
@@ -113,7 +113,7 @@ The committed bundle runs without Node, a CDN, or direct network access from the
 | Terminal jobs | Detached worker processes | No pointer use; commands may affect files/apps according to grants |
 | Native apps with `shared` mode | Current desktop | Uses that desktop's cursor/focus |
 | Native apps with `isolated` mode | Owner-provisioned separate desktop/display/VM | Independent only when that environment is actually separate |
-| Phone dashboard | A mobile browser viewing the worker | Does not grant control of the phone OS |
+| Mobile AI host preview | Embedded observation of an authorized worker | Does not grant control of the phone OS |
 
 A second window alone cannot create a second OS cursor. RDC's `isolated` setting describes the environment the owner must provision; it does not create a VM. The [optional Linux container recipe](deploy/README.md) provides a private Xvfb display, but its image and native input path still need deployment qualification. Containers share a host kernel; use a VM where that distinction matters.
 
@@ -129,7 +129,7 @@ Interactive stdin delivery accounts for partial pipe writes before marking queue
 
 Logs merge stdout/stderr in arrival order and are capped at 10 MiB per job by default. The worker keeps draining excess output and records truncation. Metadata and retained output remain in the state directory until the owner removes them; there is no automatic retention cleanup or global disk quota in this alpha. A lost worker heartbeat after two minutes is marked interrupted, never assumed completed. A machine restart may terminate running processes. Browser sessions are memory-resident and end with the daemon.
 
-Owner review lasts 15 minutes and persists across a client restart. A request already executing at daemon failure requires investigation; it is not automatically replayed. The dashboard displays the exact action being approved. Read files again after a hash conflict and observe the page again after a stale handle.
+Optional review requests expire after 15 minutes and persist across a client restart. Investigate any action already executing at daemon failure; never automatically replay it. The local owner can inspect the exact pending request using `rdc owner status` and supply an explicit decision through `rdc owner decision`. Read files again after a hash conflict and observe the page again after a stale-control refusal.
 
 Cloud mutations require a stable `_rdc_request_id`. Keep that ID and the original arguments after a dropped response. A pending gateway response supplies an `operation_id`; call `rdc_operation_status` with it to retrieve the original result without issuing the action again. Core job retry keys and credential `idempotency_key` values remain separate from this transport request ID. The relay journals admission before execution and retains results before upload. An execution whose outcome is unknown after a crash is reported as uncertain and requires inspection.
 
@@ -149,9 +149,9 @@ The relay automatically reconnects transports and retries delivery of retained r
 
 ## Saved-password permissions
 
-The owner enrolls an existing native credential in the owner administration page by supplying a safe alias, exact HTTPS origin and native item locator. macOS enrollment now requires the specific classic **Keychain file**, server and account. The private version-2 locator binds one HTTPS origin; older server/account-only aliases require removal and re-enrollment before filling. The form never asks for a password or enumerates the vault. It generates an opaque ID and writes the private `credential-locators.json`; advanced owners may edit that mapping privately. Enrollment does not authorize a fill or verify that the native entry exists. With no mapping file, this feature is simply unconfigured. The agent can list safe aliases, request a fill into a fresh observed password field, and inspect request status. It cannot enroll or remove credentials, approve a request, create a persistent grant, or revoke a grant through MCP.
+The owner enrolls a selected native credential with `rdc owner enroll` using private JSON input containing the safe alias, exact HTTPS origin and native locator. macOS enrollment requires an explicit classic Keychain file, server and account. See [credential broker](docs/CREDENTIALS.md) for the narrow authorization contract.
 
-The existing owner administration page automatically presents pending requests. **Allow Once** authorizes one attempt. **Always Allow for this site** binds the credential, origin, device and mapping until revoked. **Later** dismisses the prompt while work continues. The owner can revoke a grant or remove an alias there. The broker checks consent and pause again before native lookup and before input, and rechecks the actual browser origin, document and password-field type. The initial feature fills only the password field; it does not click Sign in. Revocation blocks future use and does not sign out an already authenticated website session.
+Credential requests are resolved through the local owner-only CLI. An explicit `once` decision permits one attempt; `always` binds the credential, origin, device and mapping until revoked; `deny` leaves the password unfilled. The AI cannot grant or revoke its own credential access. Native OS authentication still applies.
 
 The macOS helper opens only the selected classic Keychain, requires one matching internet-password item, checks its server/account/HTTPS/port metadata, and reads the password from that same retained item reference. Missing, ambiguous or mismatched items fail before a password read. Windows uses a configured generic Credential Manager target. These routes do not expose arbitrary Apple Passwords/iCloud or Chrome/Edge vault access. Browser-provider autofill and mobile credential adapters remain future work. The automated tests use synthetic credentials and native-API fixtures; actual native vault access still requires platform qualification. See [credential setup, APIs and security boundaries](docs/CREDENTIALS.md).
 
@@ -184,3 +184,6 @@ See [design](docs/superpowers/specs/2026-11-15-rdc-design.md), [implementation p
 
 Priority next work: public multiuser ChatGPT OAuth onboarding and production host acceptance, native desktop streaming and input handoff, browser tabs/popups/frames/download-upload workflows, actual Safari and native Windows qualification, native credential-provider qualification, mobile device qualification, and packaging/signing. See the platform matrix for precisely what is implemented.
 
+### Visual file inspection
+
+The existing file-reading tool recognizes supported raster images and returns real MCP image content for visual analysis. See [visual file inspection](docs/FILE-IMAGES.md) for formats, bounded previews, and text compatibility.

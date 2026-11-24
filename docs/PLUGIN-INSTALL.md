@@ -40,7 +40,7 @@ Initialize only a new profile. Existing state is preserved by `rdc init`, which 
 
 Keep `rdc serve` running while AI clients connect. It owns the browser sessions. `rdc connect` attaches to it and reads the private agent token locally. Closing an AI connection or preview does not close that worker. Browser sessions still end if the worker itself exits.
 
-The primary preview opens inside a compatible AI host. `rdc serve --open` optionally opens the separate owner administration dashboard for approvals and diagnosis.
+The optional preview opens inside a compatible AI host. Start the worker with `rdc serve`; use the private `rdc owner` CLI for exceptional owner operations. No standalone administration UI is served.
 
 ### macOS permission walkthrough
 
@@ -102,7 +102,7 @@ Use a regular owner-only file, mode `600` on macOS/Linux, and an appropriate acc
 rdc relay --config /absolute/path/to/private/relay-config.json
 ```
 
-Add the same `--state-dir` used by the worker if it has a custom profile. The relay reads that profile's `agent-token` locally and journals operation state beneath it. No inbound network connection to the device is needed. Keep the owner administration endpoint local, and preserve the private Site access boundary. Gateway hosting and AI access have their own terms and costs.
+Add the same `--state-dir` used by the worker if it has a custom profile. The relay reads that profile's `agent-token` locally and journals operation state beneath it. No inbound network connection to the device is needed. Keep the owner-only API local, and preserve the private Site access boundary. Gateway hosting and AI access have their own terms and costs.
 
 ### Tool catalog and pending operations
 
@@ -124,7 +124,7 @@ Empty polls use adaptive backoff: 250 ms, 500 ms, one second, two seconds, four 
 
 ### Credential permission prompts
 
-The broker's aliases come from the private worker `credential-locators.json`, not the gateway. Use the owner administration page's credential configuration form to enroll a safe label, HTTPS origin, native provider and item locator. It generates the opaque ID and writes the private mapping atomically. The form has no password field, performs no vault enumeration or secret read, and does not itself authorize input. The agent can list opaque aliases, request a password fill and inspect status. Enrollment, alias removal, Allow Once / Always Allow / Deny and grant revocation stay in authenticated local owner administration. General `trusted` mode does not bypass these credential decisions.
+Credential aliases originate in the worker private configuration, never the gateway. The local owner enrolls a specific alias with `rdc owner enroll` using private JSON input. See [CREDENTIALS.md](CREDENTIALS.md) and [HEADLESS.md](HEADLESS.md) for the exact local owner commands.
 
 The owner page presents a pending permission modal automatically. Dismissing it leaves browser sessions and jobs running. Operating-system authentication can still require its own native window. The initial providers target classic macOS Keychain internet passwords and Windows generic Credential Manager entries; Apple Passwords/iCloud, browser vaults and mobile providers are not universally accessible through these APIs. See [credential configuration and limitations](CREDENTIALS.md).
 

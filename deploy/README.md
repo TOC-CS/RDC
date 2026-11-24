@@ -15,7 +15,7 @@ docker compose -f deploy/compose.yaml exec worker rdc owner-token --state-dir /h
 
 Open `http://127.0.0.1:8765/` on the host and paste that owner token. The token
 command prints a credential: keep it out of chat, screenshots, and committed files.
-The dashboard opens a separate live view. A new Chromium session runs headlessly
+The compatible AI host opens an optional embedded live view. A new Chromium session runs headlessly
 and has no access to your ordinary browser profile. Firefox and WebKit require
 installing their Playwright binaries in a derived image.
 
@@ -36,9 +36,9 @@ initialization environment variables to override it. Keep approval mode `review`
 for owner review. Test native screenshot, typing, pointer, and owner interruption
 against a harmless application before relying on a new host.
 
-The bundled dashboard previews browser sessions. Native desktop screenshots and
+The embedded preview observes the selected browser session. Native desktop screenshots and
 input are exposed through the adapter tools; a full native desktop video viewer
-is outside this alpha dashboard. You can launch a GUI application through an
+is outside the embedded viewer. You can launch a GUI application through an
 approved terminal job when execution is enabled; it inherits the worker display.
 
 For phone access, retain this local binding and put an authenticated TLS gateway

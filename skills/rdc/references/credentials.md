@@ -4,11 +4,11 @@ Use the broker's opaque configured aliases. It is a targeted password-fill route
 
 ## Agent sequence
 
-1. Call `rdc_credentials_list {}`. Read `credential_id`, the owner-chosen label, and permitted origins. An alias with `requires_reenrollment: true` cannot fill; let the owner remove and re-enroll it in owner administration, without exposing its native locator. An empty list means no alias is configured; ask the owner to configure the intended alias privately instead of searching password stores.
+1. Call `rdc_credentials_list {}`. Read `credential_id`, the owner-chosen label, and permitted origins. An alias with `requires_reenrollment: true` cannot fill; let the owner remove and re-enroll it using the local owner-only CLI, without exposing its native locator. An empty list means no alias is configured; ask the owner to configure the intended alias privately instead of searching password stores.
 2. Use the browser observation tools to confirm the intended HTTPS site and obtain a fresh `session_id`, `observation_id`, and password-control handle.
 3. Call `rdc_credentials_request` with `credential_id`, `session_id`, `observation_id`, `password_handle`, and a stable `idempotency_key`. Add `_rdc_request_id` only on the cloud schema that requires it.
 4. Recover any gateway `operation_id` first. From the broker result, save `request.id` and poll `rdc_credentials_status {request_id}`. Do not replace the request after a timeout or interrupted fill.
-5. Let the owner decide in owner administration. Allow Once is consumed for one request. Always Allow persists a grant for the configured credential, worker, exact HTTPS origin, and provider mapping. Deny leaves the password unfilled. Revocation is an owner operation.
+5. Let the owner decide using the local owner-only CLI. Allow Once is consumed for one request. Always Allow persists a grant for the configured credential, worker, exact HTTPS origin, and provider mapping. Deny leaves the password unfilled. Revocation is an owner operation.
 6. Verify successful fill through redacted status or an appropriate nonsecret observation. Filling does not submit the form or authorize subsequent account actions.
 
 Existing valid grants can avoid a new RDC consent prompt. A different site, alias, provider mapping, or worker requires appropriate owner authorization. Review/trusted mode for general actions does not override this credential consent.

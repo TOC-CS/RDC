@@ -193,6 +193,54 @@
       "python_take": 3,
       "python_offset": 0,
       "python_module": "tests.test_background_preview_window_grant"
+    },
+    "headless-worker-red": {
+      "description": "Headless worker scoped regression",
+      "node_files": [],
+      "python_module": "tests.test_headless_worker.HeadlessWorkerTests.test_01_root_and_legacy_assets_have_no_admin_ui",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 1
+    },
+    "headless-worker-green": {
+      "description": "Headless worker scoped regression",
+      "node_files": [],
+      "python_module": "tests.test_headless_worker.HeadlessWorkerTests",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 12
+    },
+    "headless-worker-transport": {
+      "description": "Headless worker scoped regression",
+      "node_files": [],
+      "python_module": "tests.test_transport.HttpContracts",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 6
+    },
+    "headless-worker-security": {
+      "description": "Selected retained backend credential and scope regressions",
+      "node_files": [],
+      "python_module": "tests.test_headless_worker_security",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 6
+    },
+    "file-image-red": {
+      "description": "One intended old image read regression",
+      "node_files": [],
+      "python_module": "tests.test_file_images.FileImageTests.test_01_automatic_png_visual_read",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 1
+    },
+    "file-image-green": {
+      "description": "Bounded file image, text, policy and MCP image output checks",
+      "node_files": [],
+      "python_module": "tests.test_file_images.FileImageTests",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 17
     }
   }
 }

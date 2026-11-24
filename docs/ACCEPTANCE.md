@@ -36,7 +36,7 @@ Keep the worker running throughout. A cloud call that returns `pending` must be 
 
 ## 5. Check saved-password consent
 
-Use a synthetic account first. In owner administration, configure the one saved credential alias for its exact HTTPS origin and native provider. Do not paste a password into a chat or a tool argument.
+Use a synthetic account first. Using the local owner-only CLI, configure the one saved credential alias for its exact HTTPS origin and native provider. Do not paste a password into a chat or a tool argument.
 
 Ask RDC to observe the login form, request filling the selected password field and report the request status. Choose Allow Once in the owner prompt. Confirm the field was filled without a password appearing in the model's observation or result. Filling must not submit the form. Repeat with a fresh request to verify another one-time approval is needed, then exercise a site-specific persistent grant and Revoke.
 

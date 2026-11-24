@@ -6,7 +6,7 @@ Historical evidence includes the 101-test iMac broker baseline in 65.014 seconds
 
 ## Design decision
 
-RDC requests a saved password through an owner-authorized broker on the worker. The agent selects an opaque configured credential ID and a freshly observed password field. The owner chooses **Allow Once**, **Always Allow for this site**, or **Deny** in the existing owner administration page. Persistent grants can be revoked there. Native operating-system authentication remains active when required.
+RDC requests a saved password through an owner-authorized broker on the worker. The agent selects an opaque configured credential ID and a freshly observed password field. The owner chooses **Allow Once**, **Always Allow for this site**, or **Deny** using the local owner-only CLI. Persistent grants can be revoked using the same CLI. Native operating-system authentication remains active when required.
 
 The selected approach combines a narrow broker with existing platform credential services. Browser-provider autofill is a later adapter because a fresh isolated browser does not automatically inherit the owner's password-manager session. Direct browser-vault database extraction and bulk export are excluded. A dedicated RDC credential vault would require a separate enrollment workflow and remains a possible future provider.
 
@@ -14,7 +14,7 @@ The selected approach combines a narrow broker with existing platform credential
 
 1. `rdc/credentials.py` owns the three-tool agent contract, SQLite request/grant state and targeted native providers. The broker consumes one-time permission atomically and retains request outcomes for recovery. Its private `rdc/_keychain_helper.py` resolves an explicitly selected classic Keychain item before reading a password.
 2. Private browser adapter methods validate the actual HTTPS origin, document observation and enabled password input before lookup and again before filling. The final field validation and value assignment occur in one browser JavaScript turn. Password bytes stay outside generic tool arguments, approvals, results and logs.
-3. Owner-only credential routes extend the existing authenticated server. A modal and grant list extend the existing owner administration UI. The agent catalog cannot approve, revoke, or reconfigure a credential.
+3. Owner-only credential routes extend the existing authenticated server. The local CLI uses those owner-only routes without exposing an approval interface to agents. The agent catalog cannot approve, revoke, or reconfigure a credential.
 4. Synthetic tests exercise consent, origin changes, replay, revocation, pause, driver/provider error redaction, restart, the real browser fill and the permission modal. Independent review reproduced an initial-validation error-text leak and leftover modal metadata after disconnect; both were corrected with regression tests and re-reviewed.
 
 Native lookup runs away from the browser's owning thread, so an operating-system authentication prompt does not block ordinary browser preview/status polling. Consent and pause are checked again after browser validation, immediately before native lookup, and before input. Existing jobs and browser sessions keep their existing lifecycle when the owner dismisses the permission view.
@@ -34,21 +34,21 @@ Native lookup runs away from the browser's owning thread, so an operating-system
 
 Agent requests never contain passwords or provider locators. A request ID identifies a status record, not an authorization capability. `trusted` operation mode does not bypass credential consent. A grant binds the worker device ID, opaque credential ID, canonical HTTPS origin and current provider mapping. Each request separately binds the session, document observation and password handle. A changed mapping requires a new grant. Existing requests are interrupted on worker restart and are never automatically replayed.
 
-## Enroll a credential in owner administration
+## Enroll a credential using the private local CLI
 
-Connect to the existing owner administration page and use its credential configuration section. Enter a safe **Credential name**, the exact HTTPS **Website origin**, and the **Native provider**. For macOS, enter the **Keychain file** containing the existing item and supply its **Keychain server** and **Keychain account**. The form suggests `~/Library/Keychains/login.keychain-db`; change it when the item belongs to another classic Keychain file. Enrollment expands an explicitly entered `~/` path for the worker account and saves an absolute path. Relative paths and another user's `~name` shorthand are rejected. For Windows, supply the generic **Credential Manager target**. The form never asks for the password. It generates the opaque credential ID and saves the locator to a private regular mapping file atomically, with mode `600` on macOS/Linux.
+Use `rdc owner enroll` with a JSON object on standard input containing `label`, `origin`, `provider`, and `locator`. Keep the locator private; use the exact provider-specific fields described below. The owner may inspect `rdc owner credentials`, supply `rdc owner credential-decision` with `request_id` and `decision`, and revoke or remove an existing mapping with the corresponding command. The CLI reads its private token file locally and never opens a browser. See [HEADLESS.md](HEADLESS.md).
 
 Enrollment validates configuration only. It does not read the vault, verify that the native item exists, alter OS permissions or grant permission to fill a password. A later fill request still needs Allow Once or a matching Always Allow grant. The first native lookup can reveal that the entry is missing, unavailable on this platform, locked, or requires additional OS authentication.
 
-The owner can remove a configured alias in the same section. Removal invalidates its persistent grants and requests that have not been admitted. Removing an alias or revoking a grant does not erase a password already entered into a page or sign out an existing website session. Those remain subject to normal browser and account controls.
+The owner can remove a configured alias with `rdc owner remove`. Removal invalidates its persistent grants and requests that have not been admitted. Removing an alias or revoking a grant does not erase a password already entered into a page or sign out an existing website session. Those remain subject to normal browser and account controls.
 
 ### Upgrade older macOS mappings
 
-An older locator containing only `server` and `account` remains listable and removable with `requires_reenrollment: true`. Requests and decisions using that locator fail with `credential_reenrollment_required` before native lookup. Remove the old alias in owner administration, then use **Add saved credential** with the selected Keychain file to enroll it again. The new alias needs its own fill consent. Existing Windows aliases remain usable under their normal consent rules.
+An older locator containing only `server` and `account` remains listable and removable with `requires_reenrollment: true`. Requests and decisions using that locator fail with `credential_reenrollment_required` before native lookup. Remove the old alias with `rdc owner remove`, then enroll it again with `rdc owner enroll` and the selected Keychain file. The new alias needs its own fill consent. Existing Windows aliases remain usable under their normal consent rules.
 
 ## Advanced private mapping file
 
-The owner form maintains `credential-locators.json` inside the initialized worker's state directory. Advanced owners can also edit that file privately. With no file, the tool lists no credentials and the rest of RDC works normally. Use a regular file owned by the worker account, with mode `600` on macOS/Linux. Keep Windows state restricted to the intended account. RDC's file tools exclude the entire state directory.
+The owner-only enrollment API maintains `credential-locators.json` inside the initialized worker's state directory. Advanced owners can also edit that file privately. With no file, the tool lists no credentials and the rest of RDC works normally. Use a regular file owned by the worker account, with mode `600` on macOS/Linux. Keep Windows state restricted to the intended account. RDC's file tools exclude the entire state directory.
 
 For a classic macOS Keychain internet-password item, the mapping has this shape. The outer file format stays at version `1`; the macOS locator uses version `2`. The example names are synthetic; replace them privately with the selected absolute Keychain file, exact existing item server/account, and intended website origin:
 

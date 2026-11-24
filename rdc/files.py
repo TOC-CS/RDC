@@ -55,11 +55,25 @@ class Files:
                 raise RDCError('not_regular_file','Only regular files can be read.')
             yield source
 
-    def read(self, file_path, offset=0, limit=None):
+    def read(self, file_path, offset=0, limit=None, mode='auto', max_edge=1280):
+        from .file_images import identify_image, read_image
+        if mode not in ('auto','text','image'):
+            raise RDCError('invalid_arguments', 'Read mode must be auto, text or image.')
+        if type(max_edge) is not int or not 320 <= max_edge <= 1600:
+            raise RDCError('invalid_arguments', 'Image max_edge must be between 320 and 1600.')
+        if mode=='image' and (offset or limit is not None):
+            raise RDCError('invalid_arguments', 'Images must be read without byte pagination.')
         path = self.resolve(file_path)
-        limit = min(limit or self.settings.max_read_bytes, self.settings.max_read_bytes)
         with self._open_regular(path) as source:
             info = os.fstat(source.fileno())
+            detected = None if mode=='text' else identify_image(source.read(16))
+            source.seek(0)
+            if mode=='image' or detected is not None:
+                if offset or limit is not None:
+                    raise RDCError('image_read_required', 'Read this image individually without byte pagination.')
+                return read_image(source, path, info, detected, max_edge=max_edge,
+                                  output_limit=self.settings.max_read_bytes)
+            limit = min(limit or self.settings.max_read_bytes, self.settings.max_read_bytes)
             # Hash without loading an entire large file into memory.
             digest = hashlib.file_digest(source, 'sha256').hexdigest()
             source.seek(offset)

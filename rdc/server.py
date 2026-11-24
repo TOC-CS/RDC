@@ -1,4 +1,4 @@
-"""Official MCP SDK transports and the authenticated local owner dashboard.
+"""Official MCP SDK transports and the authenticated headless owner API.
 
 HTTP bearer mode is intended for direct clients and an authenticated gateway.
 It does not implement the OAuth onboarding required by ChatGPT's public web UI.
@@ -10,7 +10,6 @@ import binascii
 from contextlib import asynccontextmanager
 import hmac
 import json
-from pathlib import Path
 from urllib.parse import urlsplit
 
 import anyio
@@ -21,8 +20,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-from starlette.routing import Mount, Route
-from starlette.staticfiles import StaticFiles
+from starlette.routing import Route
 
 MAX_BODY_BYTES = 1_048_576
 
@@ -56,7 +54,7 @@ def create_mcp_server(engine) -> Server:
         return next((item['inputSchema'] for item in engine.catalog() if item['name'] == name), None)
 
     server = Server('rdc', version=__version__, title='RDC',
-                  instructions='RDC agent tools operate within owner grants. Pass the current task session_id to rdc_preview_open for a live view of that source in compatible AI hosts. Closing the view leaves the worker running. Pending approvals are resolved in owner administration.',
+                  instructions='RDC agent tools operate within owner grants. Pass the current task session_id to rdc_preview_open for a live view of that source in compatible AI hosts. Closing the view leaves the worker running. Routine operations follow the configured policy. Exceptional owner decisions use the private local owner API, never agent tools.',
                   on_list_tools=list_tools, on_call_tool=call_tool,
                   get_tool_input_schema=input_schema,
                   on_list_resources=list_resources, on_read_resource=read_resource)
@@ -265,8 +263,5 @@ def create_app(engine, agent_token: str, owner_token: str):
               Route('/api/preview', api), Route('/api/jobs/{job_id}/output', api)]
     # Reuse the official SDK's exact /mcp route without an extra path prefix.
     routes.extend(mcp_app.routes)
-    web = Path(__file__).parent / 'web'
-    if web.is_dir():
-        routes.append(Mount('/', StaticFiles(directory=web, html=True), name='dashboard'))
     app = Starlette(routes=routes, lifespan=lifespan)
     return Boundary(app, agent_token, owner_token, origins)

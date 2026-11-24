@@ -78,9 +78,11 @@ class Engine:
                   'height':{'type':'integer','minimum':180,'maximum':1600},
                   '_rdc_request_id':{'type':'string','minLength':1,'maxLength':200}},['session_id','width','height'],True),
             tool('rdc_file_list','List a directory within the granted roots.', {'path':STRING,'limit':{'type':'integer','minimum':1,'maximum':1000}}),
-            tool('rdc_file_read','Read UTF-8 text with deterministic byte offsets and a SHA-256 version.',
-                 {'file_path':STRING,'offset':{'type':'integer','minimum':0},'limit':LIMIT},['file_path']),
-            tool('rdc_file_read_many','Read up to 20 independent files in one call. Per-file failures are retained.',
+            tool('rdc_file_read','Inspect a file. Auto-detects supported raster images and returns an actual bounded MCP image for visual analysis; otherwise reads UTF-8 text with byte offsets and SHA-256. For images omit offset and limit; mode=image explicitly requests image inspection. Multi-frame images show their first frame.',
+                 {'file_path':STRING,'offset':{'type':'integer','minimum':0},'limit':LIMIT,
+                  'mode':{'type':'string','enum':['auto','text','image']},
+                  'max_edge':{'type':'integer','minimum':320,'maximum':1600}},['file_path']),
+            tool('rdc_file_read_many','Read up to 20 independent text files in one call. Per-file failures are retained. Inspect images individually with rdc_file_read.',
                  {'file_paths':{'type':'array','items':STRING,'minItems':1,'maxItems':20}},['file_paths']),
             tool('rdc_code_context','Read one project-scoped coding context: bounded directory listing, literal source search and up to 20 SHA-256 versioned files. Relative file_paths resolve inside selected path. Source mode skips generated/dependency directories by default; search_mode=all includes them. Per-file errors remain visible; this is not an atomic snapshot.',
                  {'path':STRING,
@@ -521,7 +523,7 @@ class Engine:
             db.execute('INSERT INTO approvals(id,name,arguments,digest,status,created_at,expires_at,client_key) VALUES (?,?,?,?,?,?,?,?)',
                        (identifier,name,encoded,digest,'pending',now,now+900,key))
         return {'ok':True,'status':'pending_approval','request_id':identifier,'expires_at':now+900,
-                'message':'Review this exact operation in local RDC owner administration. Native desktop input can take over your mouse or keyboard; the live preview is observation only.'}
+                'message':'Review this exact operation in the private local RDC owner CLI. Native desktop input can take over your mouse or keyboard; the live preview is observation only.'}
 
     def decide(self,request_id,approve):
         return self._guarded(lambda:self._decide(request_id,approve))
