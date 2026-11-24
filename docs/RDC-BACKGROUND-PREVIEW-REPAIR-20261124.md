@@ -19,6 +19,8 @@ A later verification found that another active SEO workflow had removed the guar
 - Official reference: https://developers.openai.com/plugins/reference
 - OpenAI MCP display documentation and the OpenAI runtime bridge describe different mode capabilities. Presence of a method permits a request; it does not prove live floating support.
 
+The bundle now advertises preview-v10 with all v1-v9 aliases retained, so a new open can select the new resource identity. Gateway assets carry the same tested HTML and job guidance.
+
 ## Verification
 
 Five failing behavior assertions were reproduced before implementation: three background policy defects and two legacy presentation defects. The next six selected checks passed. A subsequent 28-case source/browser regression selection passed without skips, including a real headless Playwright session and three bundled-iframe UI tests. The initial preview test selector accidentally selected two existing contract cases; both executions are charged in the cumulative ledger and were not represented as red evidence.
@@ -29,7 +31,7 @@ The test governor preflight was used. All executions, including repeats and nest
 
 A narrow package is prepared against SHA-256 hashes of the installed source. It contains only the new policy and preview hunks; it does not install the larger V2 branch. The package must be revalidated immediately before installation. Preserve the installed configuration, pairing, journals and source backups.
 
-Seven additional checks passed against the narrow patch applied to a copy of the installed worker source. The cumulative ledger charges 62/100 slots, including one live guard recheck failure and conservative nested-case accounting.
+Two final resource tests passed after a deliberate version-red check, including all historical resource aliases. Seven additional checks passed against the narrow patch applied to a copy of the installed worker source. The cumulative ledger charges 76/100 slots, including one live guard recheck failure and conservative nested-case accounting.
 
 The source candidate is not a live worker upgrade. Applying the new Python policy requires an orderly worker restart, which ends its three existing dedicated browser sessions. Active jobs must be checked before restart. The deployed gateway's embedded preview asset also requires a separately verified asset update; local asset changes alone do not update the ChatGPT widget.
 
