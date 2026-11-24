@@ -192,3 +192,26 @@ was created. Added an optional Xcode build script, syntax-checked only,
 with unsigned and owner-selected signed modes. Android SDK Platform 36
 and Build Tools remain pending Google's license acceptance. No IPA or APK
 build or release deployment is claimed.
+
+## Native device compilation after owner license approval
+
+Both platform license/setup checks passed after owner confirmation.
+The Android SDK 36 and build-tools 36.0.0 produced an aligned APK with
+bundle org.tocministries.rdc.mobile, minimum API 26 and target API 36.
+A dedicated local development-only key was created and retained privately
+outside the repository; the development APK passed apksigner verification
+(v2 and v3), one signer, and zipalign verification. No production signing
+key or Android device installation was used.
+
+Xcode 27.2 build 27B52 completed the native iPhoneOS Debug build with
+CODE_SIGNING_ALLOWED=NO and CODE_SIGNING_REQUIRED=NO. The arm64 Mach-O
+was independently inspected: platform iOS, minimum OS 17.0, SDK 27.2.
+The exact owner-selected physical iPhone was also confirmed paired in
+Xcode CoreDevice. No local Apple signing identity or provisioning profile
+was present, so no iPhone installation or signed IPA is claimed.
+
+Private candidate copies and a build receipt are retained on the iMac.
+These binaries are companion status clients; they do not independently
+provide unrestricted phone control. WebDriverAgent signing, native
+touchscreen qualification, physical Android testing and all production
+release gates remain open. No production deployment occurred.
