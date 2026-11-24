@@ -127,8 +127,8 @@ def _catalog():
                    for key in ('start_x','start_y','end_x','end_y')}
     rows = [
         ('list', 'List owner-configured native mobile profiles and active sessions. Private connection details are omitted.', False, {}, ()),
-        ('ios_status', 'Read battery, storage, developer-mode and trusted USB connectivity for an exact owner-configured iOS profile on this Mac. No device identifiers or personal contents are returned. Does not start an automation session.', False,
-         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
+        ('ios_status', 'Read battery, storage, Developer Mode and trusted USB connectivity for an owner-configured iOS profile on this Mac. Auto prefers PyMobileDevice3, with libimobiledevice fallback. Go-iOS verifies identity only. Does not start automation or expose identifiers.', False,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},'backend':{'type':'string','enum':['auto','pymobiledevice3','libimobiledevice','go-ios']}}, ('profile',)),
         ('start', 'Start one native Appium session using an owner-configured profile. This may launch the configured app and use the selected device screen.', True,
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
         ('observe', 'Read bounded native labels and fresh control handles. Editable values and secure field labels are redacted.', False, session, ('session_id',)),
@@ -341,8 +341,8 @@ class Mobile:
                     profile = self._profiles.get(args['profile'])
                     if profile is None or profile['platformName'] != 'iOS':
                         fail('profile_not_found')
-                    from .ios_usb import device_metrics
-                    return device_metrics(profile['capabilities']['appium:udid'])
+                    from .ios_usb import preferred_device_metrics
+                    return preferred_device_metrics(profile['capabilities']['appium:udid'], args.get('backend','auto'))
 
                 session = self._sessions.get(args['session_id'])
                 if session is None: fail('session_not_found')

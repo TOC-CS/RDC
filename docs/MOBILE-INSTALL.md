@@ -169,3 +169,34 @@ complete Apple's Developer Mode and UI Automation requirements and valid
 WebDriverAgent signing; see the official Appium device preparation guide
 linked in MOBILE.md. Apple's separate iPhone Mirroring feature requires
 the nearby iPhone to be locked and the owner to approve its setup.
+
+### Preferred lightweight iOS backend (development candidate)
+
+Install the official PyMobileDevice3 distribution in the default isolated uv
+tool directory. The verified release was 11.63.1:
+
+```sh
+uv tool install --managed-python --python 3.13 pymobiledevice3==11.63.1
+```
+
+The RDC status tool defaults to the PyMobileDevice3 backend, querying six
+fixed metrics in one existing, exact-device USB lockdown session with
+automatic pairing disabled. If the primary backend is unavailable or
+incomplete, the existing libimobiledevice route is retained as a fallback.
+
+For independent device identity verification, Go-iOS 1.3.2 was installed
+from the upstream npm distribution. Install its appropriate upstream
+platform binary privately at ~/.local/share/rdc/tools/go-ios/ios on macOS.
+Go-iOS is explicitly selectable and returns only whether the selected
+device identity matched the USB diagnostic. It does not return full
+lockdown data. No Go-iOS tunnel daemon or REST server is started.
+
+The owner-configured profile alias is the only accepted device target.
+The optional backend enum is auto, pymobiledevice3, libimobiledevice, or
+go-ios. The last option verifies identity only and is not a battery or
+storage backend. All outputs omit device identifiers and personal data.
+
+Developer services, screen interaction, signed app installation and
+wireless hardware acceptance remain separate gates. Existing phone
+passcode and trust settings are preserved. Developer Mode must be
+enabled by the owner through Apple's supported setup.

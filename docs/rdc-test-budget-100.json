@@ -32,6 +32,14 @@
       "python_offset": 0,
       "python_take": 19
     },
+    "ios-preferred-backends": {
+      "description": "Five bounded primary, fallback and independent Go-iOS identity checks.",
+      "node_files": [],
+      "python_module": "tests.test_ios_backends",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
     "ios-readonly-status": {
       "description": "Five exact-target, read-only iOS status and privacy checks.",
       "node_files": [],

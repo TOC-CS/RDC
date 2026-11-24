@@ -50,3 +50,17 @@ automation session was made. Native controls remain open pending device
 Developer Mode, Xcode, and signed WebDriverAgent. Host free space was 9.9 GiB.
 The five additional source tests plus this focused live check remain within
 the cumulative 100-check campaign ceiling.
+
+## Follow-up: alternative iOS communication backends
+
+PyMobileDevice3 11.63.1 installed in the default isolated uv environment.
+Go-iOS 1.3.2 installed from the official npm package; its bundled macOS
+universal executable was placed in the private RDC tools directory
+without running the package postinstall script. Both communicated with
+the owner-selected physical iOS 26.6.1 device. Ten selected source checks
+(5 new backend checks, 5 existing iOS status checks) passed. An isolated
+RDC Engine returned all six metrics with the default PyMobileDevice3
+backend and independently verified the Go-iOS device identity.
+libimobiledevice fallback is retained. No tunnel daemon, native UI action,
+signed application installation, production changes or phone data changes.
+Developer Mode remained disabled. No live release gates are closed.

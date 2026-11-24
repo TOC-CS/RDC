@@ -204,3 +204,79 @@ def device_metrics(udid):
     if "storage_available_bytes" in metrics and "storage_data_capacity_bytes" in metrics and metrics["storage_available_bytes"]>metrics["storage_data_capacity_bytes"]:
         metrics.pop("storage_available_bytes")
     return {**evidence,**metrics,"metrics_status":"complete" if len(metrics)==len(fields) else "partial" if metrics else "unavailable"}
+
+
+def _pmd_python():
+    path=Path.home()/".local/share/uv/tools/pymobiledevice3/bin/python"
+    return str(path) if path.is_file() and os.access(path,os.X_OK) else None
+
+
+def _go_ios_binary():
+    path=Path.home()/".local/share/rdc/tools/go-ios/ios"
+    return str(path) if path.is_file() and os.access(path,os.X_OK) else None
+
+
+def _safe_json_command(argv,timeout=10,limit=65536):
+    """Only fixed local tool arguments; never return raw output or stderr."""
+    try:
+        proc=subprocess.run(argv,stdin=subprocess.DEVNULL,capture_output=True,
+            text=True,timeout=timeout,env={"PATH":"/usr/bin:/bin","HOME":str(Path.home()),"LC_ALL":"C"})
+        if proc.returncode or len(proc.stdout)>limit:
+            return {}
+        obj=json.loads(proc.stdout)
+        return obj if isinstance(obj,dict) else {}
+    except (OSError,ValueError,subprocess.SubprocessError,UnicodeError):
+        return {}
+
+
+def _clean_metrics(obj):
+    metrics={}
+    for k in ("storage_total_bytes","storage_available_bytes","storage_data_capacity_bytes","battery_percent"):
+        v=obj.get(k)
+        if type(v) is int and 0<=v<=(100 if k=="battery_percent" else 2**53-1):
+            metrics[k]=v
+    for k in ("charging","developer_mode"):
+        if type(obj.get(k)) is bool:
+            metrics[k]=obj[k]
+    if metrics.get("storage_available_bytes",0)>metrics.get("storage_data_capacity_bytes",2**53-1):
+        metrics.pop("storage_available_bytes",None)
+    return metrics
+
+
+def preferred_device_metrics(udid,backend="auto"):
+    """Select a vetted read-only backend, with safe fallback on incomplete diagnostics."""
+    if backend not in ("auto","pymobiledevice3","libimobiledevice","go-ios"):
+        return {"metrics_status":"invalid_backend"}
+    if not isinstance(udid,str) or not re.fullmatch(r"[A-Za-z0-9-]{8,128}",udid):
+        return {"metrics_status":"invalid_target"}
+    evidence=usb_check(udid)
+    if evidence.get("trust_accepted") is not True:
+        return {**evidence,"metrics_status":"trust_required"}
+    if backend=="go-ios":
+        binary=_go_ios_binary()
+        if not binary:
+            return {**evidence,"backend":"go-ios","metrics_status":"library_required"}
+        obj=_safe_json_command([binary,"info","lockdown","--udid="+udid],limit=262144)
+        verified=bool(obj.get("ProductVersion")==evidence.get("ios_version") and
+                      obj.get("ProductType")==evidence.get("product_type") and
+                      evidence.get("ios_version") and evidence.get("product_type"))
+        return {**evidence,"backend":"go-ios","backend_verified":verified,
+                "metrics_status":"identity_only" if verified else "unavailable"}
+    primary={}
+    if backend in ("auto","pymobiledevice3"):
+        python=_pmd_python()
+        if python:
+            primary=_clean_metrics(_safe_json_command([python,"-I",str(Path(__file__).with_name("ios_pmd_worker.py")),udid]))
+            if len(primary)==6 or backend=="pymobiledevice3":
+                return {**evidence,**primary,"backend":"pymobiledevice3",
+                        "metrics_status":"complete" if len(primary)==6 else "partial" if primary else "unavailable"}
+        elif backend=="pymobiledevice3":
+            return {**evidence,"backend":"pymobiledevice3","metrics_status":"library_required"}
+    fallback=device_metrics(udid)
+    if fallback.get("trust_accepted") is not True:
+        return fallback
+    if primary and fallback.get("metrics_status")!="complete":
+        merged=_clean_metrics({**primary,**_clean_metrics(fallback)})
+        return {**evidence,**merged,"backend":"pymobiledevice3+libimobiledevice",
+                "metrics_status":"complete" if len(merged)==6 else "partial"}
+    return {**fallback,"backend":"libimobiledevice"}

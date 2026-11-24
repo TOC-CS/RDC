@@ -19,9 +19,9 @@ class IOSStatus(unittest.TestCase):
         try:
             descriptor=next(t for t in m.catalog() if t["name"]=="rdc_mobile_ios_status")
             self.assertTrue(descriptor["annotations"]["readOnlyHint"])
-            with patch("rdc.ios_usb.device_metrics",return_value=TRUST) as check:
+            with patch("rdc.ios_usb.preferred_device_metrics",return_value=TRUST) as check:
                 self.assertEqual(m.call("rdc_mobile_ios_status",{"profile":"iphone"})["trust_accepted"],True)
-                check.assert_called_once_with(UDID)
+                check.assert_called_once_with(UDID,"auto")
                 for alias in ("android","unknown"):
                     with self.assertRaises(RDCError): m.call("rdc_mobile_ios_status",{"profile":alias})
         finally: m.close()
