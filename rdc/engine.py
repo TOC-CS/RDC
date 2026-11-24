@@ -487,7 +487,7 @@ class Engine:
         if name == 'rdc_file_read_many':
             paths = args['file_paths']
             def read(path):
-                return self._guarded(lambda:{'ok':True,**self.files.read(path,limit=max(1024,self.settings.max_read_bytes//len(paths)))})
+                return self._guarded(lambda:{'ok':True,**self.files.read(path,limit=max(1024,self.settings.max_read_bytes//len(paths)),mode='text')})
             with ThreadPoolExecutor(max_workers=min(4,len(paths))) as pool:
                 return {'results':list(pool.map(read,paths))}
         if name == 'rdc_directory_create':
