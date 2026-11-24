@@ -220,6 +220,63 @@ def _bounds(attributes, platform):
     return dict(zip(('x','y','width','height'), values))
 
 
+def _recover_keyboard_layout_visibility(rows):
+    """Recover only explicit visible descendants of the keyboard-active form
+    layout pattern. Never make a hidden window, interactive ancestor, keyboard
+    subtree, or arbitrary invisible container transparent to input.
+    """
+    def window_of(row):
+        while row is not None and row['kind'] != 'XCUIElementTypeWindow':
+            row=row['parent']
+        return row
+
+    apps=[r for r in rows if r['kind']=='XCUIElementTypeApplication']
+    keys=[r for r in rows if r['kind']=='XCUIElementTypeKeyboard'
+          and r['visible'] and r['element'].get('visible')=='true']
+    if len(apps)!=1 or len(keys)!=1: return
+    app=apps[0]
+    keyboard_window=window_of(keys[0])
+    if (not app['visible'] or not app['enabled'] or not keyboard_window
+            or not keyboard_window['visible'] or not keyboard_window['enabled']
+            or keyboard_window['parent'] is not app): return
+
+    def structural(row,kind,bounds):
+        a=row['element'].attrib
+        return (row['kind']==kind and not row['interactive']
+                and not row['editable'] and not row['secure']
+                and a.get('visible')=='false' and a.get('accessible')=='false'
+                and a.get('enabled')=='true' and row['bounds']==bounds)
+
+    candidates=[]
+    for r in rows:
+        if r['kind']!='XCUIElementTypeCollectionView' or not r['visibility_blocked']: continue
+        window=window_of(r)
+        if (window is None or window is keyboard_window or window['parent'] is not app
+                or not window['visible'] or not window['enabled']
+                or window['bounds'] is None or window['bounds']!=app['bounds']): continue
+        if not structural(r,'XCUIElementTypeCollectionView',window['bounds']): continue
+        parent=r['parent']; hidden_count=0
+        while parent is not None and structural(parent,'XCUIElementTypeOther',window['bounds']):
+            hidden_count+=1; parent=parent['parent']
+        if not hidden_count or parent is None or not parent['visible'] or not parent['enabled']: continue
+        if parent is not window and (parent['kind']!='XCUIElementTypeOther' or parent['interactive']
+                or parent['bounds']!=window['bounds'] or parent['private_ancestor']): continue
+        candidates.append(r)
+    if len(candidates)!=1: return
+    # Only recover the explicit descendants of this one collection. The
+    # layout ancestors themselves remain hidden. Preserve all privacy scans.
+    recovered={id(candidates[0])}
+    for r in rows:
+        parent=r['parent']
+        if parent is None or id(parent) not in recovered: continue
+        if (r['kind'] in ('XCUIElementTypeApplication','XCUIElementTypeWindow','XCUIElementTypeKeyboard')
+                or r['element'].get('visible')!='true' or not parent['enabled']
+                or r['private_ancestor']): continue
+        r['visible']=True
+        r['visibility_blocked']=False
+        recovered.add(id(r))
+
+
 def _native_tree(source, platform):
     """Parse a complete bounded native hierarchy. Never export XML or values."""
     if not isinstance(source, str) or not source or len(source)>MAX_XML_BYTES:
@@ -284,6 +341,7 @@ def _native_tree(source, platform):
             or (platform=='Android' and rows[0]['element'].tag != 'hierarchy')
             or (platform=='iOS' and rows[0]['element'].tag not in ('AppiumAUT','XCUIElementTypeApplication'))):
         raise ValueError('Unknown native hierarchy')
+    if platform=='iOS': _recover_keyboard_layout_visibility(rows)
     # A container's accessible label can concatenate the values of its children.
     for row in reversed(rows):
         if row['parent'] is not None and row['private_branch']:

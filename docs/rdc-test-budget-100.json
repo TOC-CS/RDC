@@ -251,6 +251,14 @@
       "python_take": 30,
       "python_offset": 0,
       "python_discovery": false
+    },
+    "keyboard-layout-correction": {
+      "description": "Keyboard-active visibility and hidden/secure-control boundary tests",
+      "node_files": [],
+      "python_module": "tests.test_mobile_keyboard_visibility",
+      "python_take": 13,
+      "python_offset": 0,
+      "python_discovery": false
     }
   }
 }

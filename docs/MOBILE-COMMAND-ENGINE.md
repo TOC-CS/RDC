@@ -76,3 +76,35 @@ synthetic fixtures only. No owner application usage, screenshots, private
 test logs, signing material, personal paths, account information or device
 identifiers may be packaged. Every published binary requires source identity,
 signature status, SHA-256 and a truthful hardware qualification status.
+
+### Keyboard-active control discovery
+
+The keyboard-active form correction recognizes an explicitly visible
+control inside the observed noninteractive full-window layout chain,
+when exactly one visible native keyboard is present in a separate
+window of the same visible application. It preserves hidden-window,
+ambiguous-window, secure-field, disabled-ancestor and stale-observation
+checks. It does not make arbitrary hidden UI elements actionable.
+Physical execution and latency acceptance remain separate from source
+regressions.
+
+### General mobile interaction acceptance
+
+Use generic, reproducible workloads and verify effects, not just input
+acknowledgements. Keep the private test corpus separate from publications.
+
+| Area | Required evidence |
+| --- | --- |
+| App identification and readiness | Exact app identity, launch result, usable controls, cold/warm elapsed time |
+| Native navigation and input | Correct tap, text entry, back/forward, switching and close, with observed state changes |
+| Scrolling and swiping | Correct axis, direction, displacement, target, end state and both orientations |
+| Simultaneous touch | Independent contact identity, overlapping movement, correct endpoints and release order |
+| Instrument-like surfaces | Actual timing, accurate target selection, chords, independent holds, repeated hits and continuous movement |
+| Game-like surfaces | Verified practice-only movement, aim and independent simultaneous control; no competitive or account-state changes |
+| Unfamiliar app surfaces | Discover available controls, select direct/structured/visual route, verify effect, refuse ambiguous or protected input |
+| Continuous feedback | Distinct correctly attributed frames, timestamps, latency, dropped/stale-frame rate, no uncontrolled input queue |
+
+Do not claim support for every application or instrument from one app or
+synthetic fixture. Report measured coverage and remaining unsupported or
+unverified surfaces. Keep the existing 100-operation campaign ceiling,
+live acceptance thresholds, owner authorization and release hold.
