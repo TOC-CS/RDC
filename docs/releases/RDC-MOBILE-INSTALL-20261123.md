@@ -215,3 +215,61 @@ These binaries are companion status clients; they do not independently
 provide unrestricted phone control. WebDriverAgent signing, native
 touchscreen qualification, physical Android testing and all production
 release gates remain open. No production deployment occurred.
+
+## Signed native installation follow-up — November 23, 2026
+
+Resumed the existing mobile branch from cf81f7b. The Apple Development
+certificate and matching private key existed, but the required Apple WWDR
+G3 intermediate was missing locally. Installing the official Apple G3
+intermediate with normal Keychain trust changed the valid identity count
+from zero to one. No certificate was revoked, private key exported, account
+credential copied, or trust override applied.
+
+Xcode automatic provisioning produced a device-specific Personal Team
+development profile for the existing org.tocministries.rdc.mobile bundle.
+The native build passed strict code-signature verification. The embedded
+profile covered the exact owner-selected iPhone, matching team and bundle,
+and was valid until 2026-12-01 02:28:07 UTC. CoreDevice installed the app;
+a separate exact-bundle query confirmed RDC Mobile 0.1.0, build 1.
+
+The initial launch was denied with CoreDevice error 10002 and an iOS
+security error naming invalid signature, insufficient entitlements, or
+developer-profile trust. Local signature/profile checks passed. Owner
+confirmation of developer trust on the phone is pending. Do not report
+successful launch or repeat the launch automatically before inspecting the
+owner's resulting device state.
+
+WebDriverAgent from the existing pinned XCUITest 13.6.1 installation also
+passed build-for-testing and strict signature verification. Its dedicated
+org.tocministries.rdc.wda.xctrunner bundle installed on the same device and
+was confirmed by a separate exact-bundle query. No XCUITest/Appium native
+session was started. WDA startup, touchscreen input, accessibility control,
+privacy-safe capture, live previews, app switching, wireless operation,
+reconnection and native session cleanup remain unqualified.
+
+The build helper now supports explicit RDC_ALLOW_PROVISIONING=1 with the
+existing exact team/device variables. Default signed builds do not enable
+account provisioning updates, and unsigned builds never do. Invalid opt-in
+values fail before compilation. Native macOS Bash 3.2 empty-array behavior
+was caught and corrected during focused regression testing.
+
+Verification: 11/11 final build/signing regression cases passed. The
+initial missing-feature test failed as expected; the first 11-case run
+found the Bash compatibility issue; the final 11-case run passed. All
+executions and diagnostic batches remain in one combined 37/100-slot
+campaign ledger, including a final passive process query that found no running
+RDCMobile process. No unbounded suite or performance benchmark was run.
+The revised helper separately completed a real signed build with exit 0.
+Static compilation is excluded from the runtime-test count by policy.
+
+Private signed app/IPA copies, WDA products, build logs, profile checks,
+install/readback receipts and the campaign ledger are retained under
+private-mobile-onboarding/builds/20261123-native. An isolated native
+qualification configuration is prepared privately; it does not modify or
+restart the connected worker. Its usePrebuiltWDA setting uses Xcode for
+development testing and does not qualify an Xcode-free runtime.
+
+This remains a read-only gateway companion. Secure pairing, host/device and
+task management, operation approval, expanded native interfaces, and the
+complete mobile companion experience remain unfinished. No production
+worker, gateway, TOC VPS, public release or GitHub deployment changed.

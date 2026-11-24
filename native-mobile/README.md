@@ -58,8 +58,11 @@ a temporary copy, checks minimal entitlements and strict local signature
 verification, and creates a fresh IPA. Apple's device installation service
 remains the authority for signing and provisioning. The helper never installs
 an application. A compatible SDK/toolchain and Apple signing prerequisites
-are still required; no full iOS compile or signed IPA has been verified.
-The direct USB developer-control path is separate and does not require Xcode.
+are still required. The November 23 Xcode route produced a signed development
+app and IPA and installed the app on the owner-selected iPhone; the initial
+launch still required investigation of the device's developer-profile trust.
+See docs/releases/RDC-MOBILE-INSTALL-20261123.md for the precise evidence.
+The direct USB developer-service path is separate and does not require Xcode.
 
 For the optional owner-approved Xcode route, install the compatible official
 Apple release, review and accept the first-launch license, finish the required
@@ -67,8 +70,24 @@ platform setup, and sign into Xcode with the owner's development account.
 Run ios/build-xcode.sh unsigned to compile without signing. The signed mode
 requires the exact owner-selected development team and iPhone in local
 environment variables RDC_APPLE_TEAM and RDC_IOS_DEVICE. It does not install
-the application, accept agreements, or automatically update provisioning.
-Complete provisioning through the owner-approved Xcode workflow first.
+the application or accept agreements. Provisioning updates are disabled by default.
+After owner authorization, set RDC_ALLOW_PROVISIONING=1 to let Xcode manage
+the development profile and register only the explicitly selected device.
+The helper requires the existing signed-in Apple account and never exports
+private keys or revokes certificates.
+
+If Xcode shows a certificate but security find-identity reports zero valid
+code-signing identities, compare matching identities with valid identities
+before creating another certificate. A missing Apple intermediate can cause
+this discrepancy. Obtain only the matching intermediate from
+https://www.apple.com/certificateauthority/, verify its chain, and install
+it with normal Keychain trust; do not override trust or revoke the identity.
+
+Physical iOS installation may still require the owner to trust the developer
+profile in Settings > General > VPN & Device Management. An installed bundle
+is not evidence of a successful launch. Preserve the launch result and verify
+the running process independently. Personal Team development profiles expire;
+inspect the actual embedded profile expiration before reuse.
 
 The independent gateway /mobile/ PWA remains the lower-friction installation
 option on either platform. Physical device acceptance, full native UI control,

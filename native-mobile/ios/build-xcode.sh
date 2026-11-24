@@ -32,7 +32,16 @@ case "$MODE" in
     [[ "$TEAM" =~ ^[A-Z0-9]{10}$ ]] || { echo "Set the exact owner-approved Apple development team locally." >&2; exit 1; }
     DEVICE="$(printenv RDC_IOS_DEVICE || true)"
     [[ "$DEVICE" =~ ^[A-Za-z0-9-]{8,128}$ ]] || { echo "Set the owner-selected iPhone locally." >&2; exit 1; }
-    "$BUILD" -project RDCMobile.xcodeproj -scheme RDCMobile -configuration Debug -sdk iphoneos -destination "platform=iOS,id=$DEVICE" -derivedDataPath "$OUT/DerivedData-signed" DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic build
+    # Explicit owner opt-in only: Xcode may register this exact device and
+    # create/update its development profile using the existing signed-in account.
+    # Keep the array nonempty for macOS Bash 3.2 with nounset enabled.
+    PROVISIONING=(CODE_SIGN_STYLE=Automatic)
+    case "${RDC_ALLOW_PROVISIONING:-0}" in
+      0) ;;
+      1) PROVISIONING+=(-allowProvisioningUpdates -allowProvisioningDeviceRegistration) ;;
+      *) echo "RDC_ALLOW_PROVISIONING must be 0 or 1." >&2; exit 1 ;;
+    esac
+    "$BUILD" -project RDCMobile.xcodeproj -scheme RDCMobile -configuration Debug -sdk iphoneos -destination "platform=iOS,id=$DEVICE" -derivedDataPath "$OUT/DerivedData-signed" "${PROVISIONING[@]}" DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" build
     APP="$OUT/DerivedData-signed/Build/Products/Debug-iphoneos/RDCMobile.app"
     [[ -d "$APP" && -f "$APP/embedded.mobileprovision" ]] || { echo "Signed development bundle or provisioning profile missing." >&2; exit 1; }
     /usr/bin/codesign --verify --strict "$APP"
