@@ -32,6 +32,14 @@
       "python_offset": 0,
       "python_take": 19
     },
+    "ios-usb-onboarding": {
+      "description": "Five owner-only iOS USB diagnostic and private profile cases.",
+      "node_files": [],
+      "python_module": "tests.test_ios_usb",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
     "mobile-install": {
       "description": "Five focused mobile installation, least-privilege status and profile tests.",
       "node_files": [],

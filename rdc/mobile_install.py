@@ -61,10 +61,26 @@ def main():
     profile.add_argument("--app", required=True)
     profile.add_argument("--activity")
     profile.add_argument("--endpoint", default="http://127.0.0.1:4723")
+    probe = sub.add_parser("ios-usb-check", help="Read-only local USB and existing trust diagnostic")
+    probe.add_argument("--udid", help="Exact owner-selected device if multiple are attached")
+    prepare = sub.add_parser("ios-usb-profile", help="Create a private fragment for a trusted USB device")
+    prepare.add_argument("--udid")
+    prepare.add_argument("--alias", default="iphone")
+    prepare.add_argument("--output", required=True)
     args = parser.parse_args()
     if args.action == "enable-status":
         provision_mobile_token(args.state_dir)
         print("Read-only mobile status enabled. Retrieve mobile-status-token privately from the state directory.")
+    elif args.action == "ios-usb-check":
+        from .ios_usb import usb_check
+        print(json.dumps(usb_check(args.udid),indent=2))
+    elif args.action == "ios-usb-profile":
+        from .ios_usb import write_profile
+        try:
+            write_profile(args.output,args.alias,args.udid)
+        except (OSError,ValueError,EOFError,TypeError,KeyError):
+            parser.exit(1,"Unable to create private iOS profile; check connection, existing trust and output path.\n")
+        print("Private iOS profile created; no live worker configuration or phone data changed.")
     else:
         print(json.dumps({"mobile_profiles": make_profile(args.alias, args.platform, args.udid,
                          args.app, args.activity, args.endpoint)}, indent=2))

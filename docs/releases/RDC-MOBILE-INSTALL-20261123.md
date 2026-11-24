@@ -22,3 +22,15 @@ installation, no working JDK, and no Android SDK/ADB executable. The connected
 device inventory lists the iMac and VPS only, with no physical phone.
 Real iPhone/iPad and Android installation, native automation, live host
 performance, public TLS, signed IPA/APK and store distribution remain unverified.
+
+## Follow-up: real iPhone USB onboarding
+
+Five additional targeted USB onboarding tests passed. The owner-connected
+physical iPhone reported product type iPhone18,2 and iOS 26.6.1. The Mac's
+USB multiplexer enumerated one USB device; the device service answered, and
+its existing host trust was accepted. The owner-local profile generator
+created a permission-600 fragment for the exact USB device outside the
+repository, without modifying live worker configuration or phone data.
+These are USB diagnostic and configuration results only. Full Xcode is absent,
+and the host has approximately 6.2 GiB free. Native control and signed
+distribution remain open.

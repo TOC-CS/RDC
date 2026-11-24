@@ -118,3 +118,28 @@ actual gestures, secure-field refusal and lifecycle cleanup on selected
 physical devices. Preserve the existing six speed/release gates and rollback
 controls. Total test executions across the mobile development campaign may
 never exceed the owner-mandated 100 ceiling.
+
+### Existing trusted USB connection on a Mac
+
+A local macOS diagnostic can enumerate a unique USB-connected Apple mobile
+device and check whether its existing lockdown pairing is accepted, without
+Xcode or third-party packages:
+
+```sh
+python -m rdc.mobile_install ios-usb-check
+python -m rdc.mobile_install ios-usb-profile --alias iphone --output /YOUR/PRIVATE/iphone-profile.json
+```
+
+If multiple USB devices are attached, use the owner-selected `--udid`.
+The diagnostic excludes identifiers and pairing records from its output;
+the generated fragment contains the actual selected UDID and is owner-only.
+It refuses to overwrite an existing file or select an untrusted device.
+Accepted pairing is not a verified developer-service connection, native
+automation session, or permission to operate private applications. Full
+Xcode and signed WebDriverAgent remain necessary for the native route.
+
+On supported Apple systems, the built-in iPhone Mirroring app is an alternate
+owner-mediated UI route while native developer tooling is unavailable.
+It uses Apple's own wireless requirements and consent, independent of this
+USB diagnostic. Never use mirroring to bypass a native screenshot privacy
+refusal. It does not qualify the RDC native driver.
