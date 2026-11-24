@@ -15,6 +15,7 @@ class Settings:
     approval_mode: str = 'review'
     allow_exec: bool = False
     desktop_mode: str = 'disabled'
+    background_only: bool = True
     browser_backend: str = 'playwright'
     webdriver_url: str | None = None
     webdriver_capabilities: dict | None = None
@@ -37,6 +38,8 @@ class Settings:
                 raise RDCError('invalid_config', f'{key} must be one of {options}')
         if not self.roots:
             raise RDCError('invalid_config', 'At least one working root is required.')
+        if type(self.background_only) is not bool:
+            raise RDCError('invalid_config', 'background_only must be true or false.')
         if type(self.allow_exec) is not bool:
             raise RDCError('invalid_config', 'allow_exec must be true or false.')
         for key, low, high in [('max_output_bytes', 1024, 1024**3), ('max_read_bytes', 1024, 4*1024**2),

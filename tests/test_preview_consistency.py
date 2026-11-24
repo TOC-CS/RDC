@@ -16,6 +16,9 @@ class PreviewConsistencyContracts(unittest.TestCase):
                                 capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
 
+    def test_user_can_request_float_through_documented_openai_bridge(self): self.check('legacy-user-float')
+    def test_legacy_fullscreen_substitution_returns_inline(self): self.check('legacy-user-refused')
+
     def test_unbound_result_then_explicit_input_recovers_only_that_source(self): self.check('late-bound-input')
     def test_pending_source_does_not_float_an_empty_preview(self): self.check('pending-not-floating')
     def test_fast_frames_remove_unnecessary_idle_delay(self): self.check('frame-fast-cadence')

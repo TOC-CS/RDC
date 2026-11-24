@@ -9,7 +9,7 @@ from rdc.errors import RDCError
 class WindowPreviewTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.settings = SimpleNamespace(desktop_mode='shared', state_dir=Path(self.temp.name))
+        self.settings = SimpleNamespace(background_only=False, desktop_mode='shared', state_dir=Path(self.temp.name))
         self.calls = []
         self.rows = [{'window_id':42, 'pid':100, 'launch_id':'one', 'bundle_id':'org.example.app',
                       'title':'Mixer', 'width':900, 'height':600}]
@@ -28,7 +28,7 @@ class WindowPreviewTests(unittest.TestCase):
 
     def test_window_tools_are_present(self):
         from rdc.adapters import Adapters
-        adapter = Adapters(SimpleNamespace(desktop_mode='shared',browser_backend='disabled',adb_serial=None,state_dir=Path(self.temp.name)))
+        adapter = Adapters(SimpleNamespace(background_only=False, desktop_mode='shared',browser_backend='disabled',adb_serial=None,state_dir=Path(self.temp.name)))
         try:
             names={tool['name'] for tool in adapter.catalog()}
             self.assertIn('rdc_window_list',names)
@@ -124,7 +124,7 @@ class WindowPreviewTests(unittest.TestCase):
     def test_owner_reviewed_binding_authorizes_resize_but_pause_still_blocks(self):
         from rdc.config import Settings
         from rdc.engine import Engine
-        engine=Engine(Settings(state_dir=Path(self.temp.name)/'review-state',roots=[Path(self.temp.name)],desktop_mode='shared',approval_mode='review'))
+        engine=Engine(Settings(state_dir=Path(self.temp.name)/'review-state',roots=[Path(self.temp.name)],desktop_mode='shared',approval_mode='review',background_only=False))
         engine.adapters.windows.backend=self.backend
         try:
             target=engine.call('rdc_window_list')['windows'][0]['target_id']

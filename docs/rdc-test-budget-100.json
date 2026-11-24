@@ -139,6 +139,36 @@
       "python_discovery": false,
       "python_offset": 0,
       "python_take": 4
+    },
+    "background-repair-red": {
+      "node_files": [],
+      "python_take": 4,
+      "python_offset": 0,
+      "python_module": "tests.test_background_policy"
+    },
+    "preview-repair-red": {
+      "node_files": [],
+      "python_take": 2,
+      "python_offset": 0,
+      "python_module": "tests.test_preview_repair_selected"
+    },
+    "background-repair-green": {
+      "node_files": [],
+      "python_take": 4,
+      "python_offset": 0,
+      "python_module": "tests.test_background_policy"
+    },
+    "preview-repair-green": {
+      "node_files": [],
+      "python_take": 2,
+      "python_offset": 0,
+      "python_module": "tests.test_preview_repair_selected"
+    },
+    "background-preview-regression": {
+      "node_files": [],
+      "python_take": 28,
+      "python_offset": 0,
+      "python_module": "tests.test_background_preview_campaign"
     }
   }
 }

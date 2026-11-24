@@ -18,9 +18,9 @@ except ImportError:
 
 
 def settings(**kwargs):
-    return SimpleNamespace(browser_backend='webdriver', webdriver_url=None,
+    return SimpleNamespace(background_only=False, browser_backend='webdriver', webdriver_url=None,
         webdriver_capabilities={'browserName': 'safari'}, desktop_mode='disabled',
-        adb_serial=None, **kwargs) if not kwargs else SimpleNamespace(**({
+        adb_serial=None, **kwargs) if not kwargs else SimpleNamespace(background_only=False, **({
         'browser_backend':'webdriver', 'webdriver_url':None,
         'webdriver_capabilities':{'browserName':'safari'}, 'desktop_mode':'disabled',
         'adb_serial':None} | kwargs))

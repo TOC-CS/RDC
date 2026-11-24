@@ -112,14 +112,18 @@ class Engine:
             tool('rdc_directory_create','Create one directory within granted roots. Its parent must exist.',
                  {'path':STRING},['path'],True),
             tool('rdc_job_start','Start an authorized command as a durable job. argv runs without shell expansion. '
-                 'Supply a shell explicitly when needed. Command permissions are those of the worker account.',
+                 'Supply a shell explicitly when needed. A background process can still control the desktop; '
+                 'never use shell, AppleScript or native input to bypass background-only work. '
+                 'Command permissions are those of the worker account.',
                  {'argv':{'type':'array','minItems':1,'maxItems':256,'items':{'type':'string','maxLength':262144}},
                   'cwd':STRING,'timeout':{'type':'number','exclusiveMinimum':0,'maximum':604800},
                   'idempotency_key':{'type':'string','minLength':1,'maxLength':200}},['argv','cwd'],True,open_world=True),
             tool('rdc_job_run','Run a short authorized terminal command with a bounded inline wait. '
                  'Returns bounded output and exact exit status in this call if finished; '
                  'otherwise returns the original durable job ID for later status/output, '
-                 'stdin, cancellation and recovery. Same approvals and permissions as job_start.',
+                 'stdin, cancellation and recovery. A background process does not guarantee desktop isolation; '
+                 'use independent browser tools, never shared Chrome or OS input for background tasks. '
+                 'Same approvals and permissions as job_start.',
                  {'argv':{'type':'array','minItems':1,'maxItems':256,'items':{'type':'string','maxLength':262144}},
                   'cwd':STRING,'timeout':{'type':'number','exclusiveMinimum':0,'maximum':604800},
                   'idempotency_key':{'type':'string','minLength':1,'maxLength':200},
@@ -167,6 +171,11 @@ class Engine:
         errors = sorted(self._validators[name].iter_errors(arguments),key=lambda e:str(e.path))
         if errors:
             raise RDCError('invalid_arguments',errors[0].message)
+        if self.settings.background_only and name in (
+                'rdc_desktop_pointer', 'rdc_desktop_keys', 'rdc_desktop_type', 'rdc_preview_resize'):
+            raise RDCError('background_required',
+                'Background-only mode blocks shared desktop input and window resizing. '
+                'Use the independent Playwright browser. Foreground work requires an explicit owner configuration change.')
         if name in ('rdc_job_start', 'rdc_job_run'):
             if not self.settings.allow_exec:
                 raise RDCError('capability_disabled','Command execution is disabled in the owner configuration.')

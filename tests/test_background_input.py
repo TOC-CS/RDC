@@ -13,7 +13,7 @@ class BackgroundInputTests(unittest.TestCase):
         for mode in ('shared', 'isolated'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 engine = Engine(Settings(state_dir=Path(directory)/'state', roots=[Path(directory)],
-                                         desktop_mode=mode, approval_mode='trusted'))
+                                         desktop_mode=mode, approval_mode='trusted', background_only=False))
                 try:
                     for name, args in (
                         ('rdc_desktop_pointer', {'x':12, 'y':34, 'action':'move'}),
@@ -34,7 +34,7 @@ class BackgroundInputTests(unittest.TestCase):
     def test_denial_and_pause_never_send_native_input(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = Engine(Settings(state_dir=Path(directory)/'state', roots=[Path(directory)],
-                                     desktop_mode='shared', approval_mode='trusted'))
+                                     desktop_mode='shared', approval_mode='trusted', background_only=False))
             try:
                 with patch.object(engine.adapters, 'call') as perform:
                     result = engine.call('rdc_desktop_type', {'text':'sample'})
@@ -48,7 +48,7 @@ class BackgroundInputTests(unittest.TestCase):
     def test_isolated_label_does_not_claim_verified_independent_input(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = Engine(Settings(state_dir=Path(directory)/'state', roots=[Path(directory)],
-                                     desktop_mode='isolated', approval_mode='trusted'))
+                                     desktop_mode='isolated', approval_mode='trusted', background_only=False))
             try:
                 status = engine.adapters._desktop_status()
                 self.assertFalse(status['independent_input'])

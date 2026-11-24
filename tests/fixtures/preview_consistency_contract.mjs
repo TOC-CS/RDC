@@ -39,7 +39,7 @@ class Element {
   addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}setAttribute(name,value){this.attributes[name]=String(value);}getAttribute(name){return this.attributes[name]??null;}removeAttribute(name){delete this.attributes[name];delete this[name];}
   focus(){}getBoundingClientRect(){return {width:900,height:560};}
 }
-function fixture({initialize='success',initial='open',session=SID,holdTools=false,includeInput=true,jobId=null,frameTaskId=null,hostModes=['inline','fullscreen'],clock=()=>0}={}){
+function fixture({initialize='success',initial='open',session=SID,holdTools=false,includeInput=true,jobId=null,frameTaskId=null,hostModes=['inline','fullscreen'],clock=()=>0,legacyMode=null}={}){
   const nodes=new Map(),messageListeners=new Set(),windowListeners=new Map(),timers=new Map(),wire=[],tools=[],heldInitial=[],heldTools=[];let sequence=0,initMode=initialize,taskStatus='running';
   const openResult=()=>{const data=openData(session);if(jobId)data.viewer={...data.viewer,task_job_id:jobId,task_complete:['completed','failed','cancelled','timed_out'].includes(taskStatus)};return toolResult(data)};
   for(const match of fs.readFileSync(path.join(root,'rdc/embedded/src/index.html'),'utf8').matchAll(/<([a-z][a-z0-9]*)\b[^>]*\bid="([^"]+)"[^>]*>/g)){const node=new Element(match[1]);node.hidden=/\shidden(?:\s|>)/.test(match[0]);node.disabled=/\sdisabled(?:\s|>)/.test(match[0]);nodes.set(match[2],node);}
@@ -69,6 +69,13 @@ function fixture({initialize='success',initial='open',session=SID,holdTools=fals
     }else if(message.id!==undefined)queueMicrotask(()=>send({id:message.id,result:{}}));
   }};
   const window={parent:host,innerWidth:1000,innerHeight:800,addEventListener(name,fn){if(name==='message')messageListeners.add(fn);else{const items=windowListeners.get(name)||[];items.push(fn);windowListeners.set(name,items);}},removeEventListener(name,fn){if(name==='message')messageListeners.delete(fn);}};
+  const legacyRequests=[];
+  if(legacyMode)window.openai={displayMode:'inline',requestDisplayMode:async({mode})=>{
+    legacyRequests.push(mode);
+    const actual=mode==='pip'?legacyMode:'inline';
+    window.openai.displayMode=actual;
+    return {mode:actual};
+  }};
   function send(value){for(const fn of [...messageListeners])fn({source:host,data:{jsonrpc:'2.0',...value}});}
   function initializeReply(message){send({id:message.id,result:{protocolVersion:message.params.protocolVersion,hostInfo:{name:'Pinned SDK test host',version:'1'},hostCapabilities:{serverTools:{},updateModelContext:{text:{}}},hostContext:{displayMode:'inline',availableDisplayModes:hostModes}}});}
   function toolReply(message){
@@ -95,10 +102,28 @@ function fixture({initialize='success',initial='open',session=SID,holdTools=fals
   async function click(id){for(const fn of nodes.get(id).listeners.click||[])await fn({preventDefault(){}});await settle();}
   async function runDelay(delay){const entry=[...timers].find(([,item])=>item.delay===delay);assert.ok(entry,`Missing UI timer ${delay}`);timers.delete(entry[0]);const result=entry[1].fn();await settle();return {result};}
   async function cleanup(){context.ui.dispose();await context.ui.app.close();Object.assign(globalThis,saved);}
-  return {...context.ui,nodes,wire,tools,setDocumentHidden,heldInitial,heldTools,timers,messageListeners,send,initializeReply,toolReply,click,runDelay,cleanup,setTaskStatus:value=>{taskStatus=value;},setInitialize:value=>{initMode=value;},setHoldTools:value=>{holdTools=value;}};
+  return {...context.ui,nodes,wire,tools,legacyRequests,setDocumentHidden,heldInitial,heldTools,timers,messageListeners,send,initializeReply,toolReply,click,runDelay,cleanup,setTaskStatus:value=>{taskStatus=value;},setInitialize:value=>{initMode=value;},setHoldTools:value=>{holdTools=value;}};
 }
 const which=process.argv[2];
-if(which==='late-bound-input'){
+if(which==='legacy-user-float'){
+  const ui=fixture({legacyMode:'pip'});try{
+    await ui.connect();await settle();
+    assert.deepEqual(ui.legacyRequests,[],'No unadvertised automatic mode request');
+    assert.equal(ui.nodes.get('float').hidden,false,'Offer the documented host bridge on user click');
+    await ui.click('float');
+    assert.deepEqual(ui.legacyRequests,['pip']);
+    assert.equal(ui.state.mode,'pip','Only confirmed PiP is accepted');
+    assert.equal(ui.wire.filter(x=>x.method==='ui/request-display-mode').length,0);
+  }finally{await ui.cleanup();}
+}else if(which==='legacy-user-refused'){
+  const ui=fixture({legacyMode:'fullscreen'});try{
+    await ui.connect();await settle();await ui.click('float');
+    assert.deepEqual(ui.legacyRequests,['pip','inline'],'Restore inline after fullscreen substitution');
+    assert.equal(ui.state.mode,'inline');
+    assert.equal(ui.nodes.get('float-note').textContent,'Floating is unavailable in this host.');
+    assert.equal(ui.tools.length,0,'Presentation request never dispatches worker work');
+  }finally{await ui.cleanup();}
+}else if(which==='late-bound-input'){
   const ui=fixture({initial:'unbound',includeInput:false});try{
     await ui.connect();await settle();
     assert.equal(ui.state.haveOpenResult,false);

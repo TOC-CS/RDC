@@ -1,0 +1,59 @@
+{
+  "campaign": "background-preview-repair-20261124",
+  "maximum": 100,
+  "executed_unittest_cases": 49,
+  "extra_nested_native_cases_charged": 10,
+  "live_preview_requests_charged": 2,
+  "charged_total": 62,
+  "remaining": 38,
+  "runs": [
+    {
+      "name": "background red",
+      "cases": 4,
+      "failures": 3
+    },
+    {
+      "name": "initial wrong preview selection",
+      "cases": 2,
+      "failures": 0
+    },
+    {
+      "name": "preview red corrected",
+      "cases": 2,
+      "failures": 2
+    },
+    {
+      "name": "background green",
+      "cases": 4,
+      "failures": 0
+    },
+    {
+      "name": "preview green",
+      "cases": 2,
+      "failures": 0
+    },
+    {
+      "name": "targeted regression",
+      "cases": 28,
+      "failures": 0,
+      "skips": 0
+    },
+    {
+      "name": "narrow package against installed source",
+      "cases": 7,
+      "failures": 0
+    },
+    {
+      "name": "live helper guard recheck",
+      "cases": 1,
+      "failures": 1,
+      "reason": "Concurrent SEO workflow removed guard; no Chrome command dispatched because mocked subprocess rejected it"
+    }
+  ],
+  "limitations": [
+    "No full library run",
+    "No actual ChatGPT floating placement acceptance",
+    "No installed Python policy activation",
+    "Immediate shared-Chrome stop guard was removed by another active workflow; owner clarification pending"
+  ]
+}
