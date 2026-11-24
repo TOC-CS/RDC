@@ -159,3 +159,7 @@ Honor pause, review, roots, and granted actions. Owner approvals remain outside 
 Use headless browser sessions for web work that leaves the user's pointer and focus alone. Native desktop control uses the selected desktop's pointer and focus unless a separate display, desktop, account, or VM is actually configured and verified. The `isolated` label does not provision that environment. Obtain a fresh native screenshot and use its coordinate-scale metadata before input.
 
 Report actual observations separately from implemented adapters, fixtures, and planned support. Preserve authentication and permission boundaries on every platform. Do not claim that local Codex success proves production ChatGPT or Claude rendering, that WebKit proves Safari, or that a phone-sized web dashboard proves native phone control. Measure comparable workflows before asserting a speed advantage. Keep the user's existing working route until the replacement they need is verified.
+
+## Native mobile installation
+
+For iPhone/iPad or Android setup, use [mobile installation](references/mobile-install.md). Distinguish the read-only companion installer from the host-side native control driver. Let the owner complete authentication and keep their password out of chat.

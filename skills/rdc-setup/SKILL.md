@@ -18,3 +18,7 @@ Use the existing TOC Ministries RDC connection and installed worker. Preserve it
 Finish with the worker connection, capture/resize permission results, and one concrete next step if setup is incomplete. Do not request Mac permissions for browser-only use.
 
 If an already enabled helper is denied by the actual worker, inspect launch ownership and report setup incomplete. Do not keep asking for the same grant or enable a different AI app. Permission setup is a foreground handoff: stop agent native input while the owner is using System Settings. Match guidance to the actual OS; this Mac walkthrough does not establish Windows, Linux or mobile qualification.
+
+## Native mobile installation
+
+For iPhone/iPad or Android setup, use [mobile installation](../rdc/references/mobile-install.md). Distinguish the read-only companion installer from the host-side native control driver. Let the owner complete authentication and keep their password out of chat.

@@ -1,5 +1,23 @@
 # RDC mobile installation development evidence, 2026-11-23
 
+## Current status
+
+The November 23 development candidate has a signed iPhone companion installed
+and independently verified running. Physical Appium/XCUITest observation,
+tap, nonsecure typing, secure-screen capture refusal and explicit session
+cleanup were verified. A signed Android development APK was built and its
+signature/alignment verified; no physical Android installation is qualified.
+Swipe/scroll failed at WDA window-coordinate selection. Safe live preview,
+wireless use, hardware recovery/no-replay, app switching, Xcode-free WDA
+startup, iPad/Android acceptance and the expanded companion UI remain OPEN.
+These results do not deploy the candidate worker or qualify a production release.
+
+The combined resume campaign is **97/100**, including failures and reruns.
+See [native installation and artifacts](../../native-mobile/README.md).
+Entries below are chronological evidence; earlier absent-toolchain, no-signing,
+trust-pending and no-session statements are historical and superseded by
+the final owner-authenticated native-control entry.
+
 Base source: fb631e8 (audit recovery branch). Isolated mobile candidate only.
 No live gateway, plugin, device pairing, production service or public release
 was changed. Existing six live acceptance gates and release hold remain open.

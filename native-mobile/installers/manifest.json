@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "status": "development-only",
+  "date": "2026-11-23",
+  "source_branch": "feature/rdc-mobile-install-20261123",
+  "qualified_adapter_revision": "2328f7c",
+  "bundle_id": "org.tocministries.rdc.mobile",
+  "companion_scope": "read-only gateway status",
+  "android": {
+    "file": "RDC-Mobile-Android-development.apk",
+    "bytes": 41467,
+    "sha256": "25c68b7394399e6ba118c54e185e72733beba97e5c4769df15438c5f19755643",
+    "signing": "development v2/v3; private key excluded",
+    "min_api": 26,
+    "target_api": 36,
+    "physical_install_verified": false
+  },
+  "ios": {
+    "delivery": "owner-private, not present in repository or plugin",
+    "file": "RDC-Mobile-iOS-development.ipa",
+    "bytes": 548732,
+    "sha256": "02afa583af94efcaaad2b12423edaeefa2fcbf51e7f4f48917502efa27920e07",
+    "signing": "exact-device Apple development profile",
+    "profile_expiration_utc": "2026-12-01T02:28:07Z",
+    "minimum_source_target": "17.0",
+    "qualified_os": "26.6.1",
+    "install_verified": true,
+    "launch_independently_verified": true,
+    "ipad_verified": false
+  },
+  "native_control_verified": [
+    "iPhone session creation",
+    "accessibility observation",
+    "tap",
+    "nonsecure typing",
+    "secure-screen capture refusal",
+    "explicit close and empty session readback"
+  ],
+  "open_gates": [
+    "swipe/scroll",
+    "privacy-safe live preview",
+    "wireless",
+    "hardware reconnect/no-replay",
+    "app switching",
+    "Xcode-free WDA startup",
+    "Android/iPad hardware",
+    "expanded companion UI",
+    "production deployment"
+  ],
+  "campaign": {
+    "id": "rdc-mobile-resume-20261123",
+    "executed": 97,
+    "limit": 100,
+    "includes_failures_and_reruns": true,
+    "ci_runtime_tests": "not rerun for publication"
+  }
+}
