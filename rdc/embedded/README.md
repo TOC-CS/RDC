@@ -19,13 +19,13 @@ source distributions. The original project logo remains at `../assets/rdc-logo.p
 
 ## Host contract
 
-`rdc_preview_open` takes the exact visual session ID for this task. The server advertises `ui://rdc/preview-v5.html`; the earlier resource aliases still resolve. The host delivers the original tool invocation and result. An unbound result leaves the view empty, even if an older server returns a last-used session. The viewer does not discover a replacement source.
+`rdc_preview_open` takes the exact visual session ID for this task. The server advertises `ui://rdc/preview-v9.html`; the earlier resource aliases still resolve. The host delivers the original tool invocation and result. An unbound result leaves the view empty, even if an older server returns a last-used session. The viewer does not discover a replacement source. If the host later supplies an explicit valid session ID, it performs one scoped recovery read. Automatic floating waits for a confirmed source, and still requires actual host support.
 
 The resource contains a live image, a source-bound agent cursor only after confirmed pointer movement, and small viewer controls. The parent-bound MCP Apps SDK mediates reads of `rdc_preview_open`, `rdc_preview_frame`, and `rdc_operation_status`. The resource has no account credential and makes no direct network requests. It displays no worker dashboard or command output.
 
 The AI host owns panel placement, size, and dismissal. Expand, Inline, and Float appear only when advertised and use the mode the host returns. Hide, document visibility changes and teardown suspend or clear observation without changing the worker. Reopen resumes the same source. If the host supports `updateModelContext`, dismissing shares the exact binding and any retained operation ID with the agent.
 
-Frame reads are single flight. A frame must match the source and worker before its bounded PNG, JPEG or WebP image can render. A refused capture clears stale pixels. A pending open or frame retains its original ID across hide and reopen. Confirmed expiry permits one fresh read of the same source; uncertain results retain the reference for explicit retry. An expired read without a bound source never dispatches an unscoped open.
+Successful frame reads wait 250–1500 ms before the next request, based on the measured read duration; slower reads retain backpressure. Frame reads are single flight. A frame must match the source and worker before its bounded PNG, JPEG or WebP image can render. A refused capture clears stale pixels. A pending open or frame retains its original ID across hide and reopen. Confirmed expiry permits one fresh read of the same source; uncertain results retain the reference for explicit retry. An expired read without a bound source never dispatches an unscoped open.
 
 ## Verification
 

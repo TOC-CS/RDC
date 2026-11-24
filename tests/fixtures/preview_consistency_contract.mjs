@@ -39,7 +39,7 @@ class Element {
   addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}setAttribute(name,value){this.attributes[name]=String(value);}getAttribute(name){return this.attributes[name]??null;}removeAttribute(name){delete this.attributes[name];delete this[name];}
   focus(){}getBoundingClientRect(){return {width:900,height:560};}
 }
-function fixture({initialize='success',initial='open',session=SID,holdTools=false,includeInput=true,jobId=null,frameTaskId=null,hostModes=['inline','fullscreen']}={}){
+function fixture({initialize='success',initial='open',session=SID,holdTools=false,includeInput=true,jobId=null,frameTaskId=null,hostModes=['inline','fullscreen'],clock=()=>0}={}){
   const nodes=new Map(),messageListeners=new Set(),windowListeners=new Map(),timers=new Map(),wire=[],tools=[],heldInitial=[],heldTools=[];let sequence=0,initMode=initialize,taskStatus='running';
   const openResult=()=>{const data=openData(session);if(jobId)data.viewer={...data.viewer,task_job_id:jobId,task_complete:['completed','failed','cancelled','timed_out'].includes(taskStatus)};return toolResult(data)};
   for(const match of fs.readFileSync(path.join(root,'rdc/embedded/src/index.html'),'utf8').matchAll(/<([a-z][a-z0-9]*)\b[^>]*\bid="([^"]+)"[^>]*>/g)){const node=new Element(match[1]);node.hidden=/\shidden(?:\s|>)/.test(match[0]);node.disabled=/\sdisabled(?:\s|>)/.test(match[0]);nodes.set(match[2],node);}
@@ -56,6 +56,7 @@ function fixture({initialize='success',initial='open',session=SID,holdTools=fals
     }else if(message.method==='ui/notifications/initialized'){
       if(includeInput)queueMicrotask(()=>send({method:'ui/notifications/tool-input',params:{arguments:{session_id:session,...(jobId?{job_id:jobId}:{})}}}));
       if(initial==='open')queueMicrotask(()=>send({method:'ui/notifications/tool-result',params:openResult()}));
+      else if(initial==='unbound')queueMicrotask(()=>send({method:'ui/notifications/tool-result',params:toolResult({device_id:'fixture-device',session_id:null,sessions:[],viewer:{bound_to_session:false}})}));
       else if(initial==='pending')queueMicrotask(()=>send({method:'ui/notifications/tool-result',params:pendingResult('original-open-operation')}));
       else if(initial==='offline'||initial==='busy')queueMicrotask(()=>send({method:'ui/notifications/tool-result',params:toolResult({ok:true,preview_unavailable:true,preview_status:initial==='offline'?'device_offline':'gateway_busy',message:'Fixed gateway availability result',device_id:'fixture-device'})}));
     }else if(message.method==='ui/request-display-mode'){
@@ -88,7 +89,7 @@ function fixture({initialize='success',initial='open',session=SID,holdTools=fals
   class BoundedApp extends App {connect(transport,options){assert.equal(options.timeout,15000);return super.connect(transport,{...options,timeout:40});}}
   const saved={window:globalThis.window,document:globalThis.document,ResizeObserver:globalThis.ResizeObserver,requestAnimationFrame:globalThis.requestAnimationFrame};
   Object.assign(globalThis,{window,document,ResizeObserver:class{observe(){}disconnect(){}},requestAnimationFrame:fn=>fn()});
-  const context=vm.createContext({App:BoundedApp,PostMessageTransport,document,window,URL,Map,Set,Date,Number,Promise,performance:{now:()=>0},crypto:{randomUUID:()=>SID},console,setTimeout:(fn,delay)=>{timers.set(++sequence,{fn,delay});return sequence;},clearTimeout:id=>timers.delete(id)});
+  const context=vm.createContext({App:BoundedApp,PostMessageTransport,document,window,URL,Map,Set,Date,Number,Promise,performance:{now:clock},crypto:{randomUUID:()=>SID},console,setTimeout:(fn,delay)=>{timers.set(++sequence,{fn,delay});return sequence;},clearTimeout:id=>timers.delete(id)});
   const source=fs.readFileSync(path.join(root,'rdc/embedded/src/app.js'),'utf8').replace(/^import .*?;\r?\n/,'').replace(/\nconnect\(\);\s*$/,'\n');
   vm.runInContext(source+"\nglobalThis.ui={app,state,connect,refreshSessions,refreshFrame,hidePreview,reopenPreview,dispose};",context);
   async function click(id){for(const fn of nodes.get(id).listeners.click||[])await fn({preventDefault(){}});await settle();}
@@ -97,7 +98,35 @@ function fixture({initialize='success',initial='open',session=SID,holdTools=fals
   return {...context.ui,nodes,wire,tools,setDocumentHidden,heldInitial,heldTools,timers,messageListeners,send,initializeReply,toolReply,click,runDelay,cleanup,setTaskStatus:value=>{taskStatus=value;},setInitialize:value=>{initMode=value;},setHoldTools:value=>{holdTools=value;}};
 }
 const which=process.argv[2];
-if(which==='job-floating-supported'){
+if(which==='late-bound-input'){
+  const ui=fixture({initial:'unbound',includeInput:false});try{
+    await ui.connect();await settle();
+    assert.equal(ui.state.haveOpenResult,false);
+    assert.equal(ui.tools.length,0,'No unscoped discovery');
+    ui.send({method:'ui/notifications/tool-input',params:{arguments:{session_id:SID}}});
+    await settle();await ui.runDelay(0);await settle();
+    assert.equal(ui.state.haveOpenResult,true,'Late explicit source must recover an unbound initial result');
+    assert.equal(ui.state.sessionId,SID);
+    assert.equal(ui.tools.filter(t=>t.name==='rdc_preview_open').length,1);
+  }finally{await ui.cleanup();}
+}else if(which==='pending-not-floating'){
+  const ui=fixture({initial:'pending',holdTools:true,hostModes:['inline','fullscreen','pip']});try{
+    await ui.connect();await settle();await settle();
+    assert.equal(ui.state.haveOpenResult,false);
+    assert.equal(ui.wire.filter(x=>x.method==='ui/request-display-mode').length,0,'Pending unverified source must not float an empty view');
+  }finally{await ui.cleanup();}
+}else if(which==='frame-fast-cadence'||which==='frame-slow-cadence'){
+  let now=0;
+  const ui=fixture({holdTools:true,clock:()=>now});try{
+    await ui.connect();await settle();
+    const frame=ui.refreshFrame(true);await settle();
+    now=which==='frame-fast-cadence'?40:900;
+    ui.toolReply(ui.heldTools.shift());await frame;
+    assert.equal(ui.state.busy,false);
+    assert.equal([...ui.timers.values()][0]?.delay,which==='frame-fast-cadence'?250:900,'Successful reads adapt the idle wait to measured read time');
+    assert.equal(ui.tools.filter(t=>t.name==='rdc_preview_frame').length,1,'No overlapping frames');
+  }finally{await ui.cleanup();}
+}else if(which==='job-floating-supported'){
   const ui=fixture({jobId:JOB,hostModes:['inline','fullscreen','pip']});try{
     await ui.connect();await settle();await settle();
     assert.ok(ui.wire.some(x=>x.method==='ui/request-display-mode'&&x.params.mode==='pip'));

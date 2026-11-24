@@ -16,6 +16,11 @@ class PreviewConsistencyContracts(unittest.TestCase):
                                 capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
 
+    def test_unbound_result_then_explicit_input_recovers_only_that_source(self): self.check('late-bound-input')
+    def test_pending_source_does_not_float_an_empty_preview(self): self.check('pending-not-floating')
+    def test_fast_frames_remove_unnecessary_idle_delay(self): self.check('frame-fast-cadence')
+    def test_slow_frames_keep_latency_based_backpressure(self): self.check('frame-slow-cadence')
+
     def test_host_confirmed_picture_in_picture_and_job_end_request_teardown(self): self.check('job-floating-supported')
     def test_host_without_floating_mode_hides_only_and_never_opens_external_window(self): self.check('job-floating-unsupported')
     def test_late_completion_result_cannot_reopen_but_new_job_can_rebind(self): self.check('job-next-task')
