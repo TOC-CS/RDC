@@ -46,3 +46,17 @@ The source fixes cover visible SwiftUI Form descendants behind a nonaccessible
 CollectionView and iOS WDA selectors omitting the AppiumAUT wrapper. They retain
 hidden-window and secure-field protections. Native saved-password filling is
 unsupported. The campaign is 97/100; no unrestricted tests or CI reruns.
+
+## Client-independent mobile command preview
+
+When the connected worker actually advertises rdc_mobile_command_read and
+rdc_mobile_command_execute, inspect capabilities first. Choose direct device
+operations for application lifecycle, native UI for accessible controls, and
+verified visual gestures only where needed. For local commands, select the
+RDC companion's local terminal and require a fresh matching result receipt.
+Existing durable jobs run on the selected worker host, not the mobile OS.
+No arbitrary driver scripts, guessed coordinates, or automatic replay.
+See the development preview guide in the source repository:
+https://github.com/TOC-CS/RDC/blob/feature/rdc-mobile-command-engine-20261124/docs/MOBILE-COMMAND-ENGINE.md
+Source availability does not establish installed runtime or physical speed
+qualification.

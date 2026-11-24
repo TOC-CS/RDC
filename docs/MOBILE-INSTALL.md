@@ -357,3 +357,12 @@ capture refusal and explicit cleanup. WDA rejected coordinate swipe; usable
 live preview, wireless/recovery/app-switching, Xcode-free WDA startup and
 Android/iPad hardware qualification remain open. All temporary servers and
 sessions were stopped. See the dated evidence for the combined 97/100 ledger.
+
+## Mobile command-engine preview
+
+The new development preview adds a bounded local command interpreter and a
+client-independent mobile command router. See [command engine setup and use](MOBILE-COMMAND-ENGINE.md).
+The earlier installer and qualification details above describe the previous
+status-only companion. Do not use them as proof that a later build is installed,
+qualified, or ready for production. Consult the versioned preview manifest for
+the exact current download and signing/installation status.

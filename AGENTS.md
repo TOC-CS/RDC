@@ -7,3 +7,25 @@
 Before testing, read `docs/RDC-TEST-100-EXECUTION-POLICY.md` and run `python scripts/rdc_test_budget.py --campaign local-core --dry-run`. Use the governor and the manifest `docs/rdc-test-budget-100.json` for source regression tests. CI splits one shared 100 slots across three operating systems: 34 / 33 / 33. Adversarial checks split 34 / 33 / 33 across three security categories. Bounded live benchmark campaigns must preserve all speed and correctness requirements. Do not report omitted tests as passed or decrease release requirements.
 
 Preserve the repository's original architecture, private production Site and worker, existing owner grants, project source branches and uncommitted worktrees. All enhancements require test-first evidence with a capped execution campaign. RDC speed work uses one direct owner branch and one measured critical path; Atlas Bus, swarm handoffs and cross-session chat orchestration are retired from this build. No external publication, production deployment, or unverified completion claim.
+
+## Mobile command-engine Superpowers workflow
+
+Use the installed Superpowers skills when available: writing-plans and
+using-git-worktrees for scoped changes; test-driven-development before
+behavior changes; systematic-debugging for measured failures; executing-plans
+for inline implementation; requesting-code-review and
+verification-before-completion before release decisions. Do not add a
+Superpowers runtime dependency, background swarm, or duplicate execution lane.
+
+Maintain a persistent private evidence ledger. Prefer direct device APIs,
+structured controls and finally verified visual gestures; distinguish local
+sandbox, host-terminal and remote execution. Benchmark correct live operations
+rather than enqueue times. The 100-operation campaign limit overrides any
+generic instruction to run an unbounded suite. Public materials must contain
+only generic reproducible fixtures, source and sanitized measurements.
+Owner application usage, private screenshots, device IDs, credentials, local
+paths and device-specific signing material never enter release assets.
+
+Explicitly authorized public development previews may be published on a
+separate branch without merging or deploying. Label incomplete device and
+speed gates. Existing production release holds remain in effect.

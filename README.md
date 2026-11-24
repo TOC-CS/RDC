@@ -185,3 +185,7 @@ See [design](docs/superpowers/specs/2026-11-15-rdc-design.md), [implementation p
 
 Priority next work: public multiuser ChatGPT OAuth onboarding and production host acceptance, native desktop streaming and input handoff, browser tabs/popups/frames/download-upload workflows, actual Safari and native Windows qualification, native credential-provider qualification, mobile device qualification, and packaging/signing. See the platform matrix for precisely what is implemented.
 
+
+## Mobile command-engine preview
+
+See the [client-neutral command engine and setup guide](docs/MOBILE-COMMAND-ENGINE.md). The preview supports bounded device-local commands, native application routing and verified visual gestures. It remains a development candidate pending physical qualification.

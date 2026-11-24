@@ -12,8 +12,8 @@ targets:
       path: generated/Info.plist
       properties:
         CFBundleDisplayName: RDC Mobile
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.1.1"
+        CFBundleVersion: "2"
         UILaunchScreen: {}
         NSLocalNetworkUsageDescription: Connect to your owner-authorized RDC gateway on your local network.
     settings:

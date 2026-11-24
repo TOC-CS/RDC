@@ -1,57 +1,44 @@
 {
-  "schema_version": 1,
-  "status": "development-only",
-  "date": "2026-11-23",
-  "source_branch": "feature/rdc-mobile-install-20261123",
-  "qualified_adapter_revision": "2328f7c",
-  "bundle_id": "org.tocministries.rdc.mobile",
-  "companion_scope": "read-only gateway status",
+  "schema_version": 2,
+  "status": "development-preview",
+  "worker_version": "0.1.0a12",
+  "companion_version": "0.1.1",
+  "source_branch": "feature/rdc-mobile-command-engine-20261124",
   "android": {
-    "file": "RDC-Mobile-Android-development.apk",
-    "bytes": 41467,
-    "sha256": "25c68b7394399e6ba118c54e185e72733beba97e5c4769df15438c5f19755643",
-    "signing": "development v2/v3; private key excluded",
+    "file": "RDC-Mobile-Android-0.1.1-development.apk",
+    "bytes": 45364,
+    "sha256": "02bcdd7994a3363d12e1f7062308ef3d5d8b1f516fb5df72a7bde514f9db3ba9",
+    "signature": "development v2/v3 verified; alignment verified",
     "min_api": 26,
     "target_api": 36,
     "physical_install_verified": false
   },
   "ios": {
-    "delivery": "owner-private, not present in repository or plugin",
-    "file": "RDC-Mobile-iOS-development.ipa",
-    "bytes": 548732,
-    "sha256": "02afa583af94efcaaad2b12423edaeefa2fcbf51e7f4f48917502efa27920e07",
-    "signing": "exact-device Apple development profile",
-    "profile_expiration_utc": "2026-12-01T02:28:07Z",
+    "delivery": "source kit, owner-specific signing required",
     "minimum_source_target": "17.0",
-    "qualified_os": "26.6.1",
-    "install_verified": true,
-    "launch_independently_verified": true,
-    "ipad_verified": false
+    "unsigned_compile_verified": true,
+    "physical_install_verified": false
   },
-  "native_control_verified": [
-    "iPhone session creation",
-    "accessibility observation",
-    "tap",
-    "nonsecure typing",
-    "secure-screen capture refusal",
-    "explicit close and empty session readback"
-  ],
-  "open_gates": [
-    "swipe/scroll",
-    "privacy-safe live preview",
-    "wireless",
-    "hardware reconnect/no-replay",
-    "app switching",
-    "Xcode-free WDA startup",
-    "Android/iPad hardware",
-    "expanded companion UI",
-    "production deployment"
-  ],
-  "campaign": {
-    "id": "rdc-mobile-resume-20261123",
-    "executed": 97,
-    "limit": 100,
-    "includes_failures_and_reruns": true,
-    "ci_runtime_tests": "not rerun for publication"
+  "native_source_archive": {
+    "file": "RDC-native-mobile-source-0.1.1.zip",
+    "bytes": 363157,
+    "sha256": "4e52f9b867ab7c9a6f0342be7545a6ee308722d90c761a266e11f0f2e5e27e06"
+  },
+  "legacy_android": {
+    "file": "RDC-Mobile-Android-development.apk",
+    "bytes": 41467,
+    "sha256": "25c68b7394399e6ba118c54e185e72733beba97e5c4769df15438c5f19755643",
+    "scope": "previous status-only companion"
+  },
+  "walkthrough": {
+    "file": "INSTALL.md",
+    "bytes": 3447,
+    "sha256": "38ae0e02080171e8d0b2434f5315a87a38db40f6b56f6a7ba88b158a94c61846"
+  },
+  "qualification": {
+    "selected_source_regressions_passed": 30,
+    "production_activated": false,
+    "live_latency_qualified": false,
+    "remote_ssh_qualified": false
   }
 }

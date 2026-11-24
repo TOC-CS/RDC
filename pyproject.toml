@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rdc-agent-workspace"
-version = "0.1.0a8"
+version = "0.1.0a12"
 description = "Open agent workspaces with durable jobs, independent browsers, and a live preview"
 requires-python = ">=3.11"
 license = "MIT"
