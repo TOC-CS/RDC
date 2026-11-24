@@ -280,3 +280,34 @@ def preferred_device_metrics(udid,backend="auto"):
         return {**evidence,**merged,"backend":"pymobiledevice3+libimobiledevice",
                 "metrics_status":"complete" if len(merged)==6 else "partial"}
     return {**fallback,"backend":"libimobiledevice"}
+
+
+def developer_preflight(udid):
+    """Readiness only; never mount a DDI or expose RemoteXPC endpoints."""
+    if not isinstance(udid,str) or not re.fullmatch(r"[A-Za-z0-9-]{8,128}",udid):
+        return {"developer_status":"invalid_target","remote_xpc_connected":False}
+    evidence=usb_check(udid)
+    result={**evidence,"remote_xpc_connected":False,"native_ui_verified":False}
+    if evidence.get("trust_accepted") is not True:
+        return {**result,"developer_status":"trust_required"}
+    python=_pmd_python()
+    if not python:
+        return {**result,"developer_status":"library_required"}
+    obj=_safe_json_command([python,"-I",str(Path(__file__).with_name("ios_developer_probe.py")),udid],timeout=24)
+    for field in ("developer_mode","developer_image_mounted"):
+        if type(obj.get(field)) is bool:
+            result[field]=obj[field]
+    status=obj.get("developer_status")
+    if status not in ("unavailable","trust_required","developer_mode_required","identity_mismatch","tunnel_verified"):
+        status="unavailable"
+    count=obj.get("remote_service_count")
+    if status=="tunnel_verified" and obj.get("remote_xpc_connected") is True and result.get("developer_mode") is True and type(count) is int and 0<=count<=4096:
+        result["remote_xpc_connected"]=True
+        result["remote_service_count"]=count
+        for field in ("application_service_advertised","device_info_service_advertised",
+                      "debug_service_advertised","instruments_service_advertised","image_service_advertised"):
+            if type(obj.get(field)) is bool:
+                result[field]=obj[field]
+    elif status=="tunnel_verified":
+        status="unavailable"
+    return {**result,"developer_status":status}

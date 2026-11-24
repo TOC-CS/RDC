@@ -38,6 +38,11 @@ MESSAGES = {
     'invalid_config': 'Invalid mobile profile. Use an owner-defined native Android/UiAutomator2 or iOS/XCUITest profile with a safe endpoint and flat capabilities.',
     'invalid_arguments': 'Invalid mobile arguments. Use the advertised tool schema and current observation.',
     'unknown_tool': 'Unknown mobile tool.',
+    'mirror_disabled': 'Owner opt-in and a desktop grant are required for Apple iPhone Mirroring.',
+    'mirror_unavailable': 'The exact Apple iPhone Mirroring window or menu is unavailable. No other window was selected.',
+    'mirror_outcome_unknown': 'Mirroring menu dispatch could not be confirmed. Inspect the phone; do not replay the action.',
+    'developer_preflight_conflict': 'Close native mobile sessions before running developer-service diagnostics.',
+    'mirror_conflict': 'Close native mobile sessions before using the separate owner-mediated mirroring route.',
     'closed': 'Mobile adapters are closed.',
     'profile_not_found': 'The owner has not configured that mobile profile.',
     'session_limit': 'At most eight mobile sessions may run. Close an existing session first.',
@@ -129,6 +134,11 @@ def _catalog():
         ('list', 'List owner-configured native mobile profiles and active sessions. Private connection details are omitted.', False, {}, ()),
         ('ios_status', 'Read battery, storage, Developer Mode and trusted USB connectivity for an owner-configured iOS profile on this Mac. Auto prefers PyMobileDevice3, with libimobiledevice fallback. Go-iOS verifies identity only. Does not start automation or expose identifiers.', False,
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},'backend':{'type':'string','enum':['auto','pymobiledevice3','libimobiledevice','go-ios']}}, ('profile',)),
+        ('ios_developer_preflight', 'Verify the owner-configured iOS USB Developer Mode, personalized developer image and a temporary no-root RemoteXPC tunnel. Does not mount images, install apps, pair devices, start UI automation, or expose service addresses.', False,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
+        ('mirror_observe', 'Read only the exact Apple iPhone Mirroring window and available fixed navigation commands. Requires owner opt-in. No phone contents or device identity are returned.', False, {}, ()),
+        ('mirror_navigate', 'Request one owner-reviewed Apple iPhone Mirroring menu action with a fresh observation. The owner must verify the Apple-selected phone. No arbitrary input, capture or retry.', True,
+         {'observation_id':string,'action':{'type':'string','enum':['home','app_switcher','spotlight']}}, ('observation_id','action')),
         ('start', 'Start one native Appium session using an owner-configured profile. This may launch the configured app and use the selected device screen.', True,
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
         ('observe', 'Read bounded native labels and fresh control handles. Editable values and secure field labels are redacted.', False, session, ('session_id',)),
@@ -277,6 +287,8 @@ class Mobile:
         validate_mobile_profiles(profiles)
         self._profiles = copy.deepcopy(profiles)
         self._sessions = {}
+        from .ios_mirroring import Mirroring
+        self._mirroring = Mirroring(settings)
         self._lock = threading.RLock()
         self._status_lock = threading.Lock()
         self._closed = False
@@ -336,7 +348,20 @@ class Mobile:
             if action == 'screenshot': return self.snapshot(args['session_id'])
             self._publish_status(busy=True)
             try:
-                if action == 'start': return self._start(args['profile'])
+                if action in ('mirror_observe','mirror_navigate'):
+                    if self._sessions: fail('mirror_conflict')
+                    if action == 'mirror_observe': return self._mirroring.observe()
+                    return self._mirroring.navigate(args['observation_id'],args['action'])
+                if action == 'start':
+                    self._mirroring.observation = None
+                    return self._start(args['profile'])
+                if action == 'ios_developer_preflight':
+                    if self._sessions: fail('developer_preflight_conflict')
+                    profile = self._profiles.get(args['profile'])
+                    if profile is None or profile['platformName'] != 'iOS':
+                        fail('profile_not_found')
+                    from .ios_usb import developer_preflight
+                    return developer_preflight(profile['capabilities']['appium:udid'])
                 if action == 'ios_status':
                     profile = self._profiles.get(args['profile'])
                     if profile is None or profile['platformName'] != 'iOS':

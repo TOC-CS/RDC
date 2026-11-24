@@ -200,3 +200,38 @@ Developer services, screen interaction, signed app installation and
 wireless hardware acceptance remain separate gates. Existing phone
 passcode and trust settings are preserved. Developer Mode must be
 enabled by the owner through Apple's supported setup.
+
+### Developer services and Apple Mirroring (development candidate)
+
+After Developer Mode is enabled on the phone, the optional
+`rdc_mobile_ios_developer_preflight` tool checks the exact owner-configured
+USB profile and opens and closes a temporary, no-root RemoteXPC tunnel.
+It reports only developer readiness, image mount state, and allowlisted
+service availability, not connection addresses, raw device data, or
+device identifiers. A successful tunnel does not by itself qualify UI
+automation.
+
+The physical iOS 26.6.1 device required the Apple-personalized Cryptex DDI
+route rather than the initial PersonalizedDMG mount. The owner-authorized
+first installation completed successfully using Apple's signing service.
+An independent subsequent preflight confirmed the mount and application
+and device-info service availability. No replacement or uninstall was
+performed. Developer-image installation is an explicit setup operation;
+the read-only preflight never installs or repairs an image.
+
+For Apple iPhone Mirroring, a local owner can opt in by setting
+`ios_mirroring_enabled: true` and an existing non-disabled desktop grant.
+`rdc_mobile_mirror_observe` reads the exact Apple app's window metadata
+and available Home Screen, App Switcher, and Spotlight menu commands.
+`rdc_mobile_mirror_navigate` consumes a fresh observation and always
+requires a local owner decision, even in trusted mode. It does not return
+phone screen content, type text, accept arbitrary coordinates, or replay
+an uncertain command. The owner must independently verify the Apple-selected
+phone. Native Appium sessions and mirroring navigation cannot run concurrently
+through this adapter. The connected window was verified; physical menu action
+outcomes remain unqualified.
+
+iPhone Mirroring also requires its own Apple account/Continuity setup and
+an available wireless connection. On this host, Internet Sharing was
+disabled by the owner to resolve the connection conflict. The separate
+USB developer transport remained operational.

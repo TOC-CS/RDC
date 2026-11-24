@@ -32,6 +32,22 @@
       "python_offset": 0,
       "python_take": 19
     },
+    "ios-developer-preflight": {
+      "description": "Three bounded developer preflight exact-target, privacy and fail-closed checks.",
+      "node_files": [],
+      "python_module": "tests.test_ios_developer_preflight",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 3
+    },
+    "ios-mirroring-navigation": {
+      "description": "Five owner-mediated Apple Mirroring opt-in, stale identity, no-replay and approval tests.",
+      "node_files": [],
+      "python_module": "tests.test_ios_mirroring",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
     "ios-preferred-backends": {
       "description": "Five bounded primary, fallback and independent Go-iOS identity checks.",
       "node_files": [],

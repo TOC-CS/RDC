@@ -64,3 +64,24 @@ backend and independently verified the Go-iOS device identity.
 libimobiledevice fallback is retained. No tunnel daemon, native UI action,
 signed application installation, production changes or phone data changes.
 Developer Mode remained disabled. No live release gates are closed.
+
+## Follow-up: developer mode, mirroring and native developer image
+
+Owner enabled Developer Mode and disabled the Mac's Internet Sharing.
+The connected Apple iPhone Mirroring window was verified without capturing
+phone content. Five new mirroring software checks and three developer
+preflight checks passed. An isolated RDC worker successfully detected
+available mirroring navigation commands and opened and closed a no-root
+USB RemoteXPC tunnel. The initially advertised service count was 61.
+
+The initial PersonalizedDMG mount failed; readback showed no mounted image.
+The phone subsequently confirmed compatible Cryptex service and no existing
+developer image. A single owner-authorized Apple-personalized Cryptex
+first installation succeeded without replacing or uninstalling an image.
+Independent readback confirmed both the installed record and mount. The
+subsequent developer preflight returned 82 advertised services, including
+application and device-info services. Device trust and Developer Mode were
+still enabled. No personal device content was accessed or changed by these
+development operations. Physical UI action qualification, signed companion
+packaging, wireless direct control, and existing production release gates
+remain open. No production deployment or merge occurred.
