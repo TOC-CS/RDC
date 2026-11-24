@@ -111,3 +111,33 @@ tests: network/emulator exclusion, unauthorized device refusal, private
 exact transport status, private profile creation and configured-profile
 worker routing. No physical Android device was connected and no live
 Android control, signed APK or release qualification is claimed.
+
+## Native companion source projects
+
+Added dependency-light Android Java and iOS SwiftUI native companion
+source, platform manifest/project definitions, branded app icons and
+portable connection-contract tests. Both target the existing independent
+read-only gateway status API. They do not implement unrestricted phone
+control, use full-control credentials or change any installed phone app.
+Android disables app backup and cleartext transport; iOS retains default
+ATS and certificate verification. Both reject redirects and bound
+responses; tokens are transient and not written to persistent settings.
+
+Installed official Android command-line tools (SDK manager 22.0); the
+host's existing OpenJDK 25.0.5.0.3 runs successfully. Android SDK Platform
+36 and Build Tools 36.0.0 were requested without accepting licenses.
+The SDK manager stopped at its required owner license acceptance prompt.
+No license acceptance, APK signing or device installation occurred.
+
+A new fixed native companion connection-contract campaign ran 35 checks
+across the Java JVM and Swift macOS host: 15 Java and 20 Swift checks,
+all passed. Both portable contracts compiled; SwiftUI syntax parsing,
+Android manifest XML parsing and Android build-script syntax passed.
+The full native UI targets have not been compiled against their device
+SDKs or installed. iPhoneOS SDK remains absent and code-signing identity
+count is zero. The iPhone native application-launch capability from the
+previous campaign remains verified; full touchscreen qualification and
+signed companion distribution remain open.
+
+The existing release gates and production hold remain in effect.
+No personal apps or production gateway settings were changed.
