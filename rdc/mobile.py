@@ -64,6 +64,7 @@ MESSAGES = {
     'secure_input_required': 'This is a native secure field. The owner must enter the value on the device; native credential-provider filling is not available.',
     'screenshot_redaction_required': 'This native session contains or previously exposed a secure field. Safe image masking is unavailable, so no screenshot was returned. Do not bypass this refusal with another capture route.',
     'screenshot_failed': 'Native screenshot privacy or capture could not be verified. No image was returned.',
+    'compact_preview_unavailable': 'Compact mobile previews require the optional Pillow mobile extra. No image was returned.',
 }
 
 
@@ -156,10 +157,15 @@ def _catalog():
         ('tap', 'Tap a current observed native control once. No automatic retry follows an uncertain outcome.', True, control, ('session_id','observation_id','handle')),
         ('fill', 'Replace text in a current nonsecure editable native control. Secure fields require owner input on the device.', True,
          control | {'text':{'type':'string','maxLength':4000}}, ('session_id','observation_id','handle','text')),
-        ('swipe', 'Swipe in native logical coordinates from a current observation. Refresh the observation after any input.', True,
-         observed | coordinates | {'duration_ms':{'type':'integer','minimum':50,'maximum':10000}},
+        ('swipe', 'Swipe in native logical coordinates from a current observation. On iOS, optionally use a freshly observed noneditable control as an explicit coordinate anchor. Refresh after input; never retry an uncertain gesture.', True,
+         observed | coordinates | {'duration_ms':{'type':'integer','minimum':50,'maximum':10000}, 'anchor_handle':control['handle']},
          ('session_id','observation_id','start_x','start_y','end_x','end_y')),
-        ('screenshot', 'Capture the native screen only after privacy checks. Secure or unverifiable screens fail closed.', False, session, ('session_id',)),
+        ('gesture', 'Perform one bounded simultaneous one- or two-finger iOS gesture in a freshly observed noneditable anchor. Uses logical screen coordinates; no automatic retry.', True,
+         observed | {'anchor_handle':control['handle'], 'touches':{'type':'array','minItems':1,'maxItems':2,
+                      'items':{'type':'object','properties':coordinates,'required':list(coordinates),'additionalProperties':False}},
+                     'move_ms':{'type':'integer','minimum':50,'maximum':2000},'hold_ms':{'type':'integer','minimum':0,'maximum':2000}},
+         ('session_id','observation_id','anchor_handle','touches')),
+        ('screenshot', 'Capture the native screen only after privacy checks. Optional max_edge (320–1600) returns a compact JPEG without changing logical touch coordinates. Secure or unverifiable screens fail closed.', False, session | {'max_edge':{'type':'integer','minimum':320,'maximum':1600}}, ('session_id',)),
         ('close', 'Close the exact native driver session. A failed cleanup remains listed for explicit recovery.', True, session, ('session_id',)),
     ]
     return [{'name':'rdc_mobile_' + name, 'description':description,
@@ -302,6 +308,53 @@ def _png_dimensions(raw):
     return width,height
 
 
+def compact_preview_available():
+    try:
+        from PIL import Image
+        return Image is not None
+    except ImportError:
+        return False
+
+
+def _compact_preview(raw, max_edge):
+    # This function is only called after the full native privacy/capture checks.
+    # Decode bounded PNG, never write an intermediate image or retain metadata.
+    try:
+        from PIL import Image
+    except ImportError:
+        fail('compact_preview_unavailable')
+    expected = _png_dimensions(raw)
+    with Image.open(io.BytesIO(raw), formats=['PNG']) as im:
+        if im.size != expected or getattr(im,'n_frames',1) != 1:
+            raise ValueError('Invalid image geometry')
+        im.load()
+        im.thumbnail((max_edge,max_edge), Image.Resampling.BILINEAR, reducing_gap=2.0)
+        rgb = im.convert('RGB')
+        rgb.info.clear()
+        data = io.BytesIO()
+        rgb.save(data, format='JPEG', quality=70, optimize=False)
+        encoded = data.getvalue()
+        if len(encoded)>MAX_IMAGE_BYTES:
+            fail('output_limit')
+        return encoded,rgb.width,rgb.height
+
+
+def touch_actions(paths, origin, center, move_ms, hold_ms=None):
+    # Each finger has identical tick timing; a batch is a single dispatch.
+    actions = []
+    for i, path in enumerate(paths):
+        sx,sy,ex,ey = (path[k] for k in ('start_x','start_y','end_x','end_y'))
+        cx,cy = center
+        seq = [{'type':'pointerMove','duration':0,'origin':origin,'x':round(sx-cx),'y':round(sy-cy)},
+               {'type':'pointerDown','button':0},{'type':'pause','duration':50},
+               {'type':'pointerMove','duration':move_ms,'origin':origin,'x':round(ex-cx),'y':round(ey-cy)}]
+        if hold_ms is not None: seq.append({'type':'pause','duration':hold_ms})
+        seq.append({'type':'pointerUp','button':0})
+        actions.append({'type':'pointer','id':'rdc-touch' if len(paths)==1 else 'rdc-touch-'+str(i+1),
+                        'parameters':{'pointerType':'touch'},'actions':seq})
+    return actions
+
+
 class Mobile:
     def __init__(self, settings):
         profiles = getattr(settings, 'mobile_profiles', {})
@@ -368,7 +421,7 @@ class Mobile:
             if name not in self._catalog: fail('unknown_tool')
             if next(self._validators[name].iter_errors(args), None) is not None: fail('invalid_arguments')
             action = name.removeprefix('rdc_mobile_')
-            if action == 'screenshot': return self.snapshot(args['session_id'])
+            if action == 'screenshot': return self.snapshot(args['session_id'],max_edge=args.get('max_edge'))
             self._publish_status(busy=True)
             try:
                 if action in ('ios_app_prepare','ios_app_launch'):
@@ -521,6 +574,7 @@ class Mobile:
     def _act(self, session, action, args):
         self._current(session, args['observation_id'])
         handle = None
+        anchor = None
         if action in ('tap','fill'):
             handle = session['handles'].get(args['handle'])
             if handle is None: fail('stale_observation')
@@ -528,20 +582,50 @@ class Mobile:
             if action=='fill' and control['secure']: fail('secure_input_required')
             if not control['can_tap'] or (action=='fill' and (not control['can_fill'] or '\0' in args['text'])):
                 fail('invalid_arguments')
-        elif action == 'swipe':
-            if any(args[key]>=session['width' if key.endswith('_x') else 'height']
-                   for key in ('start_x','start_y','end_x','end_y')):
+        elif action in ('swipe','gesture'):
+            paths = [args] if action=='swipe' else args['touches']
+            if any(path[key]>=session['width' if key.endswith('_x') else 'height']
+                   for path in paths for key in ('start_x','start_y','end_x','end_y')):
                 fail('invalid_arguments')
+            if 'anchor_handle' in args:
+                if session['platform'] != 'iOS': fail('invalid_arguments')
+                if session['sensitive']: fail('secure_input_required')
+                if len({(p['start_x'],p['start_y']) for p in paths})!=len(paths): fail('invalid_arguments')
+                anchor = session['handles'].get(args['anchor_handle'])
+                if anchor is None: fail('stale_observation')
+                control = anchor['control']
+                if control['editable'] or control['secure'] or not control['can_tap']:
+                    fail('invalid_arguments')
+                b = control['bounds']
+                if (b['x'] < 0 or b['y'] < 0 or b['x']+b['width'] > session['width']
+                        or b['y']+b['height'] > session['height']):
+                    fail('invalid_arguments')
+                if any(not (b['x'] <= path[k+'_x'] < b['x']+b['width']
+                            and b['y'] <= path[k+'_y'] < b['y']+b['height'])
+                       for path in paths for k in ('start','end')):
+                    fail('invalid_arguments')
         else:
             fail('unknown_tool')
         # The driver can complete an input even when its response is lost.
         self._invalidate(session)
-        if action == 'swipe':
-            actions = [{'type':'pointer','id':'rdc-touch','parameters':{'pointerType':'touch'},'actions':[
-                {'type':'pointerMove','duration':0,'origin':'viewport','x':args['start_x'],'y':args['start_y']},
-                {'type':'pointerDown','button':0},{'type':'pause','duration':50},
-                {'type':'pointerMove','duration':args.get('duration_ms',400),'origin':'viewport','x':args['end_x'],'y':args['end_y']},
-                {'type':'pointerUp','button':0}]}]
+        if action in ('swipe','gesture'):
+            origin = 'viewport'
+            center = (0,0)
+            if anchor is not None:
+                found = self._wd(session, 'POST', '/element', {'using':'xpath','value':anchor['path']})
+                if not isinstance(found, dict) or not isinstance(found.get(ELEMENT_KEY), str) or not 1<=len(found[ELEMENT_KEY])<=256:
+                    fail('mobile_protocol_error')
+                element_id = found[ELEMENT_KEY]
+                rect = self._wd(session, 'GET', '/element/' + urllib.parse.quote(element_id,safe='') + '/rect')
+                b = anchor['control']['bounds']
+                if not isinstance(rect,dict) or any(type(rect.get(k)) not in (float,int) or not math.isfinite(rect[k])
+                        or abs(rect[k]-b[k])>0.5 for k in ('x','y','width','height')):
+                    fail('stale_observation')
+                center = (rect['x']+rect['width']/2,rect['y']+rect['height']/2)
+                origin = {ELEMENT_KEY:element_id}
+            move_ms = args.get('duration_ms',400) if action=='swipe' else args.get('move_ms',200)
+            hold_ms = None if action=='swipe' else args.get('hold_ms',0)
+            actions = touch_actions(paths,origin,center,move_ms,hold_ms)
             try:
                 self._wd(session, 'POST', '/actions', {'actions':actions})
             except RDCError:
@@ -550,7 +634,7 @@ class Mobile:
                     session['setup_status'] = 'cleanup_required'
                     fail('mobile_cleanup_required')
                 raise
-            session['cursor'] = {'x':args['end_x'],'y':args['end_y']}
+            session['cursor'] = {'x':paths[0]['end_x'],'y':paths[0]['end_y']}
         else:
             found = self._wd(session, 'POST', '/element', {'using':'xpath','value':handle['path']})
             if not isinstance(found, dict) or not isinstance(found.get(ELEMENT_KEY), str) or not 1<=len(found[ELEMENT_KEY])<=256:
@@ -566,16 +650,18 @@ class Mobile:
                                  'y':max(0,min(session['height']-1,bounds['y']+bounds['height']/2))}
         return self._info(session) | {'performed':action}
 
-    def snapshot(self, session_id):
+    def snapshot(self, session_id, max_edge=None):
+        if max_edge is not None and (type(max_edge) is not int or not 320<=max_edge<=1600):
+            fail('invalid_arguments')
         with self._lock:
             if self._closed: fail('closed')
             self._publish_status(busy=True)
             try:
-                return self._snapshot(session_id)
+                return self._snapshot(session_id,max_edge=max_edge)
             finally:
                 self._publish_status()
 
-    def _snapshot(self, session_id):
+    def _snapshot(self, session_id, max_edge=None):
         session = self._sessions.get(session_id)
         if session is None: fail('session_not_found')
         if session.get('setup_status'): fail('mobile_cleanup_required')
@@ -583,6 +669,7 @@ class Mobile:
         try:
             self._native(session)
             self._dimensions(session)
+            capture_size = (session['width'],session['height'])
             before = self._source(session)
             if session['sensitive']: fail('screenshot_redaction_required')
             encoded = self._wd(session, 'GET', '/screenshot')
@@ -591,15 +678,31 @@ class Mobile:
             raw = base64.b64decode(encoded, validate=True)
             pixel_width,pixel_height = _png_dimensions(raw)
             self._native(session)
+            self._dimensions(session)
             after = self._source(session)
             if session['sensitive']: fail('screenshot_redaction_required')
-            if before['digest'] != after['digest']: fail('screenshot_failed')
+            if (capture_size != (session['width'],session['height']) or before['digest'] != after['digest']
+                    or (pixel_width > pixel_height) != (capture_size[0] > capture_size[1])
+                    or abs((pixel_width/pixel_height)/(capture_size[0]/capture_size[1])-1) > .03):
+                self._invalidate(session)
+                fail('screenshot_failed')
         except RDCError as exc:
             if exc.code in ('screenshot_redaction_required','output_limit','mobile_session_gone'): raise
             fail('screenshot_failed')
         except Exception:
             fail('screenshot_failed')
-        return self._info(session) | {'mime_type':'image/png','data':base64.b64encode(raw).decode('ascii'),
+        mime_type = 'image/png'
+        extra = {}
+        if max_edge is not None:
+            extra = {'capture_width':pixel_width,'capture_height':pixel_height}
+            try:
+                raw,pixel_width,pixel_height = _compact_preview(raw,max_edge)
+            except RDCError:
+                raise
+            except Exception:
+                fail('screenshot_failed')
+            mime_type = 'image/jpeg'
+        return self._info(session) | extra | {'mime_type':mime_type,'data':base64.b64encode(raw).decode('ascii'),
             'source_width':pixel_width,'source_height':pixel_height,
             'input_width':session['width'],'input_height':session['height'],
             'input_scale_x':session['width']/pixel_width,'input_scale_y':session['height']/pixel_height,

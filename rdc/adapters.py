@@ -21,7 +21,7 @@ import urllib.request
 import uuid
 from concurrent.futures import Future
 from .errors import RDCError
-from .mobile import Mobile, _native_tree, _png_dimensions, MAX_XML_BYTES, MESSAGES as MOBILE_MESSAGES
+from .mobile import Mobile, _native_tree, _png_dimensions, MAX_XML_BYTES, MESSAGES as MOBILE_MESSAGES, compact_preview_available
 
 MAX_SESSIONS = 8
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
@@ -206,7 +206,9 @@ class Adapters:
     def call(self,name,args):
         descriptor=self._catalog.get(name)
         if descriptor is None: raise RDCError('unknown_tool',f'Unknown adapter tool: {name}')
-        _validate(descriptor['inputSchema'],args)
+        # Native mobile calls use their own full JSON Schema validators, including nested inputs.
+        if not name.startswith('rdc_mobile_'):
+            _validate(descriptor['inputSchema'],args)
         if name.startswith('rdc_browser_'): return self._browser('call',name.removeprefix('rdc_browser_'),args)
         if name.startswith('rdc_window_'):
             with self._native_lock:
@@ -237,7 +239,7 @@ class Adapters:
         if isinstance(session_id,str) and session_id.startswith('mobile-'):
             with self._native_lock:
                 if self._closed: raise RDCError('closed','Adapters are closed')
-                return self.mobile.snapshot(session_id)
+                return self.mobile.snapshot(session_id,max_edge=1280 if compact_preview_available() else None)
         return self._browser('snapshot',session_id)
     def credentials_validate(self,target):
         return self._browser('credentials_validate',target)

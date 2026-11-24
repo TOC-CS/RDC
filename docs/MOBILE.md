@@ -154,3 +154,18 @@ review, syntax/compilation and archive inventory checks can continue without
 claiming additional runtime coverage.
 
 Hardware acceptance must still verify the chosen Appium/driver/OS versions, owner-completed pairing and consent, native field classifications, coordinate scaling, gesture behavior, real secure-field refusal, lifecycle cleanup, and the intended AI host preview. Keep the working installation until the owner's required mobile route passes those checks.
+
+
+## Native preview and touch controls
+
+Native sessions support bounded element-anchored iOS swipes and one- or two-contact
+gestures. Coordinates remain in the observed logical screen space; an anchor
+must resolve to a visible, noneditable, enabled control. Refresh the observation
+after each action. An uncertain action is never repeated automatically.
+
+The optional mobile dependency extra provides compact JPEG previews. A direct
+screenshot remains full-size PNG by default. Set the optional `max_edge` argument
+to 320–1600 pixels for a compact image, or use the embedded viewer's 1280-pixel
+preview when the image library is available. Preview dimensions and input scale
+describe the returned image; original capture dimensions are provided separately.
+The same native privacy, freshness and orientation checks apply to both formats.
