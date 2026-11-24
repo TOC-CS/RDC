@@ -325,3 +325,18 @@ automation. Lock-state uncertainty remains explicit. Neither this tool
 nor its helper returns screen content or permits touch, keyboard input
 or screenshot capture; complete privacy and foreground verification must
 be established before qualifying those operations.
+
+
+### Updated owner-approved packaging policy
+
+The owner subsequently authorized Xcode as an optional development,
+packaging and test-driver tool. The RDC direct USB runtime remains
+independent. Safari and ChatGPT Work are excluded for this session.
+Use native-mobile/ios/build-xcode.sh for isolated unsigned/signed build
+products; the existing standalone helper remains available. Review Apple
+and Google SDK agreements personally before enabling the respective builds.
+The pinned Appium 4.0.1 server and XCUITest 13.6.1 and UiAutomator2 10.1.0
+drivers were installed in a private development directory. A temporary
+loopback server responded successfully and was stopped; no device session
+was started. Physical UI qualification still requires the approved
+WebDriverAgent signing and Android hardware setup.

@@ -172,3 +172,23 @@ or wildcard profiles and preserves existing output. Standalone compiler
 preflight succeeded while the missing iPhoneOS SDK was honestly reported.
 No real iOS compilation, package signing, application installation,
 Android device qualification or production deployment occurred.
+
+
+## Owner-approved Xcode and automation toolchain setup
+
+The owner superseded the Xcode prohibition for compilation and signing.
+Apple's official stable Xcode 27.2 archive was downloaded using authenticated
+Google Chrome, expanded in the logged-in user Terminal, and independently
+verified against the Apple signature requirement and exact bundle ID.
+Xcode 27.2 build 27B52 is installed in Applications. First-launch status
+remains incomplete and the SDK query explicitly reports that Apple's license
+has not been accepted. No agreement was accepted by the assistant. The
+global selected developer directory was not changed.
+
+Appium 4.0.1 and pinned XCUITest 13.6.1 / UiAutomator2 10.1.0 drivers are
+installed in a private development directory. One isolated loopback health
+check succeeded and the temporary server was stopped; no device session
+was created. Added an optional Xcode build script, syntax-checked only,
+with unsigned and owner-selected signed modes. Android SDK Platform 36
+and Build Tools remain pending Google's license acceptance. No IPA or APK
+build or release deployment is claimed.

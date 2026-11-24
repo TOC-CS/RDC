@@ -26,12 +26,12 @@ device. No keys or credentials belong in this repository.
 
 ## iOS: standalone command-line packaging
 
-Owner policy: no Xcode application, Xcode project build, or xcodebuild
-invocation. The active packaging helper uses an explicit standalone Swift
-compiler and a separately supplied, legitimately obtained iPhoneOS device SDK.
+The owner has authorized Xcode for packaging and native test-driver setup,
+while retaining independent RDC runtime operation. The standalone packaging
+helper remains an optional route using an explicit standalone Swift compiler
+and a separately supplied, legitimately obtained iPhoneOS device SDK.
 It rejects paths inside Xcode.app and does not download SDKs or accept
-licenses. The older project.yml is retained as historical project metadata,
-not the active build path.
+licenses. The Xcode project specification is also supported for packaging.
 
 Inspect current readiness without an SDK or credentials:
 
@@ -60,6 +60,15 @@ remains the authority for signing and provisioning. The helper never installs
 an application. A compatible SDK/toolchain and Apple signing prerequisites
 are still required; no full iOS compile or signed IPA has been verified.
 The direct USB developer-control path is separate and does not require Xcode.
+
+For the optional owner-approved Xcode route, install the compatible official
+Apple release, review and accept the first-launch license, finish the required
+platform setup, and sign into Xcode with the owner's development account.
+Run ios/build-xcode.sh unsigned to compile without signing. The signed mode
+requires the exact owner-selected development team and iPhone in local
+environment variables RDC_APPLE_TEAM and RDC_IOS_DEVICE. It does not install
+the application, accept agreements, or automatically update provisioning.
+Complete provisioning through the owner-approved Xcode workflow first.
 
 The independent gateway /mobile/ PWA remains the lower-friction installation
 option on either platform. Physical device acceptance, full native UI control,
