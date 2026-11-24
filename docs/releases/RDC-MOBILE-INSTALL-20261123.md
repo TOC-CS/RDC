@@ -34,3 +34,19 @@ repository, without modifying live worker configuration or phone data.
 These are USB diagnostic and configuration results only. Full Xcode is absent,
 and the host has approximately 6.2 GiB free. Native control and signed
 distribution remain open.
+
+## Follow-up: live iOS metrics through RDC worker
+
+Installed the Homebrew libimobiledevice 1.4.0_3 package and required small
+dependencies on the authorized iMac. Existing trust validated independently.
+A further five synthetic exact-target, schema, privacy, and missing-library
+tests passed. A separately isolated RDC Engine using the private iOS profile
+returned all six allowlisted live metrics via rdc_mobile_ios_status: storage
+capacity, available data capacity, total data capacity, charge percentage,
+charging state, and Developer Mode. USB trust and iOS version were also
+confirmed. No personal data or device identifier was returned or committed.
+No live production worker or plugin change, phone data change, or native
+automation session was made. Native controls remain open pending device
+Developer Mode, Xcode, and signed WebDriverAgent. Host free space was 9.9 GiB.
+The five additional source tests plus this focused live check remain within
+the cumulative 100-check campaign ceiling.

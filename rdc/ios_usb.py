@@ -11,6 +11,8 @@ import plistlib
 import re
 import socket
 import struct
+import subprocess
+import time
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -149,3 +151,56 @@ def write_profile(output,alias,udid=None):
         json.dump(fragment,stream,indent=2)
         stream.write("\n")
     return target
+
+
+def _ideviceinfo():
+    # Owner-installed Homebrew binary only; do not accept an agent path.
+    if sys.platform != "darwin":
+        return None
+    for path in ("/opt/homebrew/bin/ideviceinfo", "/usr/local/bin/ideviceinfo"):
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return None
+
+
+def device_metrics(udid):
+    """Bounded read-only USB diagnostics for an exact owner-selected iOS profile."""
+    if not isinstance(udid,str) or not re.fullmatch(r"[A-Za-z0-9-]{8,128}",udid):
+        return {"metrics_status":"invalid_target"}
+    evidence=usb_check(udid)
+    if evidence.get("trust_accepted") is not True:
+        return {**evidence,"metrics_status":"trust_required"}
+    binary=_ideviceinfo()
+    if binary is None:
+        return {**evidence,"metrics_status":"library_required"}
+    fields=(
+        ("com.apple.disk_usage","TotalDiskCapacity","storage_total_bytes",2**53-1),
+        ("com.apple.disk_usage","TotalDataAvailable","storage_available_bytes",2**53-1),
+        ("com.apple.disk_usage","TotalDataCapacity","storage_data_capacity_bytes",2**53-1),
+        ("com.apple.mobile.battery","BatteryCurrentCapacity","battery_percent",100),
+        ("com.apple.mobile.battery","BatteryIsCharging","charging",None),
+        ("com.apple.security.mac.amfi","DeveloperModeStatus","developer_mode",None),
+    )
+    metrics={}
+    deadline=time.monotonic()+10
+    for domain,key,name,maximum in fields:
+        remaining=deadline-time.monotonic()
+        if remaining<=0:
+            break
+        try:
+            result=subprocess.run([binary,"-u",udid,"-q",domain,"-k",key],
+                stdin=subprocess.DEVNULL,capture_output=True,text=True,
+                timeout=min(remaining,4),env={"PATH":"/usr/bin:/bin","LC_ALL":"C"})
+        except (OSError,subprocess.SubprocessError,UnicodeError):
+            continue
+        if result.returncode!=0 or len(result.stdout)>128:
+            continue
+        value=result.stdout.strip()
+        if maximum is None:
+            if value in ("true","false"):
+                metrics[name]=value=="true"
+        elif re.fullmatch(r"[0-9]{1,16}",value) and 0<=int(value)<=maximum:
+            metrics[name]=int(value)
+    if "storage_available_bytes" in metrics and "storage_data_capacity_bytes" in metrics and metrics["storage_available_bytes"]>metrics["storage_data_capacity_bytes"]:
+        metrics.pop("storage_available_bytes")
+    return {**evidence,**metrics,"metrics_status":"complete" if len(metrics)==len(fields) else "partial" if metrics else "unavailable"}

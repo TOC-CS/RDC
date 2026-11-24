@@ -143,3 +143,29 @@ owner-mediated UI route while native developer tooling is unavailable.
 It uses Apple's own wireless requirements and consent, independent of this
 USB diagnostic. Never use mirroring to bypass a native screenshot privacy
 refusal. It does not qualify the RDC native driver.
+
+### Read-only iOS status without Xcode
+
+Install the optional host communication utility on the Mac:
+
+```sh
+brew install libimobiledevice
+```
+
+After an owner-selected iOS profile is loaded, the candidate RDC worker exposes
+`rdc_mobile_ios_status` with `{"profile":"iphone"}`. It checks existing USB
+trust and reads only fixed battery, storage and Developer Mode fields using
+the host-installed utility. It will not accept raw device identifiers, shell
+commands, arbitrary domains or file paths from the AI client. No personal
+files or app data are returned, and no permissions or phone settings are
+changed. Missing fields are omitted and explicitly marked partial or
+unavailable. This route does not require Xcode, but also cannot tap, type,
+install arbitrary apps or replace native XCUITest control.
+
+On the physical device verified November 23, 2026, iOS 26.6.1, this route
+returned all six metrics from an isolated RDC worker without changes to the
+production worker. Developer Mode was disabled. For XCUITest, the owner must
+complete Apple's Developer Mode and UI Automation requirements and valid
+WebDriverAgent signing; see the official Appium device preparation guide
+linked in MOBILE.md. Apple's separate iPhone Mirroring feature requires
+the nearby iPhone to be locked and the owner to approve its setup.
