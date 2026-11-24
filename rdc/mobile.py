@@ -206,7 +206,8 @@ def _native_tree(source, platform):
         if len(rows)>=5000 or len(stack)>=64: raise ValueError('Native source bound exceeded')
         parent = stack[-1] if stack else None
         if parent is None:
-            path = '/*[1]'
+            # Appium adds this source-only wrapper; WDA XPath starts at the app.
+            path = '' if platform == 'iOS' and element.tag == 'AppiumAUT' else '/*[1]'
         else:
             parent['children'] += 1
             path = parent['path'] + '/*[' + str(parent['children']) + ']'
@@ -229,13 +230,22 @@ def _native_tree(source, platform):
             editable = kind.endswith(('TextField','TextView'))
             secure = kind == 'XCUIElementTypeSecureTextField' or _flag(a, 'secure')
             interactive = editable or secure or kind.endswith(('Button','Switch','Cell','Link','Slider','Key','PickerWheel','SegmentedControl')) or _flag(a,'accessible')
-            visible = _flag(a, 'visible', True)
+            visible = _flag(a, 'visible', parent['visible'] if parent else True)
             label = a.get('label') or a.get('name') or ''
         else:
             raise ValueError('Unsupported native platform')
+        # SwiftUI Form may report a nonaccessible collection container as
+        # invisible while its on-screen children are explicitly visible.
+        # Only that structural container is transparent to visibility;
+        # hidden apps, windows, controls and unspecified children stay hidden.
+        collection_container = (platform == 'iOS'
+            and kind == 'XCUIElementTypeCollectionView' and not interactive)
+        visibility_blocked = ((parent is not None and parent['visibility_blocked'])
+            or (not visible and not collection_container))
         row = {'element':element,'path':path,'parent':parent,'children':0,'wrapper':wrapper,'kind':kind,
             'editable':editable or secure,'secure':secure,'interactive':interactive,
-            'visible':visible and (parent is None or parent['visible']), 'enabled':_flag(a,'enabled', True),
+            'visible':visible and not visibility_blocked, 'visibility_blocked':visibility_blocked,
+            'enabled':_flag(a,'enabled', True),
             'bounds':_bounds(a,platform), 'label':label, 'private_branch':editable or secure,
             'private_ancestor':parent is not None and (parent['editable'] or parent['private_ancestor'])}
         rows.append(row)

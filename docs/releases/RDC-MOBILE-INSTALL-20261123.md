@@ -273,3 +273,62 @@ This remains a read-only gateway companion. Secure pairing, host/device and
 task management, operation approval, expanded native interfaces, and the
 complete mobile companion experience remain unfinished. No production
 worker, gateway, TOC VPS, public release or GitHub deployment changed.
+
+## Owner-authenticated native control — November 23, 2026
+
+After the owner trusted the development profile, CoreDevice launched RDC
+successfully. Independent process readback verified the installed RDCMobile
+executable running. The immediate signed-install-and-launch milestone is
+therefore achieved; the earlier trust-pending entry is historical.
+
+The first two native test-runner attempts failed with Apple's local
+authentication timeout. A later read-only inspection identified the
+XCTest authentication sheet inside the iPhone Mirroring window. The owner
+completed authentication directly. Appium then established a native
+XCUITest session with logical display size 440 x 956. No password or token
+was entered by the agent or recorded in source.
+
+Physical qualification exposed and fixed two adapter defects:
+- SwiftUI Form reported a nonaccessible CollectionView as invisible while
+  its actual children were explicitly visible. Only that structural
+  container now permits independently visible descendants; hidden apps,
+  windows, accessible containers and missing/false child visibility remain
+  blocked.
+- Appium's AppiumAUT source wrapper does not exist in WDA's XPath lookup
+  tree. iOS positional selectors now omit it. Android selectors are
+  unchanged.
+
+Both defects were reproduced by failing tests before the fixes. The first
+focused corrected run passed 14 cases; the final run after the XPath
+correction passed 11 cases. Privacy, hidden-node handling, observation
+freshness and no-replay regression cases were included. Full-library
+coverage is not claimed.
+
+Verified on the actual iPhone after the fixes:
+- Native Appium/XCUITest session creation and accessibility observation.
+- An observed Clear session button tap, independently checked through the
+  resulting Connection not checked status.
+- Nonsecure typing of a reserved invalid-domain test URL, compared
+  privately with the actual field value; no field value was exported.
+- Secure-screen capture refusal with screenshot_redaction_required.
+- Explicit session closure followed by an empty native-session list.
+- Final clearing of the test state and orderly temporary-server shutdown.
+
+The coordinate swipe was rejected by WDA with:
+No non-empty application window on display 1 is available as a coordinate
+anchor. It was not retried or treated as successful. Source inspection
+locates the rejection in WDA's display/window coordinate selection; a
+causal connection to iPhone Mirroring is not yet established.
+
+The combined campaign now uses 97/100 slots, including failed attempts,
+negative checks and all regression reruns. It has not been reset or split.
+The private physical-native-control-receipt.json records tap/typing
+success and the swipe failure; physical-privacy-cleanup-receipt.json
+records the final secure-screen refusal and clean closure.
+
+Remaining OPEN: swipe/scroll qualification, safe live previews beyond the
+secure-screen refusal, wireless operation, automatic recovery/no-replay
+qualification on hardware, app switching, an Xcode-free WDA startup path,
+physical Android/iPad qualification and the expanded companion experience.
+The source fixes are limited to the development branch; the production
+worker and TOC infrastructure remain unchanged.
