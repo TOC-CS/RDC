@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "rdc",
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0-alpha.9",
   "description": "Remote Desktop Commander by TOC Ministries: a free, MIT-licensed local worker for compatible MCP clients, with files, durable jobs, independent browsers, headless automation, embedded previews, and optional device adapters.",
   "author": {
     "name": "TOC Ministries"

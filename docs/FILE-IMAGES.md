@@ -32,6 +32,14 @@ during inspection is rejected.
 
 Read images individually. Text batch reads and project context reads report
 an image-specific error instead of embedding image bytes in a text batch.
+
+WebP RIFF lengths, canvas dimensions and frame bounds are checked before the
+native decoder is created. Malformed containers and canvases above the existing
+pixel limit are rejected. Image inspection also rechecks the granted path, its
+resolved parent directories and the open file's identity before returning a
+preview. Replacing a parent directory during the read produces a conflict even
+when the replacement refers to the same file inode.
+
 Image inspection requires Pillow, now included in the worker's core
 dependencies. Upgrade the paired worker and refresh the MCP tool catalog before
 using the new optional arguments.

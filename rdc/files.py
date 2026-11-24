@@ -55,8 +55,26 @@ class Files:
                 raise RDCError('not_regular_file','Only regular files can be read.')
             yield source
 
+    def _image_location(self, file_path, path, *, initial=False):
+        """Recheck the granted path and the identity of every resolved parent."""
+        from .file_images import _fingerprint
+        try:
+            if self.resolve(file_path) != path:
+                raise RDCError('conflict', 'Image location changed during inspection. Read it again.')
+            parents = []
+            for parent in path.parents:
+                info = parent.stat(follow_symlinks=False)
+                if not stat.S_ISDIR(info.st_mode):
+                    raise RDCError('conflict', 'Image location changed during inspection. Read it again.')
+                parents.append((info.st_dev, info.st_ino))
+            return tuple(parents), _fingerprint(path.stat(follow_symlinks=False))
+        except OSError:
+            if initial:
+                raise
+            raise RDCError('conflict', 'Image location changed during inspection. Read it again.') from None
+
     def read(self, file_path, offset=0, limit=None, mode='auto', max_edge=1280):
-        from .file_images import identify_image, read_image
+        from .file_images import _fingerprint, identify_image, read_image
         if mode not in ('auto','text','image'):
             raise RDCError('invalid_arguments', 'Read mode must be auto, text or image.')
         if type(max_edge) is not int or not 320 <= max_edge <= 1600:
@@ -64,15 +82,23 @@ class Files:
         if mode=='image' and (offset or limit is not None):
             raise RDCError('invalid_arguments', 'Images must be read without byte pagination.')
         path = self.resolve(file_path)
+        location = self._image_location(file_path, path, initial=True) if mode != 'text' else None
         with self._open_regular(path) as source:
             info = os.fstat(source.fileno())
+            def image_guard():
+                if (self._image_location(file_path, path) != location
+                        or _fingerprint(info) != location[1]
+                        or _fingerprint(os.fstat(source.fileno())) != _fingerprint(info)):
+                    raise RDCError('conflict', 'Image location changed during inspection. Read it again.')
+            if location is not None:
+                image_guard()
             detected = None if mode=='text' else identify_image(source.read(16))
             source.seek(0)
             if mode=='image' or detected is not None:
                 if offset or limit is not None:
                     raise RDCError('image_read_required', 'Read this image individually without byte pagination.')
                 return read_image(source, path, info, detected, max_edge=max_edge,
-                                  output_limit=self.settings.max_read_bytes)
+                                  output_limit=self.settings.max_read_bytes, guard=image_guard)
             limit = min(limit or self.settings.max_read_bytes, self.settings.max_read_bytes)
             # Hash without loading an entire large file into memory.
             digest = hashlib.file_digest(source, 'sha256').hexdigest()
