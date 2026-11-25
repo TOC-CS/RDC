@@ -92,7 +92,9 @@ class NativeDriver(BaseHTTPRequestHandler):
         elif path.endswith('/context'):
             value = state.context
         elif path.endswith('/window/rect'):
-            value = state.rect
+            value = state.rects.pop(0) if state.rects else state.rect
+        elif path.endswith('/element/native-element/rect'):
+            value = state.element_rect
         elif path.endswith('/source'):
             value = state.sources.pop(0) if state.sources else state.source
         elif path.endswith('/element'):
@@ -116,7 +118,7 @@ class MobileTests(unittest.TestCase):
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), NativeDriver)
         self.server.state = SimpleNamespace(requests=[], created=0, active=set(), fail_setup=False, expired=False,
             fail_delete=0, fail_path=None, malformed_caps=False, context='NATIVE_APP',
-            rect={'x': 0, 'y': 0, 'width': 400, 'height': 800}, source=ANDROID_XML,
+            rect={'x': 0, 'y': 0, 'width': 400, 'height': 800}, rects=[], element_rect={'x':10,'y':130,'width':100,'height':50}, source=ANDROID_XML,
             sources=[], screenshot=base64.b64encode(png()).decode())
         self.driver = self.server.state
         self.thread = threading.Thread(target=lambda:self.server.serve_forever(poll_interval=.01), daemon=True)
@@ -534,6 +536,69 @@ class MobileTests(unittest.TestCase):
         self.assertEqual('screenshot_failed', error.exception.code)
         self.assertNotIn('PRIVATE_INPUT_VALUE', str(error.exception))
 
+    def test_compact_snapshot_returns_decodable_image_and_correct_scale(self):
+        from PIL import Image
+        sid=self.start()
+        shot=self.mobile.call('rdc_mobile_screenshot',{'session_id':sid,'max_edge':800})
+        self.assertEqual('image/jpeg',shot['mime_type'])
+        self.assertEqual((800,1600),(shot['capture_width'],shot['capture_height']))
+        self.assertEqual((400,800),(shot['source_width'],shot['source_height']))
+        self.assertEqual((1,1),(shot['input_scale_x'],shot['input_scale_y']))
+        with Image.open(io.BytesIO(base64.b64decode(shot['data']))) as im:
+            im.load()
+            self.assertEqual(('JPEG',(400,800)),(im.format,im.size))
+            self.assertFalse(im.getexif())
+
+    def test_compact_snapshot_landscape_retains_coordinate_mapping(self):
+        self.driver.rect={'x':0,'y':0,'width':800,'height':400}
+        self.driver.screenshot=base64.b64encode(png(1600,800)).decode()
+        sid=self.start()
+        shot=self.mobile.call('rdc_mobile_screenshot',{'session_id':sid,'max_edge':1280})
+        self.assertEqual((1280,640),(shot['source_width'],shot['source_height']))
+        self.assertEqual((800,400),(shot['input_width'],shot['input_height']))
+        self.assertAlmostEqual(.625,shot['input_scale_x'])
+        self.assertAlmostEqual(.625,shot['input_scale_y'])
+
+    def test_compact_snapshot_does_not_upscale(self):
+        self.driver.screenshot=base64.b64encode(png(400,800)).decode()
+        sid=self.start()
+        shot=self.mobile.call('rdc_mobile_screenshot',{'session_id':sid,'max_edge':1280})
+        self.assertEqual((400,800),(shot['source_width'],shot['source_height']))
+
+    def test_compact_snapshot_secure_screen_blocks_before_capture(self):
+        sid=self.start()
+        self.driver.source=ANDROID_XML.replace('password="false"','password="true"',1)
+        with patch('rdc.mobile._compact_preview') as convert:
+            with self.assertRaises(RDCError) as e:
+                self.mobile.call('rdc_mobile_screenshot',{'session_id':sid,'max_edge':800})
+            self.assertEqual('screenshot_redaction_required',e.exception.code)
+            convert.assert_not_called()
+        self.assertFalse(any(path.endswith('/screenshot') for _,path,_ in self.driver.requests))
+
+    def test_compact_snapshot_stale_source_blocks_conversion(self):
+        sid=self.start()
+        self.driver.sources=[ANDROID_XML,ANDROID_XML.replace('Save','Changed')]
+        with patch('rdc.mobile._compact_preview') as convert:
+            with self.assertRaises(RDCError) as e:
+                self.mobile.call('rdc_mobile_screenshot',{'session_id':sid,'max_edge':800})
+            self.assertEqual('screenshot_failed',e.exception.code)
+            convert.assert_not_called()
+
+    def test_compact_snapshot_invalid_dimensions_rejected_before_capture(self):
+        sid=self.start()
+        before=len(self.driver.requests)
+        with self.assertRaises(RDCError) as e:
+            self.mobile.call('rdc_mobile_screenshot',{'session_id':sid,'max_edge':2000})
+        self.assertEqual('invalid_arguments',e.exception.code)
+        self.assertEqual(before,len(self.driver.requests))
+
+    def test_compact_snapshot_invalid_image_is_not_exported(self):
+        sid=self.start()
+        self.driver.screenshot=base64.b64encode(png()[:33]).decode()
+        with self.assertRaises(RDCError) as e:
+            self.mobile.call('rdc_mobile_screenshot',{'session_id':sid,'max_edge':800})
+        self.assertEqual('screenshot_failed',e.exception.code)
+
     def test_malformed_oversized_deep_or_entity_xml_fails_closed_before_capture(self):
         sid = self.start()
         malformed = [
@@ -587,6 +652,139 @@ class MobileTests(unittest.TestCase):
         self.assertEqual(1, sum(method=='POST' and path.endswith('/actions') for method,path,_ in failed))
         self.assertEqual(1, sum(method=='DELETE' and path.endswith('/actions') for method,path,_ in failed))
 
+    def ios_anchor_fixture(self):
+        self.mobile.close()
+        self.profiles['phone'].update(platformName='iOS', automationName='XCUITest')
+        self.mobile = Mobile(settings(mobile_profiles=self.profiles))
+        self.driver.source = IOS_XML
+        sid = self.start()
+        observation = self.observe(sid)
+        handle = next(c['handle'] for c in observation['controls'] if c['name']=='Save')
+        return sid, {'session_id':sid,'observation_id':observation['observation_id'],
+            'anchor_handle':handle,'start_x':20,'start_y':140,'end_x':90,'end_y':165,'duration_ms':450}
+
+    def test_ios_element_anchor_uses_observed_element_center_and_one_action(self):
+        sid,args=self.ios_anchor_fixture()
+        self.mobile.call('rdc_mobile_swipe',args)
+        sent=[body['actions'] for method,path,body in self.driver.requests if method=='POST' and path.endswith('/actions')]
+        self.assertEqual(1,len(sent))
+        moves=[a for a in sent[0][0]['actions'] if a['type']=='pointerMove']
+        from tests.test_touch_waypoint import resolved_waypoints
+        self.assertEqual([(0,20,140),(50,20,140),(500,90,165)],resolved_waypoints(sent[0][0],(60,155)))
+        self.assertEqual([{'element-6066-11e4-a52e-4f735466cecf':'native-element'},'pointer','pointer'],
+                         [a['origin'] for a in moves])
+        self.assertIsNone(self.mobile.status()['sessions'][0]['observation_id'])
+
+    def test_ios_anchor_stale_rect_rejected_before_input(self):
+        sid,args=self.ios_anchor_fixture()
+        self.driver.element_rect={'x':20,'y':130,'width':100,'height':50}
+        with self.assertRaises(RDCError) as e:self.mobile.call('rdc_mobile_swipe',args)
+        self.assertEqual('stale_observation',e.exception.code)
+        self.assertFalse(any(method=='POST' and path.endswith('/actions') for method,path,_ in self.driver.requests))
+
+    def test_ios_anchor_outside_element_rejected(self):
+        sid,args=self.ios_anchor_fixture()
+        args['end_x']=200
+        with self.assertRaises(RDCError) as e:self.mobile.call('rdc_mobile_swipe',args)
+        self.assertEqual('invalid_arguments',e.exception.code)
+        self.assertFalse(any(path.endswith('/actions') for _,path,_ in self.driver.requests))
+
+    def test_ios_anchor_editable_field_rejected(self):
+        sid,args=self.ios_anchor_fixture()
+        obs=self.observe(sid)
+        args.update(observation_id=obs['observation_id'],anchor_handle=next(c['handle'] for c in obs['controls'] if c['editable']),
+                    start_x=20,start_y=70,end_x=90,end_y=90)
+        with self.assertRaises(RDCError) as e:self.mobile.call('rdc_mobile_swipe',args)
+        self.assertEqual('invalid_arguments',e.exception.code)
+        self.assertFalse(any(path.endswith('/actions') for _,path,_ in self.driver.requests))
+
+    def test_ios_anchor_failure_releases_without_replaying(self):
+        sid,args=self.ios_anchor_fixture()
+        self.driver.fail_path='/actions'
+        with self.assertRaises(RDCError):self.mobile.call('rdc_mobile_swipe',args)
+        self.assertEqual(1,sum(method=='POST' and path.endswith('/actions') for method,path,_ in self.driver.requests))
+        self.assertEqual(1,sum(method=='DELETE' and path.endswith('/actions') for method,path,_ in self.driver.requests))
+        self.assertEqual('cleanup_required',self.mobile.status()['sessions'][0]['setup_status'])
+
+    def test_snapshot_rejects_rotated_image_against_logical_coordinates(self):
+        sid=self.start()
+        self.driver.screenshot=base64.b64encode(png(1600,800)).decode()
+        with self.assertRaises(RDCError) as e:self.snapshot(sid)
+        self.assertEqual('screenshot_failed',e.exception.code)
+
+    def test_snapshot_rejects_orientation_change_during_capture(self):
+        sid=self.start()
+        self.driver.rects=[{'x':0,'y':0,'width':400,'height':800},{'x':0,'y':0,'width':800,'height':400}]
+        with self.assertRaises(RDCError) as e:self.snapshot(sid)
+        self.assertEqual('screenshot_failed',e.exception.code)
+
+    def ios_gesture_fixture(self):
+        sid,old=self.ios_anchor_fixture()
+        args={'session_id':sid,'observation_id':old['observation_id'],'anchor_handle':old['anchor_handle'],
+              'touches':[{'start_x':20,'start_y':140,'end_x':40,'end_y':145},
+                         {'start_x':80,'start_y':155,'end_x':85,'end_y':165}],
+              'move_ms':200,'hold_ms':300}
+        return sid,args
+
+    def test_ios_simultaneous_gesture_sends_one_two_pointer_action(self):
+        sid,args=self.ios_gesture_fixture()
+        self.mobile.call('rdc_mobile_gesture',args)
+        batches=[body['actions'] for method,path,body in self.driver.requests if method=='POST' and path.endswith('/actions')]
+        self.assertEqual(1,len(batches))
+        actions=batches[0]
+        self.assertEqual(2,len(actions))
+        self.assertNotEqual(actions[0]['id'],actions[1]['id'])
+        for a in actions:
+            self.assertEqual(['pointerMove','pointerDown','pointerMove','pointerMove','pause','pointerUp'],[x['type'] for x in a['actions']])
+            self.assertEqual(200,a['actions'][3]['duration'])
+            self.assertEqual(300,a['actions'][4]['duration'])
+        self.assertEqual([(-40,-15),(20,0)],[(a['actions'][0]['x'],a['actions'][0]['y']) for a in actions])
+        from tests.test_touch_waypoint import resolved_waypoints
+        for source in actions:
+            requested=args['touches'][int(source['id'].rsplit('-',1)[1])-1]
+            self.assertEqual((requested['end_x'],requested['end_y']),
+                             resolved_waypoints(source,(60,155))[-1][1:])
+        self.assertIsNone(self.mobile.status()['sessions'][0]['observation_id'])
+
+    def test_ios_gesture_rejects_excess_contacts(self):
+        sid,args=self.ios_gesture_fixture()
+        args['touches'].append(dict(args['touches'][0]))
+        with self.assertRaises(RDCError) as e:self.mobile.call('rdc_mobile_gesture',args)
+        self.assertEqual('invalid_arguments',e.exception.code)
+        self.assertFalse(any(path.endswith('/actions') for _,path,_ in self.driver.requests))
+
+    def test_ios_gesture_rejects_unobserved_bounds(self):
+        sid,args=self.ios_gesture_fixture()
+        args['touches'][1]['end_x']=300
+        with self.assertRaises(RDCError) as e:self.mobile.call('rdc_mobile_gesture',args)
+        self.assertEqual('invalid_arguments',e.exception.code)
+        self.assertFalse(any(path.endswith('/actions') for _,path,_ in self.driver.requests))
+
+    def test_ios_gesture_rejects_overlong_hold(self):
+        sid,args=self.ios_gesture_fixture()
+        args['hold_ms']=10000
+        with self.assertRaises(RDCError) as e:self.mobile.call('rdc_mobile_gesture',args)
+        self.assertEqual('invalid_arguments',e.exception.code)
+        self.assertFalse(any(path.endswith('/actions') for _,path,_ in self.driver.requests))
+
+    def test_ios_gesture_failure_never_replays(self):
+        sid,args=self.ios_gesture_fixture()
+        self.driver.fail_path='/actions'
+        with self.assertRaises(RDCError):self.mobile.call('rdc_mobile_gesture',args)
+        self.assertEqual(1,sum(method=='POST' and path.endswith('/actions') for method,path,_ in self.driver.requests))
+        self.assertEqual(1,sum(method=='DELETE' and path.endswith('/actions') for method,path,_ in self.driver.requests))
+        self.assertEqual('cleanup_required',self.mobile.status()['sessions'][0]['setup_status'])
+
+    def test_ios_gesture_secure_screen_rejected(self):
+        sid,args=self.ios_gesture_fixture()
+        self.driver.source=IOS_XML.replace('XCUIElementTypeTextField','XCUIElementTypeSecureTextField')
+        o=self.observe(sid)
+        args['observation_id']=o['observation_id']
+        args['anchor_handle']=next(c['handle'] for c in o['controls'] if c['name']=='Save')
+        with self.assertRaises(RDCError) as e:self.mobile.call('rdc_mobile_gesture',args)
+        self.assertEqual('secure_input_required',e.exception.code)
+        self.assertFalse(any(path.endswith('/actions') for _,path,_ in self.driver.requests))
+
     def test_fill_failure_never_returns_driver_echo_or_retries_input(self):
         sid = self.start()
         observed = self.observe(sid)
@@ -616,6 +814,50 @@ class MobileTests(unittest.TestCase):
         self.assertIsNone(adapter._thread)
         adapter.close()
         self.assertEqual(set(), self.driver.active)
+
+    def test_adapter_routes_validated_nested_gesture(self):
+        self.mobile.close()
+        self.profiles['phone'].update(platformName='iOS',automationName='XCUITest')
+        self.driver.source=IOS_XML
+        adapter=Adapters(settings(mobile_profiles=self.profiles))
+        try:
+            sid=adapter.call('rdc_mobile_start',{'profile':'phone'})['session_id']
+            obs=adapter.call('rdc_mobile_observe',{'session_id':sid})
+            anchor=next(c['handle'] for c in obs['controls'] if c['name']=='Save')
+            args={'session_id':sid,'observation_id':obs['observation_id'],'anchor_handle':anchor,
+                  'touches':[{'start_x':20,'start_y':140,'end_x':40,'end_y':145},
+                             {'start_x':80,'start_y':155,'end_x':85,'end_y':165}]}
+            result=adapter.call('rdc_mobile_gesture',args)
+            self.assertEqual('gesture',result['performed'])
+            batches=[body['actions'] for method,path,body in self.driver.requests if method=='POST' and path.endswith('/actions')]
+            self.assertEqual(1,len(batches))
+            self.assertEqual(2,len(batches[0]))
+        finally:
+            adapter.close()
+
+    def test_adapter_nested_gesture_rejects_malformed_before_dispatch(self):
+        adapter=Adapters(settings(mobile_profiles=self.profiles))
+        try:
+            before=len(self.driver.requests)
+            with self.assertRaises(RDCError) as e:
+                adapter.call('rdc_mobile_gesture',{'session_id':'mobile-fixture','observation_id':'fixture','anchor_handle':'c1',
+                    'touches':[{'start_x':20,'start_y':140,'end_x':40,'end_y':145,'extra':True}]})
+            self.assertEqual('invalid_arguments',e.exception.code)
+            self.assertEqual(before,len(self.driver.requests))
+        finally:
+            adapter.close()
+
+    def test_adapter_compact_preview_routes_and_retains_session_identity(self):
+        adapter=Adapters(settings(mobile_profiles=self.profiles))
+        try:
+            sid=adapter.call('rdc_mobile_start',{'profile':'phone'})['session_id']
+            frame=adapter.snapshot(sid)
+            self.assertEqual(sid,frame['session_id'])
+            self.assertEqual('image/jpeg',frame['mime_type'])
+            self.assertEqual((640,1280),(frame['source_width'],frame['source_height']))
+            self.assertEqual((400,800),(frame['input_width'],frame['input_height']))
+        finally:
+            adapter.close()
 
     def test_expired_driver_session_can_be_closed_without_stranding_profile(self):
         sid = self.start()

@@ -144,3 +144,13 @@ inspect the actual embedded profile expiration before reuse.
 The independent gateway /mobile/ PWA remains the lower-friction installation
 option on either platform. Physical device acceptance, full native UI control,
 signed distribution and production release gates remain separate.
+
+## Local terminal preview
+
+The development preview adds a private on-device workspace and fixed commands
+(help, pwd, ls, mkdir, write, cat, sha256, echo). The gateway status credential
+remains read-only. The companion does not become a system-wide automation
+service or unrestricted OS shell. Its output identifies device-local
+execution. See [the command engine guide](../docs/MOBILE-COMMAND-ENGINE.md).
+The earlier installer inventory and hardware evidence describe previous
+builds. Use the new versioned manifest when selecting a preview package.

@@ -11,10 +11,17 @@ final class NoRedirect: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
 }
 
 @main struct RDCMobileApp: App {
-    var body: some Scene { WindowGroup { StatusView() } }
+    @State private var terminal = false
+    var body: some Scene {
+        WindowGroup {
+            if terminal { LocalTerminalView(onBack: { terminal = false }) }
+            else { StatusView(onOpenTerminal: { terminal = true }) }
+        }
+    }
 }
 
 struct StatusView: View {
+    let onOpenTerminal: () -> Void
     @Environment(\.scenePhase) private var phase
     @State private var origin = ""
     @State private var secret = ""
@@ -46,6 +53,7 @@ struct StatusView: View {
                 }
             }
             .navigationTitle("RDC Mobile")
+            .toolbar { Button("Local terminal", action: onOpenTerminal) }
         }
         .onChange(of: phase) { value in
             if value != .active { clear(false) }

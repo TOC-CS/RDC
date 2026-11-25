@@ -21,10 +21,20 @@ public final class MainActivity extends Activity {
     private Future<?> active;
     private HttpsURLConnection connection;
     private int generation = 0;
+    private boolean terminalBusy = false;
+    private int terminalGeneration = 0;
+    private EditText terminalInput;
+    private TextView terminalOutput;
+    private Button terminalRun, terminalBack;
+
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        showStatus();
+    }
+
+    private void showStatus() {
         ScrollView scroll = new ScrollView(this);
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -59,7 +69,46 @@ public final class MainActivity extends Activity {
         status = new TextView(this); status.setText("Connection not checked.");
         status.setPadding(0,pad/2,0,pad/2);
         status.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        panel.addView(status); setContentView(scroll);
+        panel.addView(status);
+        Button local=new Button(this);local.setText("Local terminal");panel.addView(local);
+        local.setOnClickListener(v->{cancel(true);showTerminal();});
+        setContentView(scroll);
+    }
+
+    private void showTerminal() {
+        ScrollView scroll=new ScrollView(this);
+        LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
+        int pad=(int)(24*getResources().getDisplayMetrics().density);
+        panel.setPadding(pad,pad,pad,pad);scroll.addView(panel);
+        TextView heading=new TextView(this);heading.setText("RDC device-local terminal");heading.setTextSize(24);panel.addView(heading);
+        TextView intro=new TextView(this);intro.setText("Commands run on this Android device in RDC's private workspace. No unrestricted system shell or remote SSH.");panel.addView(intro);
+        terminalInput=new EditText(this);terminalInput.setHint("RDC local command");
+        terminalInput.setSingleLine(true);terminalInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        terminalInput.setSaveEnabled(false);terminalInput.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);panel.addView(terminalInput);
+        terminalRun=new Button(this);terminalRun.setText("Run local command");panel.addView(terminalRun);
+        terminalOutput=new TextView(this);terminalOutput.setText("Device-local sandbox. Type help.");terminalOutput.setTextIsSelectable(true);panel.addView(terminalOutput);
+        Button clear=new Button(this);clear.setText("Clear output");panel.addView(clear);
+        clear.setOnClickListener(v->{if(!terminalBusy){terminalInput.setText("");terminalOutput.setText("Output cleared.");}});
+        terminalBack=new Button(this);terminalBack.setText("Gateway status");panel.addView(terminalBack);
+        terminalBack.setOnClickListener(v->{if(!terminalBusy){terminalGeneration++;terminalInput.setText("");terminalOutput.setText("");terminalInput=null;terminalOutput=null;showStatus();}});
+        terminalRun.setOnClickListener(v->runLocal());
+        setContentView(scroll);
+    }
+    private void runLocal() {
+        if(terminalBusy||terminalInput==null)return;
+        final String command=terminalInput.getText().toString();if(command.isEmpty())return;
+        terminalInput.setText("");terminalBusy=true;terminalRun.setEnabled(false);terminalBack.setEnabled(false);
+        terminalOutput.setText("Running on this device…");
+        final int id=++terminalGeneration;
+        executor.execute(()->{
+            String receipt=new LocalTerminal(getFilesDir().toPath().resolve("RDCWorkspace")).execute(command).receipt();
+            runOnUiThread(()->{
+                terminalBusy=false;
+                if(terminalInput==null||isDestroyed())return;
+                terminalRun.setEnabled(true);terminalBack.setEnabled(true);
+                if(id==terminalGeneration)terminalOutput.setText(receipt);
+            });
+        });
     }
 
     private void request() {
@@ -141,6 +190,10 @@ public final class MainActivity extends Activity {
         if (status!=null) status.setText("Connection not checked.");
         if (check!=null) check.setEnabled(true);
     }
-    @Override protected void onPause() { cancel(false); super.onPause(); }
+    @Override protected void onPause() {
+        cancel(false);terminalGeneration++;
+        if(terminalInput!=null){terminalInput.setText("");terminalOutput.setText("Output cleared.");}
+        super.onPause();
+    }
     @Override protected void onDestroy() { cancel(true); executor.shutdownNow(); super.onDestroy(); }
 }

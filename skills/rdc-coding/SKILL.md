@@ -56,3 +56,14 @@ As of the verified November 17, 2026 baseline, live RDC v16 and Desktop Commande
 Reuse the existing `TOC-CS/RDC` draft PR #1 and current owner-private RDC Site. The Site remains v16; do not activate v17 before independent code review and an inactive verified rollback-compatible Site version exist. Historical v16 is unsafe for rollback after inline-only v17 result records exist. A read-only GitHub connector cannot publish source, and a browser sign-in state alone does not authorize access through a different browser control surface. When authenticated browser editing is unavailable, retain the exact local bundle, commit, and manifest and report the publication gate.
 
 Evidence packet: `~/RDC-Development/checkpoints/rdc-code-context-scope-20261117/` on the owner's iMac. Never claim a local packet automatically reached Atlas or that a build or Site version is deployed without verified readback.
+
+## Mobile speed-first development
+
+For RDC mobile changes, use available Superpowers planning, isolated-worktree,
+test-driven development, systematic debugging, execution and verification
+skills. Keep one inline development path when parallel work would duplicate
+device state or spend extra tokens. Preserve the 100-check ceiling across
+all related tests and never replay uncertain input. Measure actual execution
+and verified feedback, not only request acceptance. Public release notes,
+source packages and walkthroughs must use generic examples, without owner
+applications, personal paths, private device evidence or signing material.

@@ -80,8 +80,8 @@ def bundle_info():
         "CFBundleDisplayName":"RDC Mobile",
         "CFBundlePackageType":"APPL",
         "CFBundleInfoDictionaryVersion":"6.0",
-        "CFBundleShortVersionString":"0.1.0",
-        "CFBundleVersion":"1",
+        "CFBundleShortVersionString":"0.1.1",
+        "CFBundleVersion":"2",
         "CFBundleSupportedPlatforms":["iPhoneOS"],
         "MinimumOSVersion":MIN_IOS,
         "LSRequiresIPhoneOS":True,
@@ -98,6 +98,8 @@ def compile_command(compiler: Path,sdk: Path,output: Path):
             "-swift-version","5","-parse-as-library","-O",
             str(HERE/"RDCMobile/GatewayContract.swift"),
             str(HERE/"RDCMobile/RDCMobileApp.swift"),
+            str(HERE/"RDCMobile/LocalTerminal.swift"),
+            str(HERE/"RDCMobile/LocalTerminalView.swift"),
             "-framework","Foundation","-framework","SwiftUI","-o",str(output)]
 
 

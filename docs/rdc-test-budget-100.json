@@ -243,6 +243,38 @@
       "python_discovery": false,
       "python_offset": 0,
       "python_take": 4
+    },
+    "hybrid-mobile-public-preview": {
+      "description": "30 selected generic command, terminal, lifecycle and visual input regressions. Prior 58 cases plus 2 conservative build charges retained.",
+      "node_files": [],
+      "python_module": "tests.test_mobile_public_preview",
+      "python_take": 30,
+      "python_offset": 0,
+      "python_discovery": false
+    },
+    "keyboard-layout-correction": {
+      "description": "Keyboard-active visibility and hidden/secure-control boundary tests",
+      "node_files": [],
+      "python_module": "tests.test_mobile_keyboard_visibility",
+      "python_take": 13,
+      "python_offset": 0,
+      "python_discovery": false
+    },
+    "mobile-action-observe": {
+      "description": "Combined native input and post-action structured observation; no replay",
+      "node_files": [],
+      "python_module": "tests.test_mobile_action_observe",
+      "python_take": 6,
+      "python_offset": 0,
+      "python_discovery": false
+    },
+    "mobile-timed-contacts": {
+      "description": "Bounded independent timed contacts and verified frame contracts",
+      "node_files": [],
+      "python_module": "tests.test_mobile_timed_contacts",
+      "python_take": 19,
+      "python_offset": 0,
+      "python_discovery": false
     }
   }
 }
