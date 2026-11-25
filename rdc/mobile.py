@@ -539,6 +539,13 @@ def timed_touch_actions(contacts, origin, center):
         if delta:
             moves={}
             for i in active:
+                # Once the final waypoint is delivered, native pause retains
+                # the contact and its offset until release. Do not resolve a
+                # stationary coordinate at other contacts' later boundaries.
+                # Preserve zero-displacement moves before future waypoints:
+                # those prevent interpolation across an intentional dwell.
+                if previous>=indexed[i][1]['points'][-1]['at_ms']:
+                    continue
                 target=point_at(indexed[i][1],t); old=last[i]
                 moves[i]={'type':'pointerMove','duration':delta,'origin':'pointer',
                           'x':target[0]-old[0],'y':target[1]-old[1]}

@@ -107,3 +107,29 @@ class TimelineTests(unittest.TestCase):
     def test_excessive_contact_count_refused(self):
         with self.assertRaises(RDCError):self.send(self.frame(),CONTACTS+[CONTACTS[0]])
         self.assertEqual([],self.sent())
+    def test_terminal_stationary_holds_do_not_resolve_redundant_coordinates(self):
+        c=[
+            {'points':[{'at_ms':0,'x':30,'y':40},{'at_ms':100,'x':50,'y':40}], 'release_ms':500},
+            {'points':[{'at_ms':50,'x':240,'y':250},{'at_ms':250,'x':260,'y':250}], 'release_ms':350},
+            {'points':[{'at_ms':200,'x':180,'y':300}], 'release_ms':400},
+        ]
+        self.send(self.frame(),c)
+        sources=self.sent()[0]['actions'];by_id={s['id']:s for s in sources}
+        # The third contact never moves after its initial anchor. Native
+        # pause durations maintain its contact and exact release offset.
+        self.assertEqual(1,sum(e['type']=='pointerMove' for e in by_id['rdc-timed-3']['actions']))
+        out=interpret(sources)
+        self.assertEqual((200,400,(180,300)),(out['rdc-timed-3']['start'],out['rdc-timed-3']['end'],out['rdc-timed-3']['last']))
+        self.assertEqual((50,40),out['rdc-timed-1']['last'])
+        self.assertEqual(500,out['rdc-timed-1']['end'])
+    def test_stationary_before_future_movement_keeps_native_waypoint(self):
+        c=[{'points':[{'at_ms':0,'x':30,'y':40},{'at_ms':100,'x':30,'y':40},{'at_ms':300,'x':60,'y':50}], 'release_ms':400}]
+        self.send(self.frame(),c)
+        out=interpret(self.sent()[0]['actions'])['rdc-timed-1']
+        self.assertEqual((30,40),out['moves'][100])
+        self.assertEqual((60,50),out['moves'][300])
+        self.assertEqual(400,out['end'])
+    def test_terminal_hold_reduces_native_coordinate_resolution_count(self):
+        self.send(self.frame())
+        s=self.sent()[0]['actions'];self.assertEqual(11,sum(e['type']=='pointerMove' for c in s for e in c['actions']))
+        self.assertEqual(1,len(self.sent()))
