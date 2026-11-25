@@ -108,3 +108,24 @@ Do not claim support for every application or instrument from one app or
 synthetic fixture. Report measured coverage and remaining unsupported or
 unverified surfaces. Keep the existing 100-operation campaign ceiling,
 live acceptance thresholds, owner authorization and release hold.
+
+### Combined input and fresh control observation
+
+For tap, fill, swipe, anchored gesture and verified visual gesture operations,
+pass the optional boolean post_observation=true to request a fresh structured
+control observation in the same tool response. Use the new observation ID
+and handles only after observation_status is observed. The response also
+reports input_acknowledgement and action_to_observation in milliseconds.
+
+This saves a separate client round trip and avoids sending image data for a
+structured read. It does not eliminate native freshness verification or
+establish the intended UI effect. A failed post-action observation returns
+the original acknowledged operation and observation_status unavailable;
+inspect the current state without replay. If the input itself has an
+uncertain outcome, do not automatically observe-and-retry. Choose either
+post_observation or post_frame_max_edge, not both. Visual input still
+requires its own fresh verified frame.
+
+This is source-qualified development preview functionality. The current
+native driver and connected AI-host catalog must be verified independently
+before using it; live latency reduction is not yet measured.

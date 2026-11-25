@@ -145,6 +145,7 @@ def _catalog():
     session = {'session_id': string}
     observed = session | {'observation_id': string}
     control = observed | {'handle': {'type':'string', 'pattern':r'^c[0-9]{1,3}$'}}
+    post_observation = {'post_observation':{'type':'boolean'}}
     coordinates = {key:{'type':'integer', 'minimum':0, 'maximum':16384}
                    for key in ('start_x','start_y','end_x','end_y')}
     rows = [
@@ -171,20 +172,20 @@ def _catalog():
         ('app_open', 'Open or switch to one authorized iOS app on this native session. Verify foreground and invalidate old controls. Optional include_observation returns fresh controls immediately. Never retry uncertain input.', True, session | {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},'app_observation_id':string,'include_observation':{'type':'boolean'}}, ('session_id','profile','app_observation_id')),
         ('app_terminate', 'Close one exact owner-configured iOS app and verify it stopped. Keeps the native driver session; no automatic replay.', True, session | {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},'app_observation_id':string}, ('session_id','profile','app_observation_id')),
         ('observe', 'Read bounded native labels and fresh control handles. Editable values and secure field labels are redacted.', False, session, ('session_id',)),
-        ('tap', 'Tap a current observed native control once. No automatic retry follows an uncertain outcome.', True, control, ('session_id','observation_id','handle')),
+        ('tap', 'Tap a current observed native control once. Optional post_observation returns fresh controls after the acknowledged input. No automatic retry follows an uncertain outcome.', True, control | post_observation, ('session_id','observation_id','handle')),
         ('fill', 'Replace text in a current nonsecure editable native control. Secure fields require owner input on the device.', True,
-         control | {'text':{'type':'string','maxLength':4000}}, ('session_id','observation_id','handle','text')),
+         control | post_observation | {'text':{'type':'string','maxLength':4000}}, ('session_id','observation_id','handle','text')),
         ('swipe', 'Swipe in native logical coordinates from a current observation. On iOS, optionally use a freshly observed noneditable control as an explicit coordinate anchor. Refresh after input; never retry an uncertain gesture.', True,
-         observed | coordinates | {'duration_ms':{'type':'integer','minimum':50,'maximum':10000}, 'anchor_handle':control['handle']},
+         observed | coordinates | post_observation | {'duration_ms':{'type':'integer','minimum':50,'maximum':10000}, 'anchor_handle':control['handle']},
          ('session_id','observation_id','start_x','start_y','end_x','end_y')),
         ('gesture', 'Perform one bounded simultaneous one- or two-finger iOS gesture in a freshly observed noneditable anchor. Each contact can override the common hold_ms. Optional post_frame_max_edge (320–1600) returns one verified compact frame with fresh redacted controls after the acknowledged gesture. Frame refusal preserves the input acknowledgement; never replay input. Uses logical screen coordinates.', True,
-         observed | {'anchor_handle':control['handle'], 'touches':{'type':'array','minItems':1,'maxItems':2,
+         observed | post_observation | {'anchor_handle':control['handle'], 'touches':{'type':'array','minItems':1,'maxItems':2,
                       'items':{'type':'object','properties':coordinates | {'hold_ms':{'type':'integer','minimum':0,'maximum':2000}},'required':list(coordinates),'additionalProperties':False}},
                      'move_ms':{'type':'integer','minimum':50,'maximum':2000},'hold_ms':{'type':'integer','minimum':0,'maximum':2000},
                      'post_frame_max_edge':{'type':'integer','minimum':320,'maximum':1600}},
          ('session_id','observation_id','anchor_handle','touches')),
         ('visual_gesture', 'Use logical screen coordinates from a fresh privacy-verified iOS frame with one unambiguous full-screen window. Tap, scroll, swipe, drag, or perform two simultaneous contacts with independent bounded holds. Inspect each frame before acting; never replay uncertain input.', True,
-         observed | {'touches':{'type':'array','minItems':1,'maxItems':2,
+         observed | post_observation | {'touches':{'type':'array','minItems':1,'maxItems':2,
                       'items':{'type':'object','properties':coordinates | {'hold_ms':{'type':'integer','minimum':0,'maximum':2000}},'required':list(coordinates),'additionalProperties':False}},
                      'move_ms':{'type':'integer','minimum':50,'maximum':2000},'hold_ms':{'type':'integer','minimum':0,'maximum':2000},
                      'post_frame_max_edge':{'type':'integer','minimum':320,'maximum':1600}},
@@ -719,7 +720,25 @@ class Mobile:
                 if action == 'app_state': return self._app_state(session, args['profile'])
                 if action in ('app_open','app_terminate'): return self._app_lifecycle(session, action, args)
                 if action == 'observe': return self._observe(session)
+                if args.get('post_observation') and 'post_frame_max_edge' in args:
+                    fail('invalid_arguments')
+                started=time.perf_counter() if args.get('post_observation') else None
                 result = self._act(session, action, args)
+                if started is not None:
+                    ack_ms=round((time.perf_counter()-started)*1000,3)
+                    # One acknowledged mutation followed by a fresh redacted
+                    # read. No stale controls, frame claims or automatic replay.
+                    try:
+                        observation=self._observe(session)
+                    except Exception as exc:
+                        self._invalidate(session)
+                        code=exc.code if isinstance(exc,RDCError) and exc.code in MESSAGES else 'observation_failed'
+                        return result | self._info(session) | {'observation_status':'unavailable',
+                            'observation_error':code,'timings_ms':{'input_acknowledgement':ack_ms,
+                                'action_to_observation':round((time.perf_counter()-started)*1000,3)}}
+                    return result | observation | {'observation_status':'observed',
+                        'timings_ms':{'input_acknowledgement':ack_ms,
+                            'action_to_observation':round((time.perf_counter()-started)*1000,3)}}
                 if 'post_frame_max_edge' not in args:
                     return result
                 # Dispatch exactly once. A subsequent frame is a separate

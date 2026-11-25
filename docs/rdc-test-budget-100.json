@@ -259,6 +259,14 @@
       "python_take": 13,
       "python_offset": 0,
       "python_discovery": false
+    },
+    "mobile-action-observe": {
+      "description": "Combined native input and post-action structured observation; no replay",
+      "node_files": [],
+      "python_module": "tests.test_mobile_action_observe",
+      "python_take": 6,
+      "python_offset": 0,
+      "python_discovery": false
     }
   }
 }
