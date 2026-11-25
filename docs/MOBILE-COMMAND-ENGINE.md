@@ -129,3 +129,27 @@ requires its own fresh verified frame.
 This is source-qualified development preview functionality. The current
 native driver and connected AI-host catalog must be verified independently
 before using it; live latency reduction is not yet measured.
+
+### Independently timed visual contacts (development preview)
+
+The experimental iOS visual_timeline operation accepts up to three
+continuous contacts, each with up to eight explicit logical-coordinate
+waypoints (at_ms, x, y) and a release_ms time. The first contact starts at
+zero; all contacts overlap into one continuous gesture of at most 3000 ms.
+Each contact remains independently held until its own release. The worker
+compiles aligned native action ticks, including interpolation at other
+contacts' timing boundaries. It sends one native action request instead of
+separate AI tool calls for each waypoint.
+
+Use only a fresh verified frame from the intended authorized application.
+All coordinates are bounded by the verified screen and the worker
+revalidates the native hierarchy and exact window anchor before dispatch.
+Uncertain input is never replayed. Native driver capabilities, physical
+three-contact accuracy, release timing and actual latency require hardware
+qualification; a generated action record alone is not evidence of them.
+
+Optional post_frame_max_edge returns verified feedback after acknowledged
+input, with separate input_acknowledgement and action_to_frame timings.
+These timings include requested touch durations. Optional post_observation
+returns structured controls instead. Do not claim a faster live control
+loop from reducing client calls alone.

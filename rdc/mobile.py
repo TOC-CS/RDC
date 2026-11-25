@@ -190,6 +190,17 @@ def _catalog():
                      'move_ms':{'type':'integer','minimum':50,'maximum':2000},'hold_ms':{'type':'integer','minimum':0,'maximum':2000},
                      'post_frame_max_edge':{'type':'integer','minimum':320,'maximum':1600}},
          ('session_id','observation_id','touches')),
+        ('visual_timeline', 'Perform one continuous, bounded iOS touch timeline from a fresh verified visual frame. Up to three independently timed contacts, each with up to eight logical-coordinate waypoints and an explicit release time. A single native dispatch; never replay uncertain input. Experimental until physically qualified.', True,
+         observed | post_observation | {'contacts':{'type':'array','minItems':1,'maxItems':3,
+                     'items':{'type':'object','properties':{'points':{'type':'array','minItems':1,'maxItems':8,
+                         'items':{'type':'object','properties':{'at_ms':{'type':'integer','minimum':0,'maximum':3000},
+                                     'x':{'type':'integer','minimum':0,'maximum':16384},
+                                     'y':{'type':'integer','minimum':0,'maximum':16384}},
+                                  'required':['at_ms','x','y'],'additionalProperties':False}},
+                         'release_ms':{'type':'integer','minimum':50,'maximum':3000}},
+                         'required':['points','release_ms'],'additionalProperties':False}},
+                     'post_frame_max_edge':{'type':'integer','minimum':320,'maximum':1600}},
+         ('session_id','observation_id','contacts')),
         ('screenshot', 'Capture the native screen only after privacy checks. Optional max_edge (320–1600) returns a compact JPEG without changing logical touch coordinates. include_observation returns fresh redacted controls from the same verified capture. Secure or unverifiable screens fail closed.', False, session | {'max_edge':{'type':'integer','minimum':320,'maximum':1600},'include_observation':{'type':'boolean'}}, ('session_id',)),
         ('close', 'Close the exact native driver session. A failed cleanup remains listed for explicit recovery.', True, session, ('session_id',)),
     ]
@@ -472,6 +483,86 @@ def touch_actions(paths, origin, center, move_ms, hold_ms=None):
     return actions
 
 
+def validate_timed_contacts(contacts, width, height):
+    if not 1<=len(contacts)<=3: fail('invalid_arguments')
+    starts=[]; windows=[]
+    for contact in contacts:
+        points=contact['points']; end=contact['release_ms']
+        if not 1<=len(points)<=8: fail('invalid_arguments')
+        times=[p['at_ms'] for p in points]
+        if (any(type(t) is not int or not 0<=t<=3000 for t in times)
+                or any(b<=a for a,b in zip(times,times[1:]))
+                or type(end) is not int or not times[-1]<=end<=3000 or end-times[0]<50):
+            fail('invalid_arguments')
+        for p in points:
+            if any(type(p[k]) is not int or not 0<=p[k]<bound
+                   for k,bound in (('x',width),('y',height))): fail('invalid_arguments')
+        starts.append((points[0]['x'],points[0]['y']))
+        windows.append((times[0],end))
+    if len(set(starts))!=len(starts): fail('invalid_arguments')
+    windows.sort()
+    if windows[0][0]!=0: fail('invalid_arguments')
+    # A timeline is one continuous gesture, never unrelated actions.
+    covered=windows[0][1]
+    for start,end in windows[1:]:
+        if start>=covered: fail('invalid_arguments')
+        covered=max(covered,end)
+    return covered
+
+
+def timed_touch_actions(contacts, origin, center):
+    """Compile independent contacts into aligned W3C ticks.
+    Positive durations align the shared and per-chain clocks.
+    Each contact opens and releases once; interpolation preserves endpoints.
+    """
+    indexed=sorted(enumerate(contacts),key=lambda item:(-item[1]['release_ms'],item[0]))
+    sources=[{'type':'pointer','id':'rdc-timed-'+str(i+1),
+              'parameters':{'pointerType':'touch'},'actions':[]} for i,_ in indexed]
+    starts=[c['points'][0]['at_ms'] for _,c in indexed]
+    ends=[c['release_ms'] for _,c in indexed]
+    boundaries=sorted({t for _,c in indexed for t in
+                       [c['release_ms'],*(p['at_ms'] for p in c['points'])]})
+    active=set(); last={}
+    def point_at(c,t):
+        points=c['points']
+        for a,b in zip(points,points[1:]):
+            if a['at_ms']<=t<=b['at_ms']:
+                ratio=(t-a['at_ms'])/(b['at_ms']-a['at_ms'])
+                return tuple(round(a[k]+(b[k]-a[k])*ratio) for k in ('x','y'))
+        return points[-1]['x'],points[-1]['y']
+    def tick(events,duration=0):
+        for i,source in enumerate(sources):
+            source['actions'].append(events.get(i,{'type':'pause','duration':duration}))
+    previous=0
+    for t in boundaries:
+        delta=t-previous
+        if delta:
+            moves={}
+            for i in active:
+                target=point_at(indexed[i][1],t); old=last[i]
+                moves[i]={'type':'pointerMove','duration':delta,'origin':'pointer',
+                          'x':target[0]-old[0],'y':target[1]-old[1]}
+                last[i]=target
+            tick(moves,delta)
+        lifting={i for i in active if ends[i]==t}
+        if lifting:
+            tick({i:{'type':'pointerUp','button':0} for i in lifting})
+            active.difference_update(lifting)
+        joining=[i for i,start in enumerate(starts) if start==t]
+        if joining:
+            initial={}
+            for i in joining:
+                p=indexed[i][1]['points'][0]
+                last[i]=(p['x'],p['y'])
+                initial[i]={'type':'pointerMove','duration':0,'origin':origin,
+                            'x':round(p['x']-center[0]),'y':round(p['y']-center[1])}
+            tick(initial)
+            tick({i:{'type':'pointerDown','button':0} for i in joining})
+            active.update(joining)
+        previous=t
+    return sources
+
+
 COMPLETE_SOURCE_OPT_IN = 'rdc:completeSource'
 COMPLETE_SOURCE_MAX_SEQUENCE = 2147483647
 COMPLETE_SOURCE_RESULT_KEYS = {
@@ -722,10 +813,10 @@ class Mobile:
                 if action == 'observe': return self._observe(session)
                 if args.get('post_observation') and 'post_frame_max_edge' in args:
                     fail('invalid_arguments')
-                started=time.perf_counter() if args.get('post_observation') else None
+                started=time.perf_counter() if args.get('post_observation') or 'post_frame_max_edge' in args else None
                 result = self._act(session, action, args)
-                if started is not None:
-                    ack_ms=round((time.perf_counter()-started)*1000,3)
+                ack_ms=round((time.perf_counter()-started)*1000,3) if started is not None else None
+                if args.get('post_observation'):
                     # One acknowledged mutation followed by a fresh redacted
                     # read. No stale controls, frame claims or automatic replay.
                     try:
@@ -749,11 +840,11 @@ class Mobile:
                 except RDCError as exc:
                     self._invalidate(session)
                     code = exc.code if exc.code in MESSAGES else 'screenshot_failed'
-                    return result | self._info(session) | {'frame_status':'unavailable','frame_error':code}
+                    return result | self._info(session) | {'frame_status':'unavailable','frame_error':code,'timings_ms':{'input_acknowledgement':ack_ms,'action_to_frame':round((time.perf_counter()-started)*1000,3)}}
                 except Exception:
                     self._invalidate(session)
-                    return result | self._info(session) | {'frame_status':'unavailable','frame_error':'screenshot_failed'}
-                return result | frame | {'frame_status':'captured'}
+                    return result | self._info(session) | {'frame_status':'unavailable','frame_error':'screenshot_failed','timings_ms':{'input_acknowledgement':ack_ms,'action_to_frame':round((time.perf_counter()-started)*1000,3)}}
+                return result | frame | {'frame_status':'captured','timings_ms':{'input_acknowledgement':ack_ms,'action_to_frame':round((time.perf_counter()-started)*1000,3)}}
             finally:
                 self._publish_status()
 
@@ -1119,7 +1210,12 @@ class Mobile:
 
     def _act(self, session, action, args):
         visual = None
-        if action=='visual_gesture':
+        timeline = action=='visual_timeline'
+        timeline_duration = None
+        if timeline:
+            if session['platform']!='iOS': fail('invalid_arguments')
+            timeline_duration=validate_timed_contacts(args['contacts'],session['width'],session['height'])
+        if action in ('visual_gesture','visual_timeline'):
             visual=session.pop('visual_frame',None)
             if (visual is None or visual['observation_id']!=args['observation_id']
                     or visual['deadline']<time.monotonic() or session['sensitive']):
@@ -1134,8 +1230,12 @@ class Mobile:
             if action=='fill' and control['secure']: fail('secure_input_required')
             if not control['can_tap'] or (action=='fill' and (not control['can_fill'] or '\0' in args['text'])):
                 fail('invalid_arguments')
-        elif action in ('swipe','gesture','visual_gesture'):
-            paths = [args] if action=='swipe' else args['touches']
+        elif action in ('swipe','gesture','visual_gesture','visual_timeline'):
+            if timeline:
+                paths=[{'start_x':c['points'][0]['x'],'start_y':c['points'][0]['y'],
+                        'end_x':c['points'][-1]['x'],'end_y':c['points'][-1]['y']} for c in args['contacts']]
+            else:
+                paths = [args] if action=='swipe' else args['touches']
             if any(path[key]>=session['width' if key.endswith('_x') else 'height']
                    for path in paths for key in ('start_x','start_y','end_x','end_y')):
                 fail('invalid_arguments')
@@ -1168,7 +1268,7 @@ class Mobile:
             fail('unknown_tool')
         # The driver can complete an input even when its response is lost.
         self._invalidate(session)
-        if action in ('swipe','gesture','visual_gesture'):
+        if action in ('swipe','gesture','visual_gesture','visual_timeline'):
             origin = 'viewport'
             center = (0,0)
             if anchor is not None:
@@ -1187,7 +1287,8 @@ class Mobile:
                 fail('visual_frame_required')
             move_ms = args.get('duration_ms',400) if action=='swipe' else args.get('move_ms',200)
             hold_ms = None if action=='swipe' else args.get('hold_ms',0)
-            actions = touch_actions(paths,origin,center,move_ms,hold_ms)
+            actions = timed_touch_actions(args['contacts'],origin,center) if timeline else touch_actions(paths,origin,center,move_ms,hold_ms)
+            native_started=time.perf_counter()
             try:
                 self._wd(session, 'POST', '/actions', {'actions':actions})
             except RDCError:
@@ -1210,7 +1311,11 @@ class Mobile:
             bounds = handle['control']['bounds']
             session['cursor'] = {'x':max(0,min(session['width']-1,bounds['x']+bounds['width']/2)),
                                  'y':max(0,min(session['height']-1,bounds['y']+bounds['height']/2))}
-        return self._info(session) | {'performed':action}
+        result=self._info(session) | {'performed':action}
+        if timeline:
+            result.update(contact_count=len(args['contacts']),requested_duration_ms=timeline_duration,
+                          native_dispatch_ms=round((time.perf_counter()-native_started)*1000,3))
+        return result
 
     def snapshot(self, session_id, max_edge=None, include_observation=False):
         if type(include_observation) is not bool: fail('invalid_arguments')

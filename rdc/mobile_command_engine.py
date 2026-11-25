@@ -30,6 +30,7 @@ WRITE_ROUTES = {
     'swipe': ('swipe','structured_ui'),
     'gesture': ('gesture','structured_ui'),
     'visual_gesture': ('visual_gesture','visual'),
+    'visual_timeline': ('visual_timeline','visual'),
     'close': ('close','device_api'),
 }
 # Deliberately exclude direct_launch from the generic mutation wrapper.
