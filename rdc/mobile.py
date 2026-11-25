@@ -67,6 +67,7 @@ MESSAGES = {
     'screenshot_redaction_required': 'This native session contains or previously exposed a secure field. Safe image masking is unavailable, so no screenshot was returned. Do not bypass this refusal with another capture route.',
     'screenshot_failed': 'Native screenshot privacy or capture could not be verified. No image was returned.',
     'mobile_app_discovery_disabled': 'Installed application discovery requires an owner-enabled iOS device profile.',
+    'timed_contacts_unqualified': 'Experimental timed contact input requires an explicitly enabled original iOS qualification profile. The current native driver has not passed physical contact accuracy qualification.',
     'visual_frame_required': 'Visual input requires a fresh privacy-verified frame of one unambiguous full-screen iOS window. Inspect a new frame; never replay uncertain input.',
     'compact_preview_unavailable': 'Compact mobile previews require the optional Pillow mobile extra. No image was returned.',
 }
@@ -117,7 +118,7 @@ def validate_mobile_profiles(profiles):
                     fail('invalid_config')
             if caps.get('appium:noReset', True) is not True:
                 fail('invalid_config')
-            for key in (COMPLETE_SOURCE_OPT_IN,INSTALLED_APP_OPT_IN):
+            for key in (COMPLETE_SOURCE_OPT_IN,INSTALLED_APP_OPT_IN,EXPERIMENTAL_TIMED_CONTACTS_OPT_IN):
                 if key in caps:
                     if type(caps[key]) is not bool:
                         fail('invalid_config')
@@ -190,7 +191,7 @@ def _catalog():
                      'move_ms':{'type':'integer','minimum':50,'maximum':2000},'hold_ms':{'type':'integer','minimum':0,'maximum':2000},
                      'post_frame_max_edge':{'type':'integer','minimum':320,'maximum':1600}},
          ('session_id','observation_id','touches')),
-        ('visual_timeline', 'Perform one continuous, bounded iOS touch timeline from a fresh verified visual frame. Up to three independently timed contacts, each with up to eight logical-coordinate waypoints and an explicit release time. A single native dispatch; never replay uncertain input. Experimental until physically qualified.', True,
+        ('visual_timeline', 'Perform one continuous, bounded iOS touch timeline from a fresh verified visual frame. Up to three independently timed contacts, each with up to eight logical-coordinate waypoints and an explicit release time. A single native dispatch; never replay uncertain input. Requires an explicitly enabled original qualification profile; experimental until physically qualified.', True,
          observed | post_observation | {'contacts':{'type':'array','minItems':1,'maxItems':3,
                      'items':{'type':'object','properties':{'points':{'type':'array','minItems':1,'maxItems':8,
                          'items':{'type':'object','properties':{'at_ms':{'type':'integer','minimum':0,'maximum':3000},
@@ -570,6 +571,7 @@ def timed_touch_actions(contacts, origin, center):
     return sources
 
 
+EXPERIMENTAL_TIMED_CONTACTS_OPT_IN = 'rdc:experimentalTimedContacts'
 COMPLETE_SOURCE_OPT_IN = 'rdc:completeSource'
 COMPLETE_SOURCE_MAX_SEQUENCE = 2147483647
 COMPLETE_SOURCE_RESULT_KEYS = {
@@ -867,6 +869,7 @@ class Mobile:
             'title':profile_name, 'width':0, 'height':0, 'observation_id':None, 'cursor':{'x':0,'y':0},
             'handles':{}, 'sensitive':False}
         caps = copy.deepcopy(profile['capabilities'])
+        session['experimental_timed_contacts']=caps.pop(EXPERIMENTAL_TIMED_CONTACTS_OPT_IN,False)
         complete_source=caps.pop(COMPLETE_SOURCE_OPT_IN,False)
         session['installed_app_discovery']=caps.pop(INSTALLED_APP_OPT_IN,False)
         if complete_source:
@@ -1220,6 +1223,9 @@ class Mobile:
         timeline = action=='visual_timeline'
         timeline_duration = None
         if timeline:
+            if (not session.get('experimental_timed_contacts')
+                    or session.get('active_profile',session['profile'])!=session['profile']):
+                fail('timed_contacts_unqualified')
             if session['platform']!='iOS': fail('invalid_arguments')
             timeline_duration=validate_timed_contacts(args['contacts'],session['width'],session['height'])
         if action in ('visual_gesture','visual_timeline'):

@@ -43,7 +43,9 @@ class TimelineTests(unittest.TestCase):
     def setUp(self):
         profile={'platformName':'iOS','automationName':'XCUITest','endpoint':'http://127.0.0.1:4723',
                  'capabilities':{'appium:udid':'fixture-device','appium:bundleId':'org.example.first'}}
-        self.mobile=VisualDriver({'first':profile})
+        self.default_profile=profile
+        self.mobile=VisualDriver({'first':{**profile,'capabilities':{**profile['capabilities'],'rdc:experimentalTimedContacts':True}},
+                                  'second':{**profile,'capabilities':{**profile['capabilities'],'appium:bundleId':'org.example.second'}}})
         self.sid=self.mobile.call('rdc_mobile_start',{'profile':'first'})['session_id']
     def tearDown(self):self.mobile.close()
     def frame(self):return self.mobile.call('rdc_mobile_screenshot',{'session_id':self.sid,'include_observation':True})
@@ -133,3 +135,23 @@ class TimelineTests(unittest.TestCase):
         self.send(self.frame())
         s=self.sent()[0]['actions'];self.assertEqual(11,sum(e['type']=='pointerMove' for c in s for e in c['actions']))
         self.assertEqual(1,len(self.sent()))
+    def test_unqualified_default_profile_refuses_before_native_io(self):
+        self.mobile.close()
+        self.mobile=VisualDriver({'first':self.default_profile})
+        self.sid=self.mobile.call('rdc_mobile_start',{'profile':'first'})['session_id']
+        f=self.frame()
+        before=len(self.mobile.calls)
+        with self.assertRaises(RDCError):self.send(f)
+        self.assertEqual(before,len(self.mobile.calls));self.assertEqual([],self.sent())
+    def test_experimental_opt_in_is_not_forwarded_to_appium(self):
+        self.assertFalse(any('rdc:experimentalTimedContacts' in b['capabilities']['alwaysMatch'] for m,p,b in self.mobile.calls if m=='POST' and p=='/session'))
+    def test_nonboolean_opt_in_is_rejected(self):
+        from rdc.mobile import validate_mobile_profiles
+        profile={**self.default_profile,'capabilities':{**self.default_profile['capabilities'],'rdc:experimentalTimedContacts':'true'}}
+        with self.assertRaises(RDCError):validate_mobile_profiles({'fixture':profile})
+    def test_other_app_does_not_inherit_original_qualification_grant(self):
+        state=self.mobile.call('rdc_mobile_app_state',{'session_id':self.sid,'profile':'second'})
+        self.mobile.call('rdc_mobile_app_open',{'session_id':self.sid,'profile':'second','app_observation_id':state['app_observation_id']})
+        f=self.frame();before=len(self.mobile.calls)
+        with self.assertRaises(RDCError):self.send(f)
+        self.assertEqual(before,len(self.mobile.calls));self.assertEqual([],self.sent())

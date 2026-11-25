@@ -272,7 +272,7 @@
       "description": "Bounded independent timed contacts and verified frame contracts",
       "node_files": [],
       "python_module": "tests.test_mobile_timed_contacts",
-      "python_take": 15,
+      "python_take": 19,
       "python_offset": 0,
       "python_discovery": false
     }

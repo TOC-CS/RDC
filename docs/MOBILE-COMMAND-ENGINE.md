@@ -153,3 +153,18 @@ input, with separate input_acknowledgement and action_to_frame timings.
 These timings include requested touch durations. Optional post_observation
 returns structured controls instead. Do not claim a faster live control
 loop from reducing client calls alone.
+
+The timed-contact route is disabled by default. Only a dedicated, explicitly
+owner-enabled iOS qualification profile may set the boolean capability
+rdc:experimentalTimedContacts to true. It is consumed by the worker, not
+forwarded to Appium, and never inherited by another application after a
+profile switch. Existing ordinary tap, swipe and two-contact routes are
+unchanged.
+
+Source tests verify three independent planned paths and their timing.
+An instrumented physical trial reported extra contact events and incorrect
+endpoints. Do not use the experimental route for ordinary application
+control until the native event record and actual touch receipts agree.
+The optimization removes redundant coordinate moves after the last waypoint;
+it retains required dwell waypoints before further motion. Reduced native
+work is not an accepted latency benchmark when accuracy fails.
