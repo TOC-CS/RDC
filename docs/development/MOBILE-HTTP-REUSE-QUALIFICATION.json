@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "scope": "development source preview, no worker activation",
+  "source_revision_tested": "bdafcd4a1b514c40cdab22e4d36d480df9948d91",
+  "base_preview_revision": "c6afc27eee354a0a7ff19e5b2fae4d8d48ff6f7d",
+  "tests": 142,
+  "test_exit_code": 0,
+  "modules": [
+    "tests.test_mobile_http_reuse",
+    "tests.test_mobile",
+    "tests.test_mobile_visual_input",
+    "tests.test_mobile_action_observe",
+    "tests.test_mobile_fast_ready",
+    "tests.test_mobile_app_lifecycle",
+    "tests.test_rdc_test_budget",
+    "tests.test_rdc_performance_skill",
+    "tests.test_mobile_terminal_routing",
+    "tests.test_ios_warm_terminal"
+  ],
+  "log_sha256": "72debe13f35eeca490cfd5ebf090cc60f4ab051675e67f5ffe1a8445ccc4b54e",
+  "independent_source_review": "no blocking findings",
+  "hosted_ci": "not run; skip ci is not passing CI",
+  "private_native_driver_included": false,
+  "production_changed": false,
+  "rollback": "Retain the existing worker and preceding source preview; no service replacement is included."
+}

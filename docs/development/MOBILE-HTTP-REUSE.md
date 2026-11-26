@@ -46,3 +46,12 @@ fix and verifies one creation POST over a new connection afterward. The affected
 108-test selection passed. Independent source review found no blocking issue.
 The original native runtime was then verified in a separate owned session, with
 zero touch input, exact session closure and all temporary service ports closed.
+
+## Combined public preview
+
+The combined preview passed 142 affected tests, including terminal routing,
+warm-terminal recovery and the scope-based test planner. Independent source
+review found no blocking issue. See the adjacent qualification JSON for the
+exact tested revision, selection and log digest. Hosted CI was skipped and
+was not counted as passing. This preview contains no experimental native
+driver, device-specific evidence, installed worker update or gateway switch.
