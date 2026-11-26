@@ -98,7 +98,10 @@ or activate candidate worker code. Check the actual connected catalog.
 The source fixes cover visible SwiftUI Form descendants behind a nonaccessible
 CollectionView and iOS WDA selectors omitting the AppiumAUT wrapper. They retain
 hidden-window and secure-field protections. Native saved-password filling is
-unsupported. The campaign is 97/100; no unrestricted tests or CI reruns.
+unsupported. The historical campaign recorded 97/100 against its original allocation.
+The owner retired the universal ceiling on November 25, 2026. Current
+qualification uses scope-appropriate cases, exact counts, meaningful
+timeouts and safe cleanup.
 
 ## Publication boundary
 

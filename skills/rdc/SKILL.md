@@ -163,3 +163,19 @@ Report actual observations separately from implemented adapters, fixtures, and p
 ## Native mobile installation
 
 For iPhone/iPad or Android setup, use [mobile installation](references/mobile-install.md). Distinguish the read-only companion installer from the host-side native control driver. Let the owner complete authentication and keep their password out of chat.
+
+## Continue authorized work in Chat
+
+Keep authorized work in the current Chat using available RDC tools. Initiate
+a Work or Codex handoff only when the owner explicitly requests it. Recover
+unfinished operations and jobs by their original identifiers before starting
+replacement work. A bounded wait returning a job ID is a progress state.
+Continue bounded status/output recovery and other authorized useful work;
+verify exit status, output and required cleanup before reporting completion.
+Report a real blocker precisely if no authorized route remains. Never imply
+work continues between chat turns unless a persistent job actually runs.
+
+The fixed 100-check rule is retired. Preserve historical ledgers and select
+tests needed for the actual change and remaining risk, with exact counts,
+meaningful timeouts and safe cleanup. Stop optional testing once sufficient
+evidence exists. Keep terminal and touch input as equal mobile priorities.

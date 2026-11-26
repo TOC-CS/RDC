@@ -62,8 +62,9 @@ Evidence packet: `~/RDC-Development/checkpoints/rdc-code-context-scope-20261117/
 For RDC mobile changes, use available Superpowers planning, isolated-worktree,
 test-driven development, systematic debugging, execution and verification
 skills. Keep one inline development path when parallel work would duplicate
-device state or spend extra tokens. Preserve the 100-check ceiling across
-all related tests and never replay uncertain input. Measure actual execution
+device state or spend extra tokens. Use scope-appropriate qualification with exact counts, meaningful timeouts
+and safe cleanup. The owner retired the fixed 100-check ceiling on
+November 25, 2026. Never replay uncertain input. Measure actual execution
 and verified feedback, not only request acceptance. Public release notes,
 source packages and walkthroughs must use generic examples, without owner
 applications, personal paths, private device evidence or signing material.
