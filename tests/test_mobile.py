@@ -902,7 +902,7 @@ class MobileTests(unittest.TestCase):
         sid = self.start()
         observed = self.observe(sid)
         button = next(c for c in observed['controls'] if c['name']=='Save')
-        with patch('rdc.mobile.urllib.request.build_opener', side_effect=RuntimeError('PRIVATE_TRANSPORT_PAYLOAD')):
+        with patch('rdc.mobile.http.client.HTTPConnection.request', side_effect=RuntimeError('PRIVATE_TRANSPORT_PAYLOAD')):
             with self.assertRaises(RDCError) as failure:
                 self.mobile.call('rdc_mobile_tap',{'session_id':sid,'observation_id':observed['observation_id'],'handle':button['handle']})
         self.assertNotIn('PRIVATE_',str(failure.exception))

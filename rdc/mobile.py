@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import copy
 import hashlib
+import http.client
 import io
 import ipaddress
 import json
@@ -718,6 +719,8 @@ class Mobile:
         validate_mobile_profiles(profiles)
         self._profiles = copy.deepcopy(profiles)
         self._sessions = {}
+        self._native_http_connections = {}
+        self._native_http_lock = threading.RLock()
         from .ios_mirroring import Mirroring
         self._mirroring = Mirroring(settings)
         from .ios_app import IOSAppLaunch
@@ -1448,7 +1451,95 @@ class Mobile:
         session.pop('visual_frame',None)
         session.pop('terminal_observation',None)
 
+    def _discard_native_http(self, endpoint):
+        connection = self._native_http_connections.pop(endpoint, None)
+        if connection is not None:
+            connection.close()
+
+    def _loopback_http_response(self, endpoint, method, path, body, timeout):
+        """Reuse a configured local driver socket, never retry a request.
+
+        http.client does not follow redirects or replay requests. External
+        HTTPS connections remain on the existing certificate-verified path.
+        Hold the transport lock across the complete request and response.
+        """
+        parsed = urllib.parse.urlsplit(endpoint)
+        target = parsed.path.rstrip('/') + path
+        if not target.startswith('/') or target.startswith('//'):
+            fail('mobile_protocol_error')
+        encoded = json.dumps(body, allow_nan=False).encode() if body is not None else None
+        with self._native_http_lock:
+            connection = self._native_http_connections.get(endpoint)
+            if connection is None:
+                connection = http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=timeout)
+                self._native_http_connections[endpoint] = connection
+            try:
+                connection.timeout = timeout
+                if connection.sock is not None:
+                    connection.sock.settimeout(timeout)
+                connection.request(method, target, body=encoded,
+                                   headers={'Content-Type':'application/json'})
+                with connection.getresponse() as response:
+                    status = response.status
+                    # Refuse malformed/oversized framing before buffering.
+                    lengths = response.headers.get_all('Content-Length', [])
+                    transfer = response.headers.get_all('Transfer-Encoding', [])
+                    if (len(lengths)>1 or len(transfer)>1
+                            or (lengths and transfer)
+                            or (transfer and transfer[0].strip().lower()!='chunked')
+                            or (lengths and (not lengths[0].isascii()
+                                or not lengths[0].isdigit() or len(lengths[0])>18))):
+                        fail('mobile_protocol_error')
+                    limit = MAX_RESPONSE_BYTES if 200<=status<300 else 4096
+                    if 200<=status<300 and lengths and int(lengths[0])>limit:
+                        fail('output_limit')
+                    raw = response.read(limit+1)
+                    if len(raw)>limit:
+                        fail('output_limit' if 200<=status<300 else 'mobile_driver_error')
+                    if lengths and len(raw)!=int(lengths[0]):
+                        fail('mobile_unavailable')
+                    if response.will_close or not 200<=status<300:
+                        self._discard_native_http(endpoint)
+                if not 200<=status<300:
+                    try:
+                        value=json.loads(raw)
+                        expired=isinstance(value,dict) and isinstance(value.get('value'),dict) and value['value'].get('error')=='invalid session id'
+                    except Exception:
+                        expired=False
+                    fail('mobile_session_gone' if expired else 'mobile_driver_error')
+                try: payload=json.loads(raw)
+                except Exception: fail('mobile_protocol_error')
+                if not isinstance(payload,dict) or 'value' not in payload:
+                    fail('mobile_protocol_error')
+                value=payload['value']
+                if isinstance(value,dict) and value.get('error'):
+                    fail('mobile_session_gone' if value['error']=='invalid session id' else 'mobile_driver_error')
+                return value
+            except RDCError:
+                self._discard_native_http(endpoint)
+                raise
+            except (OSError, TimeoutError, http.client.RemoteDisconnected, http.client.IncompleteRead):
+                self._discard_native_http(endpoint)
+                fail('mobile_unavailable')
+            except http.client.HTTPException:
+                self._discard_native_http(endpoint)
+                fail('mobile_protocol_error')
+            except Exception:
+                self._discard_native_http(endpoint)
+                fail('mobile_driver_error')
+
     def _http(self, profile, method, path, body=None, timeout=35):
+        endpoint=profile['endpoint']
+        parsed=urllib.parse.urlsplit(endpoint)
+        # Only the validated owner-configured local HTTP endpoints take the
+        # persistent path. No credential, TLS or proxy policy is changed.
+        if parsed.scheme=='http':
+            try:
+                loopback=ipaddress.ip_address(parsed.hostname).is_loopback
+            except ValueError:
+                loopback=parsed.hostname.lower()=='localhost'
+            if loopback:
+                return self._loopback_http_response(endpoint, method, path, body, timeout)
         class NoRedirect(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, *args, **kwargs): return None
         try:
@@ -1506,5 +1597,8 @@ class Mobile:
             finally:
                 self._closed = True
                 self._sessions.clear()
+                with self._native_http_lock:
+                    for endpoint in list(self._native_http_connections):
+                        self._discard_native_http(endpoint)
                 self._ios_app.invalidate()
                 self._publish_status()
