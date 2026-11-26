@@ -38,6 +38,13 @@ MESSAGES = {
     'invalid_config': 'Invalid mobile profile. Use an owner-defined native Android/UiAutomator2 or iOS/XCUITest profile with a safe endpoint and flat capabilities.',
     'invalid_arguments': 'Invalid mobile arguments. Use the advertised tool schema and current observation.',
     'unknown_tool': 'Unknown mobile tool.',
+    'direct_terminal_disabled': 'Owner opt-in is required for the direct iOS sandbox terminal.',
+    'direct_terminal_unavailable': 'Exact trusted developer connection or compatible companion build is unavailable.',
+    'direct_terminal_conflict': 'Request identity conflicts with the original configured device or command.',
+    'direct_terminal_unknown': 'An earlier command on this device has an unknown outcome. Recover the exact receipt without replay.',
+    'direct_terminal_journal_full': 'Direct terminal journal capacity reached. Owner review is required.',
+    'direct_terminal_recovery_required': 'Direct terminal journal could not be verified. Owner inspection is required.',
+    'direct_terminal_not_found': 'This request was not admitted by this worker.',
     'ios_app_launch_disabled': 'The owner must explicitly enable direct CoreDevice iOS app launch.',
     'ios_app_outcome_unknown': 'The app launch may have occurred. Inspect the device; do not replay it.',
     'ios_app_launch_unavailable': 'The exact app launch could not proceed. Prepare the owner-configured application again after inspecting the device.',
@@ -163,6 +170,13 @@ def _catalog():
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
         ('ios_app_launch', 'Request one owner-reviewed launch of the prepared iOS profile app without Xcode or Appium. No termination, installation, launch arguments, screen capture, or retry. Process readback does not imply foreground or native UI control.', True,
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},'observation_id':string}, ('profile','observation_id')),
+        ('ios_direct_terminal_execute', 'Request one owner-reviewed direct command inside the exact configured iOS RDC development companion. Requires opt-in and trusted developer transport. Supply a unique canonical request UUID. Reusing an admitted ID only reads its receipt; no automatic replay. This is a bounded app sandbox, not an OS shell.', True,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},
+          'request_id':{'type':'string','pattern':r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'},
+          'command':{'type':'string','minLength':1,'maxLength':4000}}, ('profile','request_id','command')),
+        ('ios_direct_terminal_recover', 'Read the exact previously admitted direct terminal result. No input, launch or copy-to-device replay. Requires the original configured companion profile and request UUID.', False,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},
+          'request_id':{'type':'string','pattern':r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'}}, ('profile','request_id')),
         ('mirror_observe', 'Read only the exact Apple iPhone Mirroring window and available fixed navigation commands. Requires owner opt-in. No phone contents or device identity are returned.', False, {}, ()),
         ('mirror_navigate', 'Request one owner-reviewed Apple iPhone Mirroring menu action with a fresh observation. The owner must verify the Apple-selected phone. No arbitrary input, capture or retry.', True,
          {'observation_id':string,'action':{'type':'string','enum':['home','app_switcher','spotlight']}}, ('observation_id','action')),
@@ -708,6 +722,8 @@ class Mobile:
         self._mirroring = Mirroring(settings)
         from .ios_app import IOSAppLaunch
         self._ios_app = IOSAppLaunch(settings,self._profiles)
+        from .ios_direct_terminal import DirectTerminal
+        self._direct_terminal = DirectTerminal(settings,self._profiles)
         self._lock = threading.RLock()
         self._status_lock = threading.Lock()
         self._closed = False
@@ -774,6 +790,12 @@ class Mobile:
                 include_observation=args.get('include_observation',False))
             self._publish_status(busy=True)
             try:
+                if action in ('ios_direct_terminal_execute','ios_direct_terminal_recover'):
+                    if self._sessions: fail('developer_preflight_conflict')
+                    self._ios_app.invalidate()
+                    self._mirroring.observation = None
+                    operation = self._direct_terminal.execute if action.endswith('_execute') else self._direct_terminal.recover
+                    return operation(**args)
                 if action in ('ios_app_prepare','ios_app_launch'):
                     if self._sessions: fail('developer_preflight_conflict')
                     self._mirroring.observation = None

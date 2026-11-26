@@ -10,9 +10,11 @@ struct LocalTerminal {
         let elapsedMs: Double
         let runId: String
         let commandDigest: String
-        var receipt: String {
-            "RDC terminal result | device-local | run=\(runId) | command=\(commandDigest) | exit=\(exitCode) | \(String(format: "%.2f", elapsedMs)) ms\n\(output)"
+        var header: String {
+            let timing = String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), elapsedMs)
+            return "RDC terminal result | device-local | run=\(runId) | command=\(commandDigest) | exit=\(exitCode) | \(timing) ms"
         }
+        var receipt: String { header + "\n" + output }
     }
 
     private enum Invalid: Error { case input, path, exists, limit, file }

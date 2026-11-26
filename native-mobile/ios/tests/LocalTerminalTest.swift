@@ -28,6 +28,14 @@ import Foundation
         check("unsupported shell", terminal.execute("sh -c id").exitCode != 0)
         check("bounded input", terminal.execute("echo "+String(repeating: "x",count: 4096)).exitCode != 0)
         check("listing", terminal.execute("ls sub").output == "test.txt")
+        let receipt = LocalTerminal.Result(exitCode: 0, output: "fixture output\nsecond line",
+            elapsedMs: 12.34, runId: "11111111-1111-4111-8111-111111111111",
+            commandDigest: String(repeating: "a", count: 64))
+        check("standalone exact receipt header", receipt.header ==
+            "RDC terminal result | device-local | run=11111111-1111-4111-8111-111111111111 | command=" +
+            String(repeating: "a", count: 64) + " | exit=0 | 12.34 ms")
+        check("header excludes output", !receipt.header.contains("fixture output") && !receipt.header.contains("\n"))
+        check("combined receipt compatibility", receipt.receipt == receipt.header + "\n" + receipt.output)
         print("LOCAL_TERMINAL_CASES=\(count)")
     }
 }

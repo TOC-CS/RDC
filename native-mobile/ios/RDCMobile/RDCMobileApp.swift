@@ -14,11 +14,66 @@ final class NoRedirect: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     @State private var terminal = false
     var body: some Scene {
         WindowGroup {
-            if terminal { LocalTerminalView(onBack: { terminal = false }) }
-            else { StatusView(onOpenTerminal: { terminal = true }) }
+            #if DEBUG
+            if let id = DirectTerminalLaunch.requestID(CommandLine.arguments) {
+                DirectTerminalLaunch(requestID: id)
+            } else {
+                normalView
+            }
+            #else
+            normalView
+            #endif
+        }
+    }
+    @ViewBuilder private var normalView: some View {
+        if terminal { LocalTerminalView(onBack: { terminal = false }) }
+        else { StatusView(onOpenTerminal: { terminal = true }) }
+    }
+}
+
+#if DEBUG
+/// Explicit developer-service launch only; not a public URL or background endpoint.
+private struct DirectTerminalLaunch: View {
+    let requestID: String
+    @State private var status = "Waiting for local developer request"
+    @State private var started = false
+    static func requestID(_ arguments: [String]) -> String? {
+        guard arguments.count == 3, arguments[1] == "--rdc-direct-terminal",
+              UUID(uuidString: arguments[2])?.uuidString.lowercased() == arguments[2]
+        else { return nil }
+        return arguments[2]
+    }
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("RDC device-local command")
+            Text(status)
+        }
+        .task {
+            guard !started else { return }
+            started = true
+            let id = requestID
+            let result = await Task.detached(priority: .userInitiated) {
+                do {
+                    let fm = FileManager.default
+                    let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                    try fm.createDirectory(at: support, withIntermediateDirectories: true)
+                    return DirectTerminalMailbox(documents: docs,
+                        workspace: support.appendingPathComponent("RDCWorkspace", isDirectory: true)).process(id)
+                } catch {
+                    return DirectTerminalMailbox.Outcome.refused
+                }
+            }.value
+            switch result {
+            case .completed: status = "Result ready"
+            case .alreadyClaimed: status = "Request already claimed; no replay"
+            case .refused: status = "Request refused"
+            case .outcomeUnknown: status = "Outcome unknown; inspect result without replay"
+            }
         }
     }
 }
+#endif
 
 struct StatusView: View {
     let onOpenTerminal: () -> Void

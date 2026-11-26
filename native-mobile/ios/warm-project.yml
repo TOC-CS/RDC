@@ -1,0 +1,26 @@
+name: RDCWarmTerminal
+options:
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  RDCWarmTerminal:
+    type: application
+    platform: iOS
+    sources:
+      - path: RDCWarmTerminal
+      - path: RDCMobile/LocalTerminal.swift
+    info:
+      path: generated-warm/Info.plist
+      properties:
+        CFBundleDisplayName: RDC Warm Terminal
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.tocministries.rdc.warmterminal
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        CODE_SIGN_STYLE: Automatic

@@ -5,7 +5,9 @@ struct LocalTerminalView: View {
     let onBack: () -> Void
     @Environment(\.scenePhase) private var phase
     @State private var input = ""
-    @State private var receipt = "Device-local sandbox. Type help."
+    @State private var receiptHeader = ""
+    @State private var output = "Device-local sandbox. Type help."
+    @FocusState private var commandFocused: Bool
     @State private var busy = false
     @State private var generation = UUID()
 
@@ -19,18 +21,28 @@ struct LocalTerminalView: View {
                 Section("Command") {
                     TextField("Enter local command", text: $input)
                         .accessibilityLabel("RDC local command")
+                        .focused($commandFocused)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .font(.system(.body, design: .monospaced))
                     Button("Run local command", action: run)
                         .disabled(busy || input.isEmpty)
-                    Button("Clear output") { receipt = "Output cleared."; input = "" }
+                    Button("Clear output") { receiptHeader = ""; output = "Output cleared."; input = ""; commandFocused = false }
                         .disabled(busy)
                 }
                 Section("Result") {
-                    Text(receipt).font(.system(.footnote, design: .monospaced))
-                        .textSelection(.enabled)
-                        .accessibilityLabel(receipt)
+                    // Keep the bounded execution identity distinct from output
+                    // and editable values. Do not make the receipt a text view.
+                    if !receiptHeader.isEmpty {
+                        Text(receiptHeader)
+                            .font(.system(.footnote, design: .monospaced))
+                            .accessibilityLabel(Text(receiptHeader))
+                            .accessibilityIdentifier("rdc-terminal-receipt")
+                    }
+                    Text(output)
+                        .font(.system(.footnote, design: .monospaced))
+                        .accessibilityLabel(Text(output))
+                        .accessibilityIdentifier("rdc-terminal-output")
                 }
             }
             .navigationTitle("Local terminal")
@@ -39,16 +51,18 @@ struct LocalTerminalView: View {
             } }
         }
         .onChange(of: phase) { value in
-            if value != .active { generation = UUID(); input = ""; receipt = "Output cleared." }
+            if value != .active { generation = UUID(); input = ""; receiptHeader = ""; output = "Output cleared."; commandFocused = false }
         }
     }
 
     private func run() {
         guard !busy, !input.isEmpty else { return }
         let command = input
+        commandFocused = false
         input = ""
         busy = true
-        receipt = "Running on this device…"
+        receiptHeader = ""
+        output = "Running on this device…"
         let id = UUID()
         generation = id
         Task {
@@ -57,14 +71,16 @@ struct LocalTerminalView: View {
                 // Application Support is created by Foundation inside this application's container.
                 do {
                     try FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
-                    return LocalTerminal(root: documents.appendingPathComponent("RDCWorkspace", isDirectory: true)).execute(command).receipt
+                    let result = LocalTerminal(root: documents.appendingPathComponent("RDCWorkspace", isDirectory: true)).execute(command)
+                    return (result.header, result.output)
                 } catch {
-                    return "RDC terminal result | device-local | exit=1 | Workspace unavailable."
+                    return ("", "Workspace unavailable.")
                 }
             }.value
             busy = false
             guard generation == id else { return }
-            receipt = result
+            receiptHeader = result.0
+            output = result.1
         }
     }
 }

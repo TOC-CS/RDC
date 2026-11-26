@@ -275,6 +275,44 @@
       "python_take": 19,
       "python_offset": 0,
       "python_discovery": false
+    },
+    "ios-direct-terminal-worker": {
+      "description": "Direct developer transport journal and owner-admission contracts",
+      "node_files": [],
+      "python_module": "tests.test_ios_direct_terminal",
+      "python_take": 22,
+      "python_offset": 0,
+      "python_discovery": false
+    },
+    "ios-direct-terminal-receipt-red": {
+      "node_files": [],
+      "python_module": "tests.test_ios_direct_terminal.DirectTerminalTests.test_verified_run_identity_cannot_change_on_recovery",
+      "python_discovery": false,
+      "python_take": 1,
+      "python_offset": 0
+    },
+    "ios-direct-terminal-receipt-integrity": {
+      "node_files": [],
+      "python_module": "tests.test_ios_direct_terminal",
+      "python_discovery": false,
+      "python_take": 22,
+      "python_offset": 0
+    },
+    "ios-warm-terminal-qualification": {
+      "description": "43 host cases within the private warm-terminal qualification's shared max100 ledger: 22 cold regressions,9 shared journal cases,12 codec/USB cases.",
+      "node_files": [],
+      "python_module": "tests.test_ios_warm_terminal_qualification",
+      "python_take": 43,
+      "python_offset": 0,
+      "python_discovery": false
+    },
+    "ios-terminal-preview-integration": {
+      "description": "43 bounded source cases; combined with 53 physical checks = 96/100 maximum before publication readback",
+      "node_files": [],
+      "python_module": "tests.test_ios_warm_terminal_qualification",
+      "python_take": 43,
+      "python_offset": 0,
+      "python_discovery": false
     }
   }
 }
