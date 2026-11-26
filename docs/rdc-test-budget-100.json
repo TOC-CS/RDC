@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "owner_policy": "RDC testing hard ceiling: 100 executed test cases per campaign, across every test category combined. A request for 101 fails before execution.",
-  "max_cases": 100,
+  "owner_policy": "Fixed 100-case ceiling retired by the owner on November 25, 2026. Test selections are determined by acceptance criteria and actual scope. Keep exact accounting, timeouts, cleanup and explicit campaign-specific limits where useful.",
+  "max_cases": null,
   "ci_matrix": {
     "ubuntu-latest": "ci-ubuntu",
     "macos-latest": "ci-macos",

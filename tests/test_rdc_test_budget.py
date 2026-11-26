@@ -1,8 +1,8 @@
-"""Owner-mandated maximum of 100 RDC test executions per campaign."""
+"""RDC scope-based test planning and accounting."""
 import unittest
 from pathlib import Path
 from scripts.rdc_test_budget import (
-    MAX_RDC_TESTS, TestBudgetExceeded, validate_budget,
+    TestBudgetExceeded, validate_budget,
     distribute_security_checks, count_node_test_cases, preflight_campaign,
     load_policy,
 )
@@ -10,17 +10,16 @@ from scripts.rdc_test_budget import (
 ROOT = Path(__file__).resolve().parent.parent
 
 
-class RDC100BudgetTests(unittest.TestCase):
-    def test_absolute_cap_is_exactly_100(self):
-        self.assertEqual(MAX_RDC_TESTS, 100)
+class RDCBudgetTests(unittest.TestCase):
+    def test_default_accepts_more_than_one_hundred(self):
         self.assertEqual(validate_budget({"javascript": 86, "python": 14}), 100)
-        self.assertEqual(validate_budget({"security": 100}), 100)
+        self.assertEqual(validate_budget({"security": 101}), 101)
+        self.assertEqual(validate_budget({"a": 120, "b": 80}), 200)
 
-    def test_101_or_multiplying_three_categories_fails_before_execution(self):
-        for parts in ({"security": 101}, {"a": 34, "b": 34, "c": 33},
-                      {"security_a": 100, "security_b": 100, "security_c": 100}):
-            with self.subTest(parts=parts), self.assertRaises(TestBudgetExceeded):
-                validate_budget(parts)
+    def test_explicit_campaign_limit_is_still_enforced(self):
+        self.assertEqual(validate_budget({"a": 120, "b": 80}, limit=200), 200)
+        with self.assertRaises(TestBudgetExceeded):
+            validate_budget({"a": 120, "b": 81}, limit=200)
 
     def test_boolean_negative_and_noninteger_budgets_rejected(self):
         for value in (True, 3.5, -1, "100", None):
@@ -37,9 +36,9 @@ class RDC100BudgetTests(unittest.TestCase):
         self.assertEqual(count_node_test_cases(
             ROOT / "cloud-gateway/tests/v2/actor.test.mjs"), 34)
 
-    def test_default_core_campaign_cannot_exceed_100(self):
+    def test_default_core_campaign_retains_its_existing_selection(self):
         data = preflight_campaign(ROOT, "local-core")
-        self.assertEqual(data["max_cases"], 100)
+        self.assertIsNone(data["max_cases"])
         self.assertEqual(data["planned_total"], 100)
         self.assertEqual(data["node_cases"], 86)
         self.assertEqual(data["python_cases"], 14)
@@ -52,27 +51,38 @@ class RDC100BudgetTests(unittest.TestCase):
                                  for path in policy["campaigns"][name]["node_files"])
                              for name in matrix.values()), 100)
 
-    def test_policy_rejects_oversized_override_even_if_requested(self):
-        with self.assertRaises(TestBudgetExceeded):
-            validate_budget({"name": 100}, limit=101)
+    def test_explicit_larger_security_selection(self):
+        self.assertEqual(sum(distribute_security_checks(301).values()), 301)
 
-    def test_ci_workflow_uses_shared_100_case_governor(self):
+    def test_ci_workflow_keeps_test_execution_and_evidence(self):
         workflow = (ROOT / ".github/workflows/test.yml").read_text()
-        self.assertIn("scripts/rdc_test_budget.py", workflow)
-        self.assertEqual(workflow.count("test_budget: "), 3)
-        self.assertIn("test_budget: 34", workflow)
-        self.assertEqual(workflow.count("test_budget: 33"), 2)
-        self.assertNotIn("run: python -m unittest discover", workflow)
-        self.assertNotIn("run: node --test", workflow)
+        self.assertTrue("scripts/rdc_test_budget.py" in workflow or
+                        "python -m unittest discover -s tests" in workflow)
+        self.assertTrue("scripts/rdc_test_budget.py" in workflow or
+                        "node --test cloud-gateway/tests/" in workflow)
+        self.assertIn("actions/upload-artifact", workflow)
+        self.assertIn("if: always()", workflow)
 
-    def test_101_node_declarations_rejected_before_runner_start(self):
+    def test_101_node_declarations_admitted_before_runner_start(self):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "overbudget.test.mjs"
             path.write_text("import test from 'node:test';\n" +
                             "test('case', () => {});\n" * 101)
-            with self.assertRaises(TestBudgetExceeded):
-                count_node_test_cases(path)
+            self.assertEqual(count_node_test_cases(path), 101)
+
+    def test_manifest_can_plan_more_than_one_hundred(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs").mkdir()
+            manifest = {"schema_version": 1, "max_cases": None,
+                        "campaigns": {"extended": {"node_files": [],
+                            "python_take": 180, "python_offset": 0,
+                            "python_module": "tests.test_mobile"}}}
+            (root / "docs/rdc-test-budget-100.json").write_text(json.dumps(manifest))
+            self.assertEqual(preflight_campaign(root, "extended")["planned_total"], 180)
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,8 +1,8 @@
-"""TOC RDC test-execution governor. Hard cap: 100 total cases per campaign.
+"""TOC RDC scope-based test execution planner and accounting.
 
-Use this entry point for local/CI RDC testing. Counts are checked before
-executing any test. Source tests remain preserved for later, separately
-authorized bounded campaigns. Local results never qualify hosted speed gates.
+Use this entry point for local/CI RDC testing. Declared test selections are checked before execution.
+No universal case-count ceiling applies. Explicit per-campaign limits, when
+provided, remain enforced. Local results never qualify hosted speed gates.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import sys
 import time
 import unittest
 
-MAX_RDC_TESTS = 100
+DEFAULT_SECURITY_CASES = 100
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -26,7 +26,7 @@ NODE_REPORTED = re.compile(r"(?m)^(?:#\s*tests\s+|ℹ\s+tests\s+)(\d+)\s*$")
 
 
 class TestBudgetExceeded(ValueError):
-    """Request was refused before running more than 100 RDC test cases."""
+    """Invalid test plan or explicitly configured campaign limit."""
 
 
 def _integer(value, name: str, *, positive: bool = False) -> int:
@@ -35,10 +35,9 @@ def _integer(value, name: str, *, positive: bool = False) -> int:
     return value
 
 
-def validate_budget(allocations: dict[str, int], *, limit: int = MAX_RDC_TESTS) -> int:
-    _integer(limit, "budget", positive=True)
-    if limit > MAX_RDC_TESTS:
-        raise TestBudgetExceeded("RDC hard ceiling is 100 tests. Override refused.")
+def validate_budget(allocations: dict[str, int], *, limit: int | None = None) -> int:
+    if limit is not None:
+        _integer(limit, "budget", positive=True)
     if not isinstance(allocations, dict) or not allocations:
         raise TestBudgetExceeded("Test allocation is missing")
     total = 0
@@ -47,14 +46,14 @@ def validate_budget(allocations: dict[str, int], *, limit: int = MAX_RDC_TESTS) 
             raise TestBudgetExceeded("Invalid test category")
         _integer(count, name)
         total += count
-    if total > limit:
+    if limit is not None and total > limit:
         raise TestBudgetExceeded(
             f"Rejected before execution: {total} RDC cases across categories; maximum {limit}."
         )
     return total
 
 
-def distribute_security_checks(total: int = MAX_RDC_TESTS) -> dict[str, int]:
+def distribute_security_checks(total: int = DEFAULT_SECURITY_CASES) -> dict[str, int]:
     _integer(total, "security total", positive=True)
     validate_budget({"all hostile categories combined": total})
     groups = ("unauthenticated", "wrong_owner", "wrong_socket_key")
@@ -68,7 +67,7 @@ def count_node_test_cases(path: Path) -> int:
         raise TestBudgetExceeded(f"Missing or oversized Node test: {path.name}")
     content = path.read_text(encoding="utf-8")
     count = len(NODE_DECLARATION.findall(content))
-    if not 1 <= count <= MAX_RDC_TESTS:
+    if count < 1:
         raise TestBudgetExceeded(
             f"Unsafe Node test declaration count for {path.name}: {count}"
         )
@@ -78,8 +77,10 @@ def count_node_test_cases(path: Path) -> int:
 def load_policy(root: Path = ROOT) -> dict:
     doc = Path(root) / "docs/rdc-test-budget-100.json"
     policy = json.loads(doc.read_text(encoding="utf-8"))
-    if policy.get("schema_version") != 1 or policy.get("max_cases") != MAX_RDC_TESTS:
-        raise TestBudgetExceeded("Policy must pin hard ceiling to exactly 100")
+    if policy.get("schema_version") != 1:
+        raise TestBudgetExceeded("Unsupported test policy schema")
+    if policy.get("max_cases") is not None:
+        _integer(policy["max_cases"], "budget", positive=True)
     if not isinstance(policy.get("campaigns"), dict):
         raise TestBudgetExceeded("Missing test campaigns")
     return policy
@@ -92,7 +93,7 @@ def preflight_campaign(root: Path, campaign: str) -> dict:
     if not isinstance(entry, dict):
         raise TestBudgetExceeded(f"Unknown campaign: {campaign}")
     files = entry.get("node_files")
-    if not isinstance(files, list) or len(files) > MAX_RDC_TESTS:
+    if not isinstance(files, list):
         raise TestBudgetExceeded("Invalid Node test file manifest")
     node_cases = 0
     paths = []
@@ -112,8 +113,9 @@ def preflight_campaign(root: Path, campaign: str) -> dict:
     if python_cases and not (entry.get("python_discovery") is True or
                              isinstance(entry.get("python_module"), str)):
         raise TestBudgetExceeded("Python selection is missing")
-    planned = validate_budget({"node": node_cases, "python": python_cases})
-    return {"campaign": campaign, "max_cases": MAX_RDC_TESTS,
+    limit = entry.get("max_cases", policy.get("max_cases"))
+    planned = validate_budget({"node": node_cases, "python": python_cases}, limit=limit)
+    return {"campaign": campaign, "max_cases": limit,
             "planned_total": planned, "node_cases": node_cases,
             "python_cases": python_cases, "python_offset": offset,
             "node_files": paths, "python_discovery": bool(entry.get("python_discovery")),
@@ -151,12 +153,12 @@ def _run_campaign(root: Path, plan: dict, output_dir: Path) -> dict:
     # Prepare *all* case identities before running Node or Python tests.
     root = Path(root).resolve()
     selected = _select_python_tests(root, plan)
-    validate_budget({"node": plan["node_cases"], "python": len(selected)})
+    validate_budget({"node": plan["node_cases"], "python": len(selected)}, limit=plan.get("max_cases"))
     output_dir.mkdir(parents=True, exist_ok=True)
     report = {
-        "scope": "RDC local or CI capped test campaign",
+        "scope": "RDC local or CI planned test campaign",
         "campaign": plan["campaign"],
-        "limit": MAX_RDC_TESTS,
+        "limit": plan.get("max_cases"),
         "planned_total": plan["planned_total"],
         "executed_total": 0,
         "node": {"planned": plan["node_cases"], "executed": 0},
@@ -208,13 +210,13 @@ def _run_campaign(root: Path, plan: dict, output_dir: Path) -> dict:
         report["passed"] = True
         return report
     finally:
-        if report["executed_total"] > MAX_RDC_TESTS:
+        if report["executed_total"] > plan["planned_total"] or (plan.get("max_cases") is not None and report["executed_total"] > plan["max_cases"]):
             report["passed"] = False
-            raise TestBudgetExceeded("Unexpected test count over hard ceiling")
+            raise TestBudgetExceeded("Unexpected executed count exceeds declared plan")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="RDC max-100 test governor")
+    parser = argparse.ArgumentParser(description="RDC test planner and execution accounting")
     parser.add_argument("--campaign", required=True)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--report", type=Path, default=None)
@@ -222,19 +224,19 @@ def main() -> int:
     try:
         plan = preflight_campaign(ROOT, args.campaign)
         policy = load_policy(ROOT)
-        # Enforce the TOTAL CI matrix budget before allowing any platform job.
+        # Check an explicit CI matrix limit, when configured.
         if args.campaign in policy["ci_matrix"].values():
             allocations = {
                 os_name: preflight_campaign(ROOT, name)["planned_total"]
                 for os_name, name in policy["ci_matrix"].items()
             }
-            validate_budget(allocations)
+            validate_budget(allocations, limit=policy.get("ci_matrix_max_cases", policy.get("max_cases")))
         if args.dry_run:
             print(json.dumps({**plan, "status": "preflight-only", "passed": True},
                              indent=2))
             return 0
         destination = args.report or (
-            ROOT / "test-results" / (args.campaign + "-100-budget.json")
+            ROOT / "test-results" / (args.campaign + "-budget.json")
         )
         report = _run_campaign(ROOT, plan, destination.parent)
         destination.write_text(json.dumps(report, indent=2) + "\n",
