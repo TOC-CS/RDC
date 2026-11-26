@@ -1585,6 +1585,12 @@ class Mobile:
             if exc.code == 'mobile_session_gone': return
             session['setup_status'] = 'cleanup_required'
             fail('mobile_cleanup_required')
+        finally:
+            # Explicit session teardown is a transport lifecycle boundary.
+            # A replacement service may bind the same endpoint. Never carry
+            # its predecessor's socket into a later session creation.
+            with self._native_http_lock:
+                self._discard_native_http(self._profiles[session['profile']]['endpoint'])
 
     def close(self):
         with self._lock:

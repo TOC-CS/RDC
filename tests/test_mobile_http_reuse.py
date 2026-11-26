@@ -62,16 +62,18 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length",str(len(data)))
         self.end_headers()
         self.wfile.write(data)
-    do_GET=do_POST=_handle
+    do_GET=do_POST=do_DELETE=_handle
 class Server(ThreadingHTTPServer):
     daemon_threads=True
     def __init__(self):
         self.accepted=0
         self.requests=[]
+        self.connections=[]
         super().__init__(("127.0.0.1",0),Handler)
     def get_request(self):
         sock,addr=super().get_request()
         self.accepted+=1
+        self.connections.append(sock)
         return sock,addr
 
 class PersistentNativeHTTPTests(unittest.TestCase):
@@ -143,4 +145,23 @@ class PersistentNativeHTTPTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code,"mobile_protocol_error")
         self.assertFalse(self.mobile._native_http_connections)
         self.request()
+        self.assertEqual(self.server.accepted,2)
+
+    def test_closed_session_does_not_reuse_socket_from_restarted_driver(self):
+        self.assertEqual(self.request(),{"ok":True})
+        self.mobile._destroy({"profile":"fixture","driver_id":"first-session"})
+        # A service restart closes its accepted streams. Its replacement can
+        # listen on the same endpoint, but cannot recover the previous socket.
+        for connection in list(self.server.connections):
+            try:
+                connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            connection.close()
+        try:
+            value=self.request("/new-session","POST",{})
+        except RDCError as exc:
+            self.fail("A completed session retained a stale socket: "+exc.code)
+        self.assertEqual(value,{"ok":True})
+        self.assertEqual(self.server.requests.count(("POST","/driver/new-session")),1)
         self.assertEqual(self.server.accepted,2)
