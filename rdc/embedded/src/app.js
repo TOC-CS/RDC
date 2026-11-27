@@ -5,7 +5,7 @@ document.querySelectorAll('[data-rdc-logo]').forEach(image => { image.src = bran
 
 // The host mediates every request. This view never contacts a worker URL,
 // receives owner credentials, or changes worker/session/job lifetime.
-const app = new App({name: 'RDC Preview', version: '0.1.0a8-preview.9'}, {
+const app = new App({name: 'RDC Preview', version: '0.1.0a8-preview.10'}, {
   availableDisplayModes: ['inline', 'fullscreen', 'pip'],
 });
 const el = id => document.getElementById(id);
@@ -638,9 +638,9 @@ function applyLayout() {
   updateCursor();
 }
 function canFloatInHost() {
-  // The host's advertised modes are authoritative. The existence of a
-  // legacy requestDisplayMode function does not establish PiP support.
-  return state.modes.includes('pip');
+  // The documented OpenAI bridge allows a user-initiated request even when
+  // the separate MCP transport omits PiP. Its returned mode still decides.
+  return state.modes.includes('pip') || typeof window.openai?.requestDisplayMode === 'function';
 }
 function floatingNotice(message = '') {
   text('float-note', message);
@@ -652,7 +652,10 @@ function requestAutomaticFloat() {
       state.selectionLost || state.setupProblem || !sourceId(state.sessionId) ||
       state.autoFloatAttempted || state.floatPending) return;
   if (state.mode === 'pip') { state.autoFloatAttempted = true; floatingNotice(); return; }
-  if (!canFloatInHost()) { floatingNotice(FLOAT_UNAVAILABLE); return; }
+  if (!state.modes.includes('pip')) {
+    floatingNotice(canFloatInHost() ? 'Choose Float to request a floating view.' : FLOAT_UNAVAILABLE);
+    return;
+  }
   state.autoFloatAttempted = true;
   void requestMode('pip');
 }

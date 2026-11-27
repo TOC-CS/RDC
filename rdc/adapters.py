@@ -256,6 +256,8 @@ class Adapters:
     def _desktop_status(self):
         mode=self.settings.desktop_mode
         return {'mode':mode,'available':mode!='disabled','independent_input':False,
+                'background_only':self.settings.background_only,
+                'input_available':mode!='disabled' and not self.settings.background_only,
                 'owner_input_approval_required':mode!='disabled',
                 'isolation':'Isolation is not verified by RDC. Each native input requires owner approval.' if mode=='isolated' else 'Uses the owner OS cursor; each native input requires owner approval.' if mode=='shared' else 'Disabled by owner configuration.'}
     def _desktop(self,action,args):
@@ -561,6 +563,10 @@ class _Browsers:
     def start(self,args):
         if len(self.sessions)>=MAX_SESSIONS: raise RDCError('session_limit','At most 8 browser sessions may run; close an existing session')
         backend=self.settings.browser_backend
+        if self.settings.background_only and backend=='webdriver':
+            raise RDCError('background_required',
+                'Background-only mode requires the independent Playwright browser. '
+                'WebDriver isolation is not verified; no shared desktop fallback was started.')
         if backend=='disabled': raise RDCError('adapter_disabled','Browser control is disabled by owner configuration')
         browser=args.get('browser') or ('chromium' if backend=='playwright' else (self.settings.webdriver_capabilities or {}).get('browserName',''))
         width,height=args.get('width',1280),args.get('height',800)

@@ -139,6 +139,60 @@
       "python_discovery": false,
       "python_offset": 0,
       "python_take": 4
+    },
+    "background-repair-red": {
+      "node_files": [],
+      "python_take": 4,
+      "python_offset": 0,
+      "python_module": "tests.test_background_policy"
+    },
+    "preview-repair-red": {
+      "node_files": [],
+      "python_take": 2,
+      "python_offset": 0,
+      "python_module": "tests.test_preview_repair_selected"
+    },
+    "background-repair-green": {
+      "node_files": [],
+      "python_take": 4,
+      "python_offset": 0,
+      "python_module": "tests.test_background_policy"
+    },
+    "preview-repair-green": {
+      "node_files": [],
+      "python_take": 2,
+      "python_offset": 0,
+      "python_module": "tests.test_preview_repair_selected"
+    },
+    "background-preview-regression": {
+      "node_files": [],
+      "python_take": 28,
+      "python_offset": 0,
+      "python_module": "tests.test_background_preview_campaign"
+    },
+    "preview-version-red": {
+      "node_files": [],
+      "python_take": 2,
+      "python_offset": 0,
+      "python_module": "tests.test_preview_resources"
+    },
+    "preview-version-green": {
+      "node_files": [],
+      "python_take": 2,
+      "python_offset": 0,
+      "python_module": "tests.test_preview_resources"
+    },
+    "background-preview-grant-red": {
+      "node_files": [],
+      "python_take": 3,
+      "python_offset": 0,
+      "python_module": "tests.test_background_preview_window_grant"
+    },
+    "background-preview-grant-green": {
+      "node_files": [],
+      "python_take": 3,
+      "python_offset": 0,
+      "python_module": "tests.test_background_preview_window_grant"
     }
   }
 }

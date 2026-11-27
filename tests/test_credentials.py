@@ -522,7 +522,7 @@ class PrivateAdapterTests(unittest.TestCase):
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True); self.thread.start()
         self.temporary = tempfile.TemporaryDirectory()
         settings = Settings(Path(self.temporary.name) / 'state', [Path(self.temporary.name)],
-            browser_backend='webdriver', webdriver_url=f'http://127.0.0.1:{self.server.server_port}',
+            background_only=False, browser_backend='webdriver', webdriver_url=f'http://127.0.0.1:{self.server.server_port}',
             webdriver_capabilities={'browserName': 'safari'})
         self.adapter = Adapters(settings)
         self.sid = self.adapter.call('rdc_browser_start', {})['session_id']

@@ -954,8 +954,8 @@ test('modern discovery and cacheable resource responses satisfy required result 
 test('preview resources prefer inline and preserve every published alias',async()=>{
   const s=setup();
   const listing=await modern(s,'resources/list');
-  assert.deepEqual(listing.body.result.resources.map(resource=>resource.uri),['ui://rdc/preview-v9.html']);
-  for(const uri of ['ui://rdc/preview-v9.html','ui://rdc/preview-v8.html','ui://rdc/preview-v7.html','ui://rdc/preview-v6.html','ui://rdc/preview-v5.html','ui://rdc/preview-v4.html','ui://rdc/preview-v3.html','ui://rdc/preview-v2.html','ui://rdc/preview-v1.html']){
+  assert.deepEqual(listing.body.result.resources.map(resource=>resource.uri),['ui://rdc/preview-v10.html']);
+  for(const uri of ['ui://rdc/preview-v10.html','ui://rdc/preview-v9.html','ui://rdc/preview-v8.html','ui://rdc/preview-v7.html','ui://rdc/preview-v6.html','ui://rdc/preview-v5.html','ui://rdc/preview-v4.html','ui://rdc/preview-v3.html','ui://rdc/preview-v2.html','ui://rdc/preview-v1.html']){
     const response=await modern(s,'resources/read',{uri});
     assert.equal(response.status,200);
     assert.equal(response.body.result.contents[0].uri,uri);
