@@ -71,23 +71,64 @@ class Store:
     def device_id(self):
         return self.get('device_id')
 
-    def job(self, identifier):
-        with self.connection() as db:
-            row = db.execute('SELECT * FROM jobs WHERE id=?', (identifier,)).fetchone()
-        if not row:
-            raise RDCError('job_not_found', 'No job with that ID belongs to this worker.')
+    @staticmethod
+    def _job_record(row, device_id):
+        """Keep single-job recovery and batch-list output shapes identical."""
         data = dict(row)
         spec = json.loads(data.pop('spec'))
         data.update({key: spec[key] for key in ('argv', 'cwd', 'timeout')})
         data.pop('fingerprint')
         data['truncated'] = bool(data['truncated'])
-        data['device_id'] = self.device_id
+        data['device_id'] = device_id
         return data
 
-    def jobs(self, limit=100):
+    def job_state(self, identifier):
+        """Read just the durable terminal state while a short job is running.
+
+        Completion still gets one detailed record through job(), retaining the
+        original snapshot, device identity, arguments and exit status.
+        """
         with self.connection() as db:
-            ids = [r['id'] for r in db.execute('SELECT id FROM jobs ORDER BY created_at DESC LIMIT ?', (limit,))]
-        return [self.job(identifier) for identifier in ids]
+            row = db.execute('SELECT status FROM jobs WHERE id=?', (identifier,)).fetchone()
+        if not row:
+            raise RDCError('job_not_found', 'No job with that ID belongs to this worker.')
+        return row['status']
+
+    def job(self, identifier):
+        with self.connection() as db:
+            row = db.execute('SELECT * FROM jobs WHERE id=?', (identifier,)).fetchone()
+        if not row:
+            raise RDCError('job_not_found', 'No job with that ID belongs to this worker.')
+        return self._job_record(row, self.device_id)
+
+    def job_count(self, limit=100):
+        """Match bounded list length without N+1 detailed job reads."""
+        with self.connection() as db:
+            total=db.execute('SELECT COUNT(*) AS n FROM jobs').fetchone()['n']
+        return min(total,limit)
+
+    def jobs(self, limit=100):
+        # One SQLite connection serves this bounded detailed snapshot instead
+        # of N per-job connections plus N more device-ID lookups. Never mutate
+        # the jobs, their original IDs, execution state or retained results.
+        with self.connection() as db:
+            rows = db.execute(
+                'SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?', (limit,)
+            ).fetchall()
+            identity = db.execute(
+                'SELECT value FROM meta WHERE key=?', ('device_id',)
+            ).fetchone()
+        device_id = identity['value'] if identity else None
+        return [self._job_record(row, device_id) for row in rows]
+
+    def approvals_count(self, limit=100):
+        """Keep expiration authoritative while avoiding JSON decoding."""
+        with self.connection() as db:
+            db.execute("UPDATE approvals SET status='expired' "
+                       "WHERE status='pending' AND expires_at<?", (time.time(),))
+            total=db.execute("SELECT COUNT(*) AS n FROM approvals "
+                             "WHERE status='pending'").fetchone()['n']
+        return min(total,limit)
 
     def approvals(self, limit=100):
         with self.connection() as db:

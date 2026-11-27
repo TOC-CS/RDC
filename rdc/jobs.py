@@ -12,6 +12,9 @@ from .errors import RDCError
 
 
 ACTIVE = ('queued', 'running', 'cancelling')
+# Short inline jobs check their exact durable state promptly. Long-running
+# commands keep the existing bounded 40ms poll cadence and recovery identity.
+INLINE_SHORT_POLL_SECONDS = 0.003
 
 
 class Jobs:
@@ -92,18 +95,39 @@ class Jobs:
         wait_started = time.monotonic()
         deadline = wait_started + wait_ms / 1000
         try:
+            # Normal stores poll a small status-only row. Existing isolated
+            # fixture stores without job_state retain their original behavior.
+            read_state = getattr(self.store, 'job_state', None)
             while True:
-                job = self.store.job(identifier)
-                if job['status'] not in ACTIVE:
-                    break
+                job = None
+                status = read_state(identifier) if read_state else None
+                if read_state is None:
+                    job = self.store.job(identifier)
+                    status = job['status']
+                if status not in ACTIVE:
+                    # Fetch full durable metadata once, including the original
+                    # stdout/exit status, after observing a terminal state.
+                    if job is None:
+                        job = self.store.job(identifier)
+                    if job['status'] not in ACTIVE:
+                        break
                 now = time.monotonic()
                 remaining = deadline - now
                 if remaining <= 0:
+                    if job is None:
+                        job = self.store.job(identifier)
+                    if job['status'] not in ACTIVE:
+                        break
                     return {'job':job, 'reused':started['reused'],
                             'complete':False, 'output':None}
                 # Observe short completions promptly, then bound SQLite polling
                 # for commands that need the durable background lifecycle.
-                interval = 0.01 if now - wait_started < 0.2 else 0.04
+                elapsed = now - wait_started
+                # The original 3ms cadence is only useful while a tiny job
+                # finishes. Back off before 200ms so a one-second command
+                # does not take ~90 SQLite snapshots with no latency benefit.
+                interval = (INLINE_SHORT_POLL_SECONDS if elapsed < 0.045 else
+                            0.015 if elapsed < 0.2 else 0.04)
                 time.sleep(min(interval, remaining))
             # Read one terminal snapshot. Do not give job and output
             # different status or completion metadata.
@@ -121,6 +145,10 @@ class Jobs:
     def status(self, job_id):
         self.reconcile()
         return {'job':self.store.job(job_id)}
+
+    def count(self, limit=100):
+        self.reconcile()
+        return self.store.job_count(limit)
 
     def list(self, limit=100):
         self.reconcile()

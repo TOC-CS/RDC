@@ -13,7 +13,9 @@ from rdc.config import Settings
 from rdc.engine import Engine
 
 
-def measure(operation,count=25):
+def measure(operation,count=20):
+    if type(count) is not int or not 1<=count<=100:
+        raise ValueError('RDC testing hard cap: 100 samples')
     samples=[]
     for _ in range(count):
         start=time.perf_counter()

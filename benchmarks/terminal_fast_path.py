@@ -57,6 +57,8 @@ def summarize(rows):
 
 
 def run_local(trials, warmups=3):
+    if type(trials) is not int or type(warmups) is not int or trials<1 or warmups<0 or 2*(trials+warmups)>100:
+        raise ValueError('RDC testing hard cap: 100 total terminal trial operations')
     with tempfile.TemporaryDirectory(prefix="rdc-bench-") as temp:
         root = Path(temp)
         engine = Engine(Settings(

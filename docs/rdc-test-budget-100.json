@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "owner_policy": "RDC testing hard ceiling: 100 executed test cases per campaign, across every test category combined. A request for 101 fails before execution.",
+  "max_cases": 100,
+  "ci_matrix": {
+    "ubuntu-latest": "ci-ubuntu",
+    "macos-latest": "ci-macos",
+    "windows-latest": "ci-windows"
+  },
+  "campaigns": {
+    "local-core": {
+      "description": "One capped campaign spanning 86 Node V2 tests and 14 Python V2 tests.",
+      "node_files": [
+        "cloud-gateway/tests/v2/actor.test.mjs",
+        "cloud-gateway/tests/v2/bindings.test.mjs",
+        "cloud-gateway/tests/v2/compiled-site-guard.test.mjs",
+        "cloud-gateway/tests/v2/edge.test.mjs",
+        "cloud-gateway/tests/v2/journal.test.mjs",
+        "cloud-gateway/tests/v2/rollback-readback.test.mjs",
+        "cloud-gateway/tests/v2/tombstones.test.mjs"
+      ],
+      "python_module": "tests.test_relay_v2",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 14
+    },
+    "ci-ubuntu": {
+      "description": "CI Ubuntu allocation, 34 cases total.",
+      "node_files": [
+        "cloud-gateway/tests/v2/actor.test.mjs"
+      ],
+      "python_module": null,
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 0
+    },
+    "ci-macos": {
+      "description": "CI macOS allocation, 33 Python cases total.",
+      "node_files": [],
+      "python_module": null,
+      "python_discovery": true,
+      "python_offset": 0,
+      "python_take": 33
+    },
+    "ci-windows": {
+      "description": "CI Windows allocation, 33 Python cases total.",
+      "node_files": [],
+      "python_module": null,
+      "python_discovery": true,
+      "python_offset": 33,
+      "python_take": 33
+    },
+    "speed-acceptance-contract": {
+      "description": "Bounded Node acceptance gate regression for five live metrics plus matched 2x DC and standalone release identity.",
+      "node_files": [
+        "benchmarks/rdc_speed_acceptance.test.mjs"
+      ],
+      "python_module": null,
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 0
+    },
+    "local-monotonic-trace": {
+      "description": "TDD monotonic same-process V2 stage timing, restart/clock regression and bounded history",
+      "node_files": [],
+      "python_module": "tests.test_gateway_standalone",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 19
+    },
+    "local-inline-poll-tdd": {
+      "description": "Bounded terminal inline completion polling, original job identity and deadline safety",
+      "node_files": [],
+      "python_module": "tests.test_job_inline_poll",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 2
+    },
+    "local-worker-io": {
+      "description": "Bounded POSIX and Python worker output, child process, stdin and cancellation regression",
+      "node_files": [],
+      "python_module": "tests.test_worker_io",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 12
+    },
+    "local-secure-tunnel-preflight": {
+      "description": "Read-only protected tunnel readiness and secret-safe validation",
+      "node_files": [],
+      "python_module": "tests.test_rdc2_tunnel_preflight",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 8
+    },
+    "local-v2-loopback-transport": {
+      "description": "Opt-in same-host V2 authenticated loopback WebSocket and upload with remote TLS unchanged",
+      "node_files": [],
+      "python_module": "tests.test_v2_loopback_transport",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 9
+    },
+    "local-relay-v2-compatibility": {
+      "description": "Full bounded WebSocket V2 relay recovery and backward-compatibility source suite",
+      "node_files": [],
+      "python_module": "tests.test_relay_v2",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 26
+    },
+    "local-v2-catalog-filter": {
+      "description": "Restrict V2 exposed worker catalog to the owner relay allowlist before registering it",
+      "node_files": [],
+      "python_module": "tests.test_relay_v2_catalog_filter",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 3
+    },
+    "local-codex-setup": {
+      "description": "Portably configure authenticated loopback RDC in Codex without disclosing secrets",
+      "node_files": [],
+      "python_module": "tests.test_codex_local_setup",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
+    "local-status-fast-counts": {
+      "description": "Fast summary counts preserve capped jobs, expired approvals and interrupted job semantics",
+      "node_files": [],
+      "python_module": "tests.test_status_fast_counts",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 4
+    },
+    "local-job-list-single-snapshot": {
+      "description": "One-snapshot detailed RDC job list, preserving original job identities and fields",
+      "node_files": [],
+      "python_module": "tests.test_job_list_single_snapshot",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 4
+    }
+  }
+}

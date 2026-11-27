@@ -110,6 +110,22 @@ def validate_gateway_url(url):
     return url.rstrip('/')
 
 
+def validate_loopback_gateway_url(url):
+    """Permit plain HTTP only for an explicitly paired same-host V2 gateway.
+
+    The standalone server binds 127.0.0.1 exclusively. No hostname, other IP,
+    missing port, userinfo, extra path or ambiguous URL is permitted here.
+    Regular Site and remote standalone transports always require HTTPS.
+    """
+    parts = _url_parts(url)
+    if (parts.scheme != 'http' or parts.hostname != '127.0.0.1'
+            or parts.port is None or parts.path != '/v2/mcp'
+            or parts.netloc != f'127.0.0.1:{parts.port}'
+            or url != f'http://127.0.0.1:{parts.port}/v2/mcp'):
+        raise RelayPermanentError('Standalone local gateway requires the exact 127.0.0.1 loopback MCP endpoint.')
+    return url
+
+
 def validate_worker_url(url):
     parts = _url_parts(url)
     try:
@@ -146,20 +162,32 @@ class RelayConfig:
     gateway_url: str
     device_id: str
     device_key: str = field(repr=False)
-    sites_service_token: str = field(repr=False)
+    sites_service_token: str = field(default='', repr=False)
     worker_url: str = 'http://127.0.0.1:8765/mcp'
     allowed_tools: tuple[str, ...] | None = None
     tool_timeout: float = 60
+    transport: str = 'sites'  # opt-in standalone without ChatGPT Sites
 
     def __post_init__(self):
-        object.__setattr__(self, 'gateway_url', validate_gateway_url(self.gateway_url))
+        validated_gateway = (validate_loopback_gateway_url(self.gateway_url)
+                             if self.transport == 'standalone-local'
+                             else validate_gateway_url(self.gateway_url))
+        object.__setattr__(self, 'gateway_url', validated_gateway)
         object.__setattr__(self, 'worker_url', validate_worker_url(self.worker_url))
         if not isinstance(self.device_id, str) or not IDENTIFIER.fullmatch(self.device_id):
             raise RelayPermanentError('Relay device identity is invalid.')
-        if not _secret(self.device_key, maximum=1024) or not _secret(self.sites_service_token):
-            raise RelayPermanentError('Relay device and Sites service credentials must be separate valid private values.')
-        if hmac.compare_digest(self.device_key, self.sites_service_token):
-            raise RelayPermanentError('Relay device and Sites service credentials must be distinct.')
+        if not _secret(self.device_key, maximum=1024):
+            raise RelayPermanentError('Relay device credential must be a valid private value.')
+        if self.transport == 'sites':
+            if not _secret(self.sites_service_token):
+                raise RelayPermanentError('A private Sites transport requires its separate service credential.')
+            if hmac.compare_digest(self.device_key, self.sites_service_token):
+                raise RelayPermanentError('Relay device and Sites service credentials must be distinct.')
+        elif self.transport in ('standalone', 'standalone-local'):
+            if self.sites_service_token != '':
+                raise RelayPermanentError('Independent standalone transport must not use a ChatGPT Sites token.')
+        else:
+            raise RelayPermanentError('Unknown relay gateway transport mode.')
         if isinstance(self.tool_timeout, bool) or not isinstance(self.tool_timeout, (int, float)) or not math.isfinite(self.tool_timeout) or not .1 <= self.tool_timeout <= 120:
             raise RelayPermanentError('Relay tool timeout must be between 0.1 and 120 seconds.')
         if self.allowed_tools is not None:
@@ -491,8 +519,15 @@ class RelayPump:
     async def _heartbeat(self):
         observe = getattr(self.gateway, 'supports_activity_observer', False) and OBSERVATION_TOOL in self.catalog and (
             self.config.allowed_tools is None or OBSERVATION_TOOL in self.config.allowed_tools)
+        send_hint = getattr(self.gateway, 'heartbeat_hint', None)
+        # The V2 transport can send a heartbeat without consuming a WebSocket
+        # frame meant for the foreground completion. Keep v1 polling unchanged.
+        hint_interval = getattr(self.gateway, 'heartbeat_interval', 5) if callable(send_hint) else 5
+        if (not isinstance(hint_interval,(int,float)) or isinstance(hint_interval,bool)
+                or not math.isfinite(hint_interval) or not .01 <= hint_interval <= 30):
+            hint_interval = 5
         while True:
-            await anyio.sleep(OBSERVER_POLL_SECONDS if observe else 5)
+            await anyio.sleep(OBSERVER_POLL_SECONDS if observe else hint_interval)
             try:
                 if observe:
                     if self._pending_observation_id:
@@ -503,7 +538,10 @@ class RelayPump:
                         # One bounded observer runs without another heartbeat.
                         await self.observe(operation)
                 else:
-                    await self.gateway.poll(claim=False)
+                    if callable(send_hint):
+                        await send_hint()
+                    else:
+                        await self.gateway.poll(claim=False)
             except RelayPermanentError as exc:
                 safe_record(self.diagnostics, 'relay', 'permanent_failure')
                 self.gateway_error = exc

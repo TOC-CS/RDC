@@ -5,14 +5,14 @@ document.querySelectorAll('[data-rdc-logo]').forEach(image => { image.src = bran
 
 // The host mediates every request. This view never contacts a worker URL,
 // receives owner credentials, or changes worker/session/job lifetime.
-const app = new App({name: 'RDC Preview', version: '0.1.0a8'}, {
+const app = new App({name: 'RDC Preview', version: '0.1.0a8-preview.9'}, {
   availableDisplayModes: ['inline', 'fullscreen', 'pip'],
 });
 const el = id => document.getElementById(id);
 const state = {
   connected: false, connecting: false, bridgeReady: false, disposed: false,
   hidden: false, busy: false, timer: null, generation: 0,
-  sessionId: null, deviceId: null, frame: null, haveOpenResult: false,
+  sessionId: null, deviceId: null, frame: null, haveOpenResult: false, unboundResultReceived: false,
   taskJobId: null, taskClosed: false,
   availability: null, selectionLost: false, setupProblem: null,
   mode: 'inline', modes: ['inline'], presentationBridge: 'mcp',
@@ -49,6 +49,8 @@ function schedule(delay = POLL_MS) {
   if (!visibleConnected() || state.availability || state.selectionLost) return;
   if (state.pendingOpen) {
     if (!state.pendingOpen.halted) state.timer = setTimeout(() => refreshSessions(), delay);
+  } else if (state.unboundResultReceived && sourceId(state.sessionId)) {
+    state.timer = setTimeout(() => refreshSessions(), delay);
   } else if (canPoll()) state.timer = setTimeout(() => refreshFrame(), delay);
 }
 function dataOf(result) {
@@ -193,6 +195,7 @@ function empty(title, copy, retry = false) {
 }
 function unbound() {
   state.haveOpenResult = false;
+  state.unboundResultReceived = true;
   empty('No visual source', 'Open the preview for the RDC session this task is using.');
   status('No source');
 }
@@ -339,6 +342,7 @@ function acceptOpen(data) {
   state.availability = null;
   state.selectionLost = false;
   state.haveOpenResult = true;
+  state.unboundResultReceived = false;
   const selected = Array.isArray(data.sessions) && data.sessions.find(item => item?.session_id === state.sessionId);
   state.resizeEnabled = state.sessionId.startsWith('window-') && selected?.resize_to_view === true;
   if (state.setupProblem) state.blockedFrames.delete(state.sessionId);
@@ -524,6 +528,8 @@ async function refreshFrame(manual = false) {
   }
   if (!canPoll()) return;
   const generation = state.generation, sessionId = state.sessionId;
+  const started = performance.now();
+  let nextDelay = POLL_MS;
   setBusy(true);
   try {
     if (!await fitNativeWindow(sessionId,generation) || !visibleGeneration(generation)) return;
@@ -547,6 +553,9 @@ async function refreshFrame(manual = false) {
       }
     }
     renderFrame(result, data);
+    // Fast local reads should not inherit cloud-sized idle waits. Slow reads
+    // retain backpressure; requests remain single flight with a 250ms floor.
+    nextDelay = Math.max(250, Math.min(POLL_MS, performance.now() - started));
   } catch (error) {
     if (visibleGeneration(generation)) {
       const pending = state.pendingFrames.get(sessionId);
@@ -554,20 +563,25 @@ async function refreshFrame(manual = false) {
       state.blockedFrames.set(sessionId, 'preview_request_unconfirmed');
       reportFailure(error);
     }
-  } finally { setBusy(false); schedule(); }
+  } finally { setBusy(false); schedule(nextDelay); }
 }
 async function refreshSessions(manual = false) {
   if (!visibleConnected() || state.busy || state.selectionLost) return;
   if (manual) resumePending(state.pendingOpen);
   if (state.pendingOpen?.halted || (!state.pendingOpen && !state.sessionId)) return;
   stopPolling(); setBusy(true);
+  // Consume the late-binding recovery once. A failed open needs explicit retry.
+  state.unboundResultReceived = false;
   const generation = state.generation;
   const requested = state.pendingOpen?.sessionId || state.sessionId;
   try {
     const first = state.pendingOpen ? null : await callPreviewTool('rdc_preview_open', {session_id: requested,
       ...(state.taskJobId ? {job_id:state.taskJobId} : {})});
     const result = await resolvePreview('open', first, requested, generation);
-    if (result && visibleGeneration(generation)) acceptOpen(checkResult(result));
+    if (result && visibleGeneration(generation)) {
+      acceptOpen(checkResult(result));
+      requestAutomaticFloat();
+    }
   } catch (error) {
     if (visibleGeneration(generation)) {
       if (state.pendingOpen) state.pendingOpen.halted = true;
@@ -634,7 +648,9 @@ function floatingNotice(message = '') {
 }
 const FLOAT_UNAVAILABLE = 'Floating is unavailable in this host.';
 function requestAutomaticFloat() {
-  if (!visibleConnected() || !sourceId(state.sessionId) || state.autoFloatAttempted || state.floatPending) return;
+  if (!visibleConnected() || !state.haveOpenResult || state.taskClosed || state.availability ||
+      state.selectionLost || state.setupProblem || !sourceId(state.sessionId) ||
+      state.autoFloatAttempted || state.floatPending) return;
   if (state.mode === 'pip') { state.autoFloatAttempted = true; floatingNotice(); return; }
   if (!canFloatInHost()) { floatingNotice(FLOAT_UNAVAILABLE); return; }
   state.autoFloatAttempted = true;
@@ -729,6 +745,9 @@ app.ontoolinput = ({arguments: args}) => {
   state.sessionId = args.session_id;
   state.taskJobId = args.job_id || null;
   if (state.pendingOpen) state.pendingOpen.sessionId ||= state.sessionId;
+  // Some hosts deliver source input after the unbound result. Recover only
+  // that explicit source; never select a worker's last-used session.
+  if (state.unboundResultReceived) schedule(0);
   requestAutomaticFloat();
 };
 app.ontoolresult = result => {

@@ -225,12 +225,14 @@ def execute_case(case_id=0):
 
 
 def run_local(trials=30, warmups=3, concurrency=(), concurrent_tasks_per_worker=2):
-    if not 1 <= trials <= 200 or not 0 <= warmups <= 20:
+    if not 1 <= trials <= 100 or not 0 <= warmups <= 100:
         raise ValueError("Invalid counted trials or warmups")
     if not 1 <= concurrent_tasks_per_worker <= 8:
         raise ValueError("Invalid parallel task count")
     if any(level not in (1, 2, 4, 8, 16) for level in concurrency):
         raise ValueError("Unsupported benchmark concurrency")
+    if trials+warmups+sum(level*concurrent_tasks_per_worker for level in concurrency)>100:
+        raise ValueError('RDC testing hard cap: 100 total benchmark workflows')
     for i in range(warmups):
         execute_case(-i - 1)
     samples = [execute_case(i + 1) for i in range(trials)]

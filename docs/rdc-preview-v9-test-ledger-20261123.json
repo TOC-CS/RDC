@@ -1,0 +1,281 @@
+{
+  "limit": 100,
+  "executions": 82,
+  "runs": [
+    {
+      "label": "initial runtime identity diagnostics",
+      "count": 2
+    },
+    {
+      "label": "red-preview",
+      "count": 4,
+      "status": "failed",
+      "tests": [
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_unbound_result_then_explicit_input_recovers_only_that_source",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_pending_source_does_not_float_an_empty_preview",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_fast_frames_remove_unnecessary_idle_delay",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_slow_frames_keep_latency_based_backpressure"
+      ],
+      "actual": 4,
+      "failures": 4,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "label": "green-preview",
+      "count": 4,
+      "status": "passed",
+      "tests": [
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_unbound_result_then_explicit_input_recovers_only_that_source",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_pending_source_does_not_float_an_empty_preview",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_fast_frames_remove_unnecessary_idle_delay",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_slow_frames_keep_latency_based_backpressure"
+      ],
+      "actual": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "label": "regression-preview",
+      "count": 32,
+      "status": "passed",
+      "tests": [
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_host_confirmed_picture_in_picture_and_job_end_request_teardown",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_host_without_floating_mode_hides_only_and_never_opens_external_window",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_late_completion_result_cannot_reopen_but_new_job_can_rebind",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_explicit_job_bound_floating_preview_running_keeps_work_visible",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_verified_job_completion_clears_floating_view_without_stopping_worker",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_other_completed_job_cannot_close_selected_floating_task",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_unknown_interruption_preserves_floating_view_for_inspection",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_failed_initial_handshake_explicit_retry_preserves_selection",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_delayed_handshake_guards_concurrent_connect",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_handshake_timeout_then_late_old_reply_does_not_complete_retry",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_hide_resume_drops_late_frame_without_open_or_mutation",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_dispose_and_new_mount_ignore_old_frame_and_notification",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_pending_open_keeps_original_id_across_hide_resume",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_late_host_context_after_dispose_cannot_reopen_view",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_offline_bootstrap_keeps_last_known_state_and_retries_once_when_online",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_offline_notification_while_hidden_allows_retry_after_returning",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_busy_bootstrap_does_not_invent_sessions_or_start_polling",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_new_availability_fences_older_open_success_error_and_fallback",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_new_availability_keeps_inflight_original_pending_reference",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_expired_open_recovers_structured_wrapped_and_safe_terminal_results",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_opaque_or_unmatched_expiry_retains_original_operation_on_manual_retry",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_repeated_expiry_bounds_automatic_refresh_and_allows_explicit_retry",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_expired_frame_refreshes_the_same_read_only_view",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_hidden_view_defers_expiry_recovery_without_losing_original_identity",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_expired_host_bootstrap_requests_one_fresh_open",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_hidden_fresh_read_keeps_its_new_pending_identity",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_wrong_tool_or_operation_in_refresh_hint_cannot_replace_original",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_host_wrapped_ended_session_never_selects_a_different_source",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_retired_frame_identity_allows_a_scoped_fresh_observation",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_unverified_missing_identity_errors_preserve_the_original_read",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_legacy_global_target_and_expired_unbound_read_never_choose_a_source",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_result_for_another_source_cannot_replace_the_bound_view"
+      ],
+      "actual": 32,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "label": "browser-preview",
+      "count": 5,
+      "status": "passed",
+      "tests": [
+        "tests.test_embedded_ui.EmbeddedResourceTests",
+        "tests.test_embedded_ui.EmbeddedPreviewTests.test_preview_only_shows_the_bound_source_and_does_not_poll_dashboard",
+        "tests.test_embedded_ui.EmbeddedPreviewTests.test_automatic_floating_on_open_reopen_and_new_open_result",
+        "tests.test_embedded_ui.EmbeddedPreviewTests.test_single_inflight_read_and_reject_wrong_session_frame",
+        "tests.test_embedded_ui.EmbeddedPreviewTests.test_unsupported_host_never_attempts_pip_even_when_legacy_bridge_exists"
+      ],
+      "actual": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "label": "red-deployed-assets",
+      "count": 1,
+      "status": "failed",
+      "errors": [
+        "Preview bundle exceeds 800KB",
+        "Server icon exceeds 60KB"
+      ],
+      "resource_bytes": 2021512,
+      "icon_uri_bytes": 1327346
+    },
+    {
+      "label": "green-deployed-assets",
+      "count": 1,
+      "status": "passed",
+      "errors": [],
+      "resource_bytes": 741250,
+      "icon_uri_bytes": 45546
+    },
+    {
+      "label": "resource-aliases",
+      "count": 2,
+      "status": "passed",
+      "tests": [
+        "tests.test_preview_resources"
+      ],
+      "actual": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "label": "gateway-resource-aliases",
+      "count": 1,
+      "status": "passed"
+    },
+    {
+      "label": "final-binding",
+      "count": 4,
+      "status": "passed",
+      "tests": [
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_unbound_result_then_explicit_input_recovers_only_that_source",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_pending_source_does_not_float_an_empty_preview",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_fast_frames_remove_unnecessary_idle_delay",
+        "tests.test_preview_consistency.PreviewConsistencyContracts.test_slow_frames_keep_latency_based_backpressure"
+      ],
+      "actual": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "label": "local-before",
+      "count": 2,
+      "status": "passed"
+    },
+    {
+      "label": "red-tool-resource-cache",
+      "count": 1,
+      "status": "failed",
+      "errors": [
+        "Preview tool metadata still advertises cached resource"
+      ],
+      "resource_bytes": 741250,
+      "icon_uri_bytes": 45546
+    },
+    {
+      "label": "green-tool-resource-cache",
+      "count": 1,
+      "status": "passed",
+      "errors": [],
+      "resource_bytes": 741250,
+      "icon_uri_bytes": 45546
+    },
+    {
+      "label": "local-installed",
+      "count": 2,
+      "status": "passed"
+    },
+    {
+      "label": "permanent-asset-contract",
+      "count": 1,
+      "status": "passed"
+    },
+    {
+      "label": "live-chatgpt-rdc-status-after-deploy",
+      "count": 1,
+      "status": "passed"
+    },
+    {
+      "label": "live-window-list",
+      "count": 1,
+      "status": "passed"
+    },
+    {
+      "label": "live-window-bind",
+      "count": 1,
+      "status": "passed"
+    },
+    {
+      "label": "live-preview-open-exact-native-window",
+      "count": 1,
+      "status": "passed"
+    },
+    {
+      "label": "live-preview-original-operation-recovery",
+      "count": 1,
+      "status": "passed"
+    },
+    {
+      "label": "live-exact-native-window-frame",
+      "count": 1,
+      "status": "failed",
+      "error": "window_capture_unavailable"
+    },
+    {
+      "label": "native-helper-permissions-read",
+      "count": 1,
+      "status": "passed",
+      "screen_recording": true,
+      "accessibility": true
+    },
+    {
+      "label": "native-exact-window-visibility",
+      "count": 1,
+      "status": "passed",
+      "observation": "Exact Chrome window exists but is not marked onscreen"
+    },
+    {
+      "label": "live-test-binding-cleanup",
+      "count": 1,
+      "status": "passed"
+    },
+    {
+      "label": "isolated-native-window-visible-and-minimized",
+      "count": 3,
+      "status": "failed",
+      "actual": 1,
+      "unexecuted_reserved": 2,
+      "error": "Fixture was not listed; capture requests were never dispatched"
+    },
+    {
+      "label": "isolated-native-window-visible-and-minimized",
+      "count": 3,
+      "status": "failed",
+      "actual": 1,
+      "unexecuted_reserved": 2,
+      "error": "Unbundled fixture was not listed; capture requests never dispatched"
+    },
+    {
+      "label": "isolated-native-window-visible-and-minimized",
+      "count": 3,
+      "status": "completed",
+      "results": [
+        {
+          "action": "list",
+          "ok": true
+        },
+        {
+          "state": "visible",
+          "ok": true,
+          "code": null,
+          "width": 840,
+          "height": 464,
+          "sha256": "114371bca42537100550dc9cd18a788a4fc4cd2bc100360ceebdccb158154e41"
+        },
+        {
+          "state": "minimized",
+          "ok": false,
+          "code": "window_capture_unavailable",
+          "width": null,
+          "height": null
+        }
+      ]
+    },
+    {
+      "label": "recover-original-binding-cleanup-receipt",
+      "count": 1,
+      "status": "passed",
+      "closed": true,
+      "window_keeps_running": true
+    }
+  ]
+}

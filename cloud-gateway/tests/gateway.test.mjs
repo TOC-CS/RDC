@@ -16,6 +16,13 @@ import './rdc-v2-broker.test.mjs';
 import './rdc-v2-wake-channel.test.mjs';
 // Owner speed gates run on the existing three-platform CI, without modifying workflows.
 import '../../benchmarks/rdc_speed_acceptance.test.mjs';
+// Existing cross-platform GitHub runner imports this suite. Qualify the
+// isolated RDC 2.0 protocol, journal, actor and binding regressions here
+// without changing protected GitHub Actions workflow permissions.
+import './v2/journal.test.mjs';
+import './v2/actor.test.mjs';
+import './v2/bindings.test.mjs';
+import './v2/edge.test.mjs';
 
 const DEVICE = '00000000-0000-4000-8000-000000000001';
 const KEY = 'test-device-key-with-at-least-thirty-two-bytes';
@@ -947,8 +954,8 @@ test('modern discovery and cacheable resource responses satisfy required result 
 test('preview resources prefer inline and preserve every published alias',async()=>{
   const s=setup();
   const listing=await modern(s,'resources/list');
-  assert.deepEqual(listing.body.result.resources.map(resource=>resource.uri),['ui://rdc/preview-v8.html']);
-  for(const uri of ['ui://rdc/preview-v8.html','ui://rdc/preview-v6.html','ui://rdc/preview-v5.html','ui://rdc/preview-v4.html','ui://rdc/preview-v3.html','ui://rdc/preview-v2.html','ui://rdc/preview-v1.html']){
+  assert.deepEqual(listing.body.result.resources.map(resource=>resource.uri),['ui://rdc/preview-v9.html']);
+  for(const uri of ['ui://rdc/preview-v9.html','ui://rdc/preview-v8.html','ui://rdc/preview-v7.html','ui://rdc/preview-v6.html','ui://rdc/preview-v5.html','ui://rdc/preview-v4.html','ui://rdc/preview-v3.html','ui://rdc/preview-v2.html','ui://rdc/preview-v1.html']){
     const response=await modern(s,'resources/read',{uri});
     assert.equal(response.status,200);
     assert.equal(response.body.result.contents[0].uri,uri);

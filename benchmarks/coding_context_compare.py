@@ -43,7 +43,7 @@ def summary(samples):
 
 
 def run(trials=30,warmups=3):
-    if not 1<=trials<=1000 or not 0<=warmups<=100:
+    if not 1<=trials or not 0<=warmups or 2*(trials+warmups)>100:
         raise ValueError('Invalid trial and warmup count')
     with tempfile.TemporaryDirectory(prefix='rdc-code-context-bench-') as temp:
         base=Path(temp)
