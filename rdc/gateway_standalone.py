@@ -137,8 +137,24 @@ class StandaloneGateway:
             state TEXT NOT NULL, created_ms INTEGER NOT NULL,
             expires_ms INTEGER NOT NULL, claimed_ms INTEGER,
             claim_id TEXT, completed_ms INTEGER,
-            result_json TEXT, result_file TEXT, result_digest TEXT)""")
+            result_json TEXT, result_file TEXT, result_digest TEXT,
+            unknown_since_ms INTEGER)""")
+        # An additive marker preserves compatibility with earlier readers:
+        # an uncertain original remains physically claimed, so its exact
+        # authenticated late result can still complete after a rollback.
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            columns = {r["name"] for r in self.db.execute("PRAGMA table_info(operations)")}
+            if "unknown_since_ms" not in columns:
+                self.db.execute("ALTER TABLE operations ADD COLUMN unknown_since_ms INTEGER")
+            self.db.execute("COMMIT")
+        except Exception:
+            self.db.execute("ROLLBACK")
+            raise
         self.db.execute("CREATE INDEX IF NOT EXISTS operations_queue ON operations(state,created_ms)")
+        self.db.execute("""CREATE INDEX IF NOT EXISTS operations_live_queue
+            ON operations(state, expires_ms, claimed_ms)
+            WHERE state='queued' OR (state='claimed' AND unknown_since_ms IS NULL)""")
         self.sockets: set[DeviceSocket] = set()
         self.waiters: dict[str, set[asyncio.Event]] = {}
         self.gateway_sends: dict[str,float] = {}
@@ -224,9 +240,31 @@ class StandaloneGateway:
         return bool(self.sockets) and self.clock() - self.last_heartbeat <= ONLINE_MS and (
             self.clock() >= self.last_heartbeat)
 
+    def _retire_inactive(self, now, operation_id=None):
+        """Persist observed expiry/uncertainty, never requeue or erase work.
+
+        Expired requests were never claimed. Unknown outcomes keep their
+        original claim, request key and digests, including for older readers.
+        A later backward clock adjustment cannot revive either outcome.
+        """
+        sql = """UPDATE operations
+            SET state=CASE WHEN state='queued' THEN 'expired' ELSE state END,
+                unknown_since_ms=CASE WHEN state='claimed' THEN ? ELSE unknown_since_ms END
+            WHERE ((state='queued' AND expires_ms<=?) OR
+                   (state='claimed' AND unknown_since_ms IS NULL AND claimed_ms<?))"""
+        args = (now, now, now-UNKNOWN_MS)
+        if operation_id is not None:
+            sql += " AND id=?"
+            args += (operation_id,)
+        self.db.execute(sql, args)
+
+    def _pending_count(self):
+        return self.row("""SELECT COUNT(*) AS n FROM operations
+            WHERE state='queued' OR (state='claimed' AND unknown_since_ms IS NULL)""")["n"]
+
     def status(self):
-        count = self.row("SELECT COUNT(*) AS n FROM operations WHERE state IN ('queued','claimed')")
-        return {"online": self.online(), "pending_operations": count["n"],
+        self._retire_inactive(self.clock())
+        return {"online": self.online(), "pending_operations": self._pending_count(),
                 "protocol_version": 2, "transport": "standalone",
                 "gatewaySourceSha256": self.gateway_source_sha256}
 
@@ -281,7 +319,8 @@ class StandaloneGateway:
             now = self.clock()
             if not self.online():
                 raise ValueError("device_offline")
-            if self.row("SELECT COUNT(*) AS n FROM operations WHERE state IN ('queued','claimed')")["n"] >= MAX_QUEUE:
+            self._retire_inactive(now)
+            if self._pending_count() >= MAX_QUEUE:
                 raise ValueError("queue_full")
             operation_id = str(uuid4())
             self.db.execute("""INSERT INTO operations
@@ -301,6 +340,7 @@ class StandaloneGateway:
         self.db.execute("BEGIN IMMEDIATE")
         try:
             now = self.clock()
+            self._retire_inactive(now)
             row = self.row("""SELECT * FROM operations WHERE state='queued' AND expires_ms>?
                               ORDER BY created_ms, rowid LIMIT 1""", now)
             if not row:
@@ -327,9 +367,13 @@ class StandaloneGateway:
             raise ValueError("operation_not_found")
         state = row["state"]
         now = self.clock()
-        if state == "queued" and now >= row["expires_ms"]:
-            return {"id": operation_id, "state": "expired"}
-        if state == "claimed" and now - row["claimed_ms"] > UNKNOWN_MS:
+        if ((state == "queued" and now >= row["expires_ms"]) or
+                (state == "claimed" and row["unknown_since_ms"] is None
+                 and row["claimed_ms"] is not None and now - row["claimed_ms"] > UNKNOWN_MS)):
+            self._retire_inactive(now, operation_id)
+            row = self.row("SELECT * FROM operations WHERE id=?", operation_id)
+            state = row["state"]
+        if state == "claimed" and row["unknown_since_ms"] is not None:
             return {"id": operation_id, "state": "unknown"}
         if state == "completed":
             raw = row["result_json"]
@@ -337,10 +381,12 @@ class StandaloneGateway:
                 path = self.root / "results" / row["result_file"]
                 try:
                     raw = path.read_text(encoding="utf-8")
-                except OSError:
+                except (OSError, UnicodeError):
                     raise ValueError("result_unavailable") from None
-                if sha256(raw) != row["result_digest"]:
-                    raise ValueError("result_unavailable")
+            # Validate both storage forms. Corrupt or absent retained bytes
+            # are unavailable; the original operation is never dispatched again.
+            if not isinstance(raw, str) or sha256(raw) != row["result_digest"]:
+                raise ValueError("result_unavailable")
             return {"id": operation_id, "state": state, "resultJson": raw}
         return {"id": operation_id, "state": state}
 
