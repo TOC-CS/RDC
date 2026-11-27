@@ -686,8 +686,13 @@ class EmbeddedPreviewTests(unittest.TestCase):
         }""")
         self.page.goto(self.base+'?modes=inline,fullscreen')
         self.view=self.page.frame_locator('#app-frame');self.live()
-        self.view.get_by_text('Floating is unavailable in this host.',exact=True).wait_for()
+        # An explicit user click may use the documented legacy bridge even
+        # when the MCP host omits PiP. An unsolicited signal may not.
+        button = self.view.get_by_role('button', name='Float', exact=True)
+        button.wait_for()
+        self.assertTrue(button.is_enabled())
         self.page.wait_for_timeout(200)
+        self.assertEqual(self.view.locator('#canvas').evaluate('() => window.openai.displayMode'),'pip')
         self.assertEqual(self.view.locator('#canvas').get_attribute('data-mode'),'inline')
         self.assertEqual(self.view.locator('#canvas').evaluate('() => window.openai.attempts'),[])
         self.assertEqual(self.page.evaluate('window.requestedModes'),[])
