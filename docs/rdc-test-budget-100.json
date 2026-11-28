@@ -8,6 +8,110 @@
     "windows-latest": "ci-windows"
   },
   "campaigns": {
+    "mobile-native-regression": {
+      "description": "Existing native Appium and ADB synthetic protocol regression.",
+      "node_files": [],
+      "python_module": "tests.test_mobile",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 33
+    },
+    "mobile-integration-regression": {
+      "description": "Existing worker mobile integration regression.",
+      "node_files": [],
+      "python_module": "tests.test_mobile_integration",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
+    "mobile-gateway-regression": {
+      "description": "Existing standalone gateway regression.",
+      "node_files": [],
+      "python_module": "tests.test_gateway_standalone",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 19
+    },
+    "android-usb-onboarding": {
+      "description": "Five focused authorized Android USB discovery and private onboarding checks.",
+      "node_files": [],
+      "python_module": "tests.test_android_usb",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
+    "ios-coredevice-launch": {
+      "description": "Six focused direct iOS app launch cases; separate new functionality campaign.",
+      "node_files": [],
+      "python_module": "tests.test_ios_app",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 6
+    },
+    "ios-standalone-packaging": {
+      "description": "Six focused non-Xcode SDK, signing admission and packaging safety cases.",
+      "node_files": [],
+      "python_module": "tests.test_ios_standalone_packaging",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 6
+    },
+    "ios-interaction-preflight": {
+      "description": "Five focused privacy-safe iOS native interaction readiness checks.",
+      "node_files": [],
+      "python_module": "tests.test_ios_interaction_preflight",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
+    "ios-developer-preflight": {
+      "description": "Three bounded developer preflight exact-target, privacy and fail-closed checks.",
+      "node_files": [],
+      "python_module": "tests.test_ios_developer_preflight",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 3
+    },
+    "ios-mirroring-navigation": {
+      "description": "Five owner-mediated Apple Mirroring opt-in, stale identity, no-replay and approval tests.",
+      "node_files": [],
+      "python_module": "tests.test_ios_mirroring",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
+    "ios-preferred-backends": {
+      "description": "Five bounded primary, fallback and independent Go-iOS identity checks.",
+      "node_files": [],
+      "python_module": "tests.test_ios_backends",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
+    "ios-readonly-status": {
+      "description": "Five exact-target, read-only iOS status and privacy checks.",
+      "node_files": [],
+      "python_module": "tests.test_ios_status",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
+    "ios-usb-onboarding": {
+      "description": "Five owner-only iOS USB diagnostic and private profile cases.",
+      "node_files": [],
+      "python_module": "tests.test_ios_usb",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
+    "mobile-install": {
+      "description": "Five focused mobile installation, least-privilege status and profile tests.",
+      "node_files": [],
+      "python_module": "tests.test_mobile_install",
+      "python_discovery": false,
+      "python_offset": 0,
+      "python_take": 5
+    },
     "local-core": {
       "description": "One capped campaign spanning 86 Node V2 tests and 14 Python V2 tests.",
       "node_files": [

@@ -1,8 +1,20 @@
 # Phones and tablets
 
+For the independent installable iPhone/Android companion, read-only status credential, and owner-side profile generator, see [Mobile installation and onboarding](MOBILE-INSTALL.md). The development candidate has narrow iPhone acceptance and separate open Android/iPad, gesture, preview and recovery gates.
+
 RDC can operate an owner-authorized Android device through ADB and can create dedicated native Appium sessions for Android, iPhone, and iPad. Mobile sessions have their own tools and `mobile-<uuid>` IDs. They remain separate from dedicated browser sessions.
 
-This expansion has synthetic protocol and privacy tests. **Real Android, iPhone, iPad, emulator, and simulator qualification is still pending.** A configured profile or successful HTTP fixture does not establish hardware compatibility. The previous desktop/iMac verification applies to its tested revision and workflows.
+The November 23 development candidate has a signed iPhone companion installed
+and independently verified running. Physical Appium/XCUITest observation,
+tap, nonsecure typing, secure-screen capture refusal and explicit session
+cleanup were verified. A signed Android development APK was built and its
+signature/alignment verified; no physical Android installation is qualified.
+Swipe/scroll failed at WDA window-coordinate selection. Safe live preview,
+wireless use, hardware recovery/no-replay, app switching, Xcode-free WDA
+startup, iPad/Android acceptance and the expanded companion UI remain OPEN.
+These results do not deploy the candidate worker or qualify a production release.
+
+See [the dated mobile evidence](releases/RDC-MOBILE-INSTALL-20261123.md) for exact scope. Synthetic fixtures and one iPhone do not establish other hardware compatibility.
 
 ## Available routes
 
@@ -134,10 +146,11 @@ Fill consists of clear followed by send-keys. If either response fails, the fiel
 
 `tests/test_mobile.py` uses a local synthetic Appium HTTP server with literal Android/iOS hierarchy fixtures and synthetic ADB subprocess responses. It covers owner-only configuration, exact device selection, setup/cleanup failures, expired sessions, bounded native observations, secure-field redaction, screenshot refusal and scaling, stale handles, touch payloads, no replay, fixed errors, ADB argument construction, adapter routing, and shutdown without a browser thread.
 
-Run the focused gate with the project's supported environment:
-
-```sh
-python -m unittest discover -s tests -p test_mobile.py -v
-```
+Before any runtime tests, follow the [100-check execution policy](RDC-TEST-100-EXECUTION-POLICY.md)
+and the existing campaign ledger. The current mobile-resume campaign is at
+97/100, including failed attempts and regression reruns. Do not run unrestricted
+discovery or start another campaign to evade the combined ceiling. Source
+review, syntax/compilation and archive inventory checks can continue without
+claiming additional runtime coverage.
 
 Hardware acceptance must still verify the chosen Appium/driver/OS versions, owner-completed pairing and consent, native field classifications, coordinate scaling, gesture behavior, real secure-field refusal, lifecycle cleanup, and the intended AI host preview. Keep the working installation until the owner's required mobile route passes those checks.

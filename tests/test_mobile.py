@@ -463,7 +463,7 @@ class MobileTests(unittest.TestCase):
                 self.mobile.call('rdc_mobile_tap', {'session_id':sid,
                     'observation_id':observed['observation_id'],'handle':save['handle']})
                 self.assertEqual(('POST','/session/native-driver-1/element',
-                    {'using':'xpath','value':'/*[1]/*[1]/*[3]'}),
+                    {'using':'xpath','value':'/*[1]/*[3]'}),
                     next(request for request in reversed(self.driver.requests) if request[1].endswith('/element')))
 
     def test_native_tap_and_fill_use_internal_selector_then_invalidate_observation(self):

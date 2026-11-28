@@ -12,7 +12,10 @@
     "mcp-apps",
     "computer-use",
     "browser",
-    "automation"
+    "automation",
+    "android",
+    "ios",
+    "mobile-installation"
   ],
   "extensions": {
     "com.openai": {

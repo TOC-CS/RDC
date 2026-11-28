@@ -13,3 +13,12 @@ test-results/
 .tmp/
 node_modules/
 
+
+# Native mobile generated builds and owner-held signing material
+native-mobile/ios/*.xcodeproj/
+native-mobile/ios/generated/
+native-mobile/ios/DerivedData/
+*.jks
+*.keystore
+*.mobileprovision
+*.p12

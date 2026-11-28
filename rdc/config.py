@@ -20,6 +20,8 @@ class Settings:
     webdriver_capabilities: dict | None = None
     adb_serial: str | None = None
     mobile_profiles: dict = field(default_factory=dict)
+    ios_mirroring_enabled: bool = False
+    ios_coredevice_launch_enabled: bool = False
     max_output_bytes: int = 10 * 1024 * 1024
     max_read_bytes: int = 262144
     job_timeout: float = 3600
@@ -37,6 +39,10 @@ class Settings:
                 raise RDCError('invalid_config', f'{key} must be one of {options}')
         if not self.roots:
             raise RDCError('invalid_config', 'At least one working root is required.')
+        if type(self.ios_coredevice_launch_enabled) is not bool:
+            raise RDCError('invalid_config', 'ios_coredevice_launch_enabled must be true or false.')
+        if type(self.ios_mirroring_enabled) is not bool:
+            raise RDCError('invalid_config', 'ios_mirroring_enabled must be true or false.')
         if type(self.allow_exec) is not bool:
             raise RDCError('invalid_config', 'allow_exec must be true or false.')
         for key, low, high in [('max_output_bytes', 1024, 1024**3), ('max_read_bytes', 1024, 4*1024**2),

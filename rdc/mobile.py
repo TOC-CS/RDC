@@ -38,6 +38,14 @@ MESSAGES = {
     'invalid_config': 'Invalid mobile profile. Use an owner-defined native Android/UiAutomator2 or iOS/XCUITest profile with a safe endpoint and flat capabilities.',
     'invalid_arguments': 'Invalid mobile arguments. Use the advertised tool schema and current observation.',
     'unknown_tool': 'Unknown mobile tool.',
+    'ios_app_launch_disabled': 'The owner must explicitly enable direct CoreDevice iOS app launch.',
+    'ios_app_outcome_unknown': 'The app launch may have occurred. Inspect the device; do not replay it.',
+    'ios_app_launch_unavailable': 'The exact app launch could not proceed. Prepare the owner-configured application again after inspecting the device.',
+    'mirror_disabled': 'Owner opt-in and a desktop grant are required for Apple iPhone Mirroring.',
+    'mirror_unavailable': 'The exact Apple iPhone Mirroring window or menu is unavailable. No other window was selected.',
+    'mirror_outcome_unknown': 'Mirroring menu dispatch could not be confirmed. Inspect the phone; do not replay the action.',
+    'developer_preflight_conflict': 'Close native mobile sessions before running developer-service diagnostics.',
+    'mirror_conflict': 'Close native mobile sessions before using the separate owner-mediated mirroring route.',
     'closed': 'Mobile adapters are closed.',
     'profile_not_found': 'The owner has not configured that mobile profile.',
     'session_limit': 'At most eight mobile sessions may run. Close an existing session first.',
@@ -127,6 +135,21 @@ def _catalog():
                    for key in ('start_x','start_y','end_x','end_y')}
     rows = [
         ('list', 'List owner-configured native mobile profiles and active sessions. Private connection details are omitted.', False, {}, ()),
+        ('android_usb_status', 'Read only the exact owner-configured Android USB transport and existing debugging authorization. Never automatically pairs, connects over Wi-Fi, exposes device identifiers or launches apps.', False,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
+        ('ios_status', 'Read battery, storage, Developer Mode and trusted USB connectivity for an owner-configured iOS profile on this Mac. Auto prefers PyMobileDevice3, with libimobiledevice fallback. Go-iOS verifies identity only. Does not start automation or expose identifiers.', False,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},'backend':{'type':'string','enum':['auto','pymobiledevice3','libimobiledevice','go-ios']}}, ('profile',)),
+        ('ios_developer_preflight', 'Verify the owner-configured iOS USB Developer Mode, personalized developer image and a temporary no-root RemoteXPC tunnel. Does not mount images, install apps, pair devices, start UI automation, or expose service addresses.', False,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
+        ('ios_interaction_preflight', 'Inspect the exact iOS USB profile for native display, touch, hardware-button and accessibility service readiness. Does not capture screens, send input, read app content or grant input authority. Unknown lock or privacy state remains blocked.', False,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
+        ('ios_app_prepare', 'Verify the exact installed app and direct CoreDevice launch support for an opted-in owner-defined iOS profile. Returns a short-lived launch observation, never private app data or identifiers.', False,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
+        ('ios_app_launch', 'Request one owner-reviewed launch of the prepared iOS profile app without Xcode or Appium. No termination, installation, launch arguments, screen capture, or retry. Process readback does not imply foreground or native UI control.', True,
+         {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'},'observation_id':string}, ('profile','observation_id')),
+        ('mirror_observe', 'Read only the exact Apple iPhone Mirroring window and available fixed navigation commands. Requires owner opt-in. No phone contents or device identity are returned.', False, {}, ()),
+        ('mirror_navigate', 'Request one owner-reviewed Apple iPhone Mirroring menu action with a fresh observation. The owner must verify the Apple-selected phone. No arbitrary input, capture or retry.', True,
+         {'observation_id':string,'action':{'type':'string','enum':['home','app_switcher','spotlight']}}, ('observation_id','action')),
         ('start', 'Start one native Appium session using an owner-configured profile. This may launch the configured app and use the selected device screen.', True,
          {'profile':{'type':'string','pattern':r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}, ('profile',)),
         ('observe', 'Read bounded native labels and fresh control handles. Editable values and secure field labels are redacted.', False, session, ('session_id',)),
@@ -183,7 +206,8 @@ def _native_tree(source, platform):
         if len(rows)>=5000 or len(stack)>=64: raise ValueError('Native source bound exceeded')
         parent = stack[-1] if stack else None
         if parent is None:
-            path = '/*[1]'
+            # Appium adds this source-only wrapper; WDA XPath starts at the app.
+            path = '' if platform == 'iOS' and element.tag == 'AppiumAUT' else '/*[1]'
         else:
             parent['children'] += 1
             path = parent['path'] + '/*[' + str(parent['children']) + ']'
@@ -206,13 +230,22 @@ def _native_tree(source, platform):
             editable = kind.endswith(('TextField','TextView'))
             secure = kind == 'XCUIElementTypeSecureTextField' or _flag(a, 'secure')
             interactive = editable or secure or kind.endswith(('Button','Switch','Cell','Link','Slider','Key','PickerWheel','SegmentedControl')) or _flag(a,'accessible')
-            visible = _flag(a, 'visible', True)
+            visible = _flag(a, 'visible', parent['visible'] if parent else True)
             label = a.get('label') or a.get('name') or ''
         else:
             raise ValueError('Unsupported native platform')
+        # SwiftUI Form may report a nonaccessible collection container as
+        # invisible while its on-screen children are explicitly visible.
+        # Only that structural container is transparent to visibility;
+        # hidden apps, windows, controls and unspecified children stay hidden.
+        collection_container = (platform == 'iOS'
+            and kind == 'XCUIElementTypeCollectionView' and not interactive)
+        visibility_blocked = ((parent is not None and parent['visibility_blocked'])
+            or (not visible and not collection_container))
         row = {'element':element,'path':path,'parent':parent,'children':0,'wrapper':wrapper,'kind':kind,
             'editable':editable or secure,'secure':secure,'interactive':interactive,
-            'visible':visible and (parent is None or parent['visible']), 'enabled':_flag(a,'enabled', True),
+            'visible':visible and not visibility_blocked, 'visibility_blocked':visibility_blocked,
+            'enabled':_flag(a,'enabled', True),
             'bounds':_bounds(a,platform), 'label':label, 'private_branch':editable or secure,
             'private_ancestor':parent is not None and (parent['editable'] or parent['private_ancestor'])}
         rows.append(row)
@@ -275,6 +308,10 @@ class Mobile:
         validate_mobile_profiles(profiles)
         self._profiles = copy.deepcopy(profiles)
         self._sessions = {}
+        from .ios_mirroring import Mirroring
+        self._mirroring = Mirroring(settings)
+        from .ios_app import IOSAppLaunch
+        self._ios_app = IOSAppLaunch(settings,self._profiles)
         self._lock = threading.RLock()
         self._status_lock = threading.Lock()
         self._closed = False
@@ -334,7 +371,41 @@ class Mobile:
             if action == 'screenshot': return self.snapshot(args['session_id'])
             self._publish_status(busy=True)
             try:
-                if action == 'start': return self._start(args['profile'])
+                if action in ('ios_app_prepare','ios_app_launch'):
+                    if self._sessions: fail('developer_preflight_conflict')
+                    self._mirroring.observation = None
+                    if action == 'ios_app_prepare': return self._ios_app.prepare(args['profile'])
+                    return self._ios_app.launch(args['profile'],args['observation_id'])
+                if action in ('mirror_observe','mirror_navigate'):
+                    if self._sessions: fail('mirror_conflict')
+                    self._ios_app.invalidate()
+                    if action == 'mirror_observe': return self._mirroring.observe()
+                    return self._mirroring.navigate(args['observation_id'],args['action'])
+                if action == 'start':
+                    self._ios_app.invalidate()
+                    self._mirroring.observation = None
+                    return self._start(args['profile'])
+                if action in ('ios_developer_preflight','ios_interaction_preflight'):
+                    if self._sessions: fail('developer_preflight_conflict')
+                    profile = self._profiles.get(args['profile'])
+                    if profile is None or profile['platformName'] != 'iOS':
+                        fail('profile_not_found')
+                    from .ios_usb import developer_preflight, interaction_preflight
+                    operation = interaction_preflight if action == 'ios_interaction_preflight' else developer_preflight
+                    return operation(profile['capabilities']['appium:udid'])
+                if action == 'android_usb_status':
+                    profile = self._profiles.get(args['profile'])
+                    if profile is None or profile['platformName'] != 'Android':
+                        fail('profile_not_found')
+                    from .android_usb import usb_check
+                    return usb_check(profile['capabilities']['appium:udid'])
+                if action == 'ios_status':
+                    profile = self._profiles.get(args['profile'])
+                    if profile is None or profile['platformName'] != 'iOS':
+                        fail('profile_not_found')
+                    from .ios_usb import preferred_device_metrics
+                    return preferred_device_metrics(profile['capabilities']['appium:udid'], args.get('backend','auto'))
+
                 session = self._sessions.get(args['session_id'])
                 if session is None: fail('session_not_found')
                 if action == 'close':
@@ -597,4 +668,5 @@ class Mobile:
             finally:
                 self._closed = True
                 self._sessions.clear()
+                self._ios_app.invalidate()
                 self._publish_status()

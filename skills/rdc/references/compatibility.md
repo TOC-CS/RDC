@@ -1,5 +1,30 @@
 # Compatibility and qualification
 
+## November 23, 2026 mobile development evidence
+
+The November 23 development candidate has a signed iPhone companion installed
+and independently verified running. Physical Appium/XCUITest observation,
+tap, nonsecure typing, secure-screen capture refusal and explicit session
+cleanup were verified. A signed Android development APK was built and its
+signature/alignment verified; no physical Android installation is qualified.
+Swipe/scroll failed at WDA window-coordinate selection. Safe live preview,
+wireless use, hardware recovery/no-replay, app switching, Xcode-free WDA
+startup, iPad/Android acceptance and the expanded companion UI remain OPEN.
+These results do not deploy the candidate worker or qualify a production release.
+
+The native companion is a read-only gateway status client, not unrestricted
+phone control. Follow [mobile installation](mobile-install.md) for the included
+Android development APK, native source, iPhone signing/install requirements
+and the owner-private iPhone artifact. This plugin update does not install
+or activate candidate worker code. Check the actual connected catalog.
+
+The source fixes cover visible SwiftUI Form descendants behind a nonaccessible
+CollectionView and iOS WDA selectors omitting the AppiumAUT wrapper. They retain
+hidden-window and secure-field protections. Native saved-password filling is
+unsupported. The campaign is 97/100; no unrestricted tests or CI reruns.
+
+The following November 16 table is historical; use the dated update above for current mobile qualification.
+
 Release qualification snapshot dated 2026-11-16. The installed worker reports core 0.1.0a8. The runtime/gateway candidate is prepared but not activated; an existing independent browser session remains open, and owner authorization to end it is pending. Preserve that session. The validated candidate runtime source remains commit 137a42d. Source, installed worker, deployed gateway, saved plugin guidance and the host catalog can be at different revisions. A saved documentation update does not deploy code or qualify a host. Prefer later explicit execution evidence and current tool schemas. Mobile adapters began in a3 and private diagnostics in a4; implementation is not device qualification.
 
 | Route | Current evidence and boundary |

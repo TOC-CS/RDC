@@ -24,6 +24,25 @@ Hide, resize, move or close the preview without closing the native session. Expl
 
 Android ADB adds swipe, long press and explicit package/activity launch through a configured serial. It does not accept arbitrary shell text, choose another device, or bypass pairing. ADB screenshots refuse competing native Appium capture and secure/unverifiable hierarchy states. Use the active native session's permitted route.
 
-## Evidence boundary
+## November 23, 2026 mobile development evidence
 
-The source includes synthetic Android/iOS protocol tests, privacy tests and UI fixtures. The 0.1.0a3 candidate recorded 200 passing macOS tests with no skips. Those fixtures establish no physical iPhone 17 Pro Max, other iPhone, iPad, Android, emulator or simulator acceptance. Actual Android, iPhone, iPad, emulator/simulator behavior and production ChatGPT/Claude mobile rendering require device-specific acceptance. Native saved-password providers remain unimplemented. Preserve OS consent and state these limits accurately.
+The November 23 development candidate has a signed iPhone companion installed
+and independently verified running. Physical Appium/XCUITest observation,
+tap, nonsecure typing, secure-screen capture refusal and explicit session
+cleanup were verified. A signed Android development APK was built and its
+signature/alignment verified; no physical Android installation is qualified.
+Swipe/scroll failed at WDA window-coordinate selection. Safe live preview,
+wireless use, hardware recovery/no-replay, app switching, Xcode-free WDA
+startup, iPad/Android acceptance and the expanded companion UI remain OPEN.
+These results do not deploy the candidate worker or qualify a production release.
+
+The native companion is a read-only gateway status client, not unrestricted
+phone control. Follow [mobile installation](mobile-install.md) for the included
+Android development APK, native source, iPhone signing/install requirements
+and the owner-private iPhone artifact. This plugin update does not install
+or activate candidate worker code. Check the actual connected catalog.
+
+The source fixes cover visible SwiftUI Form descendants behind a nonaccessible
+CollectionView and iOS WDA selectors omitting the AppiumAUT wrapper. They retain
+hidden-window and secure-field protections. Native saved-password filling is
+unsupported. The campaign is 97/100; no unrestricted tests or CI reruns.

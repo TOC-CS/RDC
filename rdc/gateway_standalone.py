@@ -26,7 +26,7 @@ from uuid import UUID, uuid4
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import FileResponse, JSONResponse, RedirectResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
@@ -518,6 +518,48 @@ def create_app(state: StandaloneGateway):
     async def health(request):
         return result({"service":"rdc-standalone-v2","ready":True})
 
+    # Public installation shell contains no owner data or credentials. Its
+    # separate status credential cannot invoke any MCP or device operation.
+    mobile_assets = {
+        "": ("index.html", "text/html"),
+        "app.js": ("app.js", "application/javascript"),
+        "style.css": ("style.css", "text/css"),
+        "manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
+        "sw.js": ("sw.js", "application/javascript"),
+        "icon-192.png": ("icon-192.png", "image/png"),
+        "icon-512.png": ("icon-512.png", "image/png"),
+    }
+    async def mobile_redirect(request):
+        return RedirectResponse("/mobile/", status_code=307)
+
+    async def mobile_shell(request):
+        item = mobile_assets.get(request.path_params.get("asset", ""))
+        if item is None:
+            return fail("not_found", 404)
+        filename, media_type = item
+        headers = {
+            "Cache-Control": "no-cache",
+            "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer",
+            "X-Frame-Options": "DENY",
+            "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        }
+        return FileResponse(Path(__file__).parent / "mobile_web" / filename,
+                            media_type=media_type, headers=headers)
+
+    async def mobile_status(request):
+        header = request.headers.get("authorization", "")
+        try:
+            token = read_secret(state.root / "mobile-status-token")
+            if not header.startswith("Bearer ") or not header.isascii() or not hmac.compare_digest(header[7:], token):
+                return fail("unauthorized", 401)
+        except (OSError, ValueError, TypeError):
+            return fail("unauthorized", 401)
+        current = state.status()
+        return result({"ok": True, "online": current["online"],
+                       "pending_operations": current["pending_operations"]})
+
     async def mcp(request):
         if not state.client_authorized(request):
             return mcp_failure("unauthorized",status=401)
@@ -699,6 +741,10 @@ def create_app(state: StandaloneGateway):
             # Original claimed work is not requeued on disconnect.
     return Starlette(routes=[
         Route("/health",health,methods=["GET"]),
+        Route("/mobile",mobile_redirect,methods=["GET"]),
+        Route("/mobile/",mobile_shell,methods=["GET"]),
+        Route("/mobile/status",mobile_status,methods=["POST"]),
+        Route("/mobile/{asset}",mobile_shell,methods=["GET"]),
         Route("/v2/mcp",mcp,methods=["POST"]),
         Route("/v2/device/result",bulk,methods=["POST"]),
         WebSocketRoute("/v2/device/socket",device),
